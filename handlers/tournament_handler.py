@@ -48,6 +48,11 @@ class TournamentHandler():
                     f"{stage['imgur']}"
                 )
                 await stage_list.send(message)
+                
+        if tournament['format'] == 'Single Elimination':
+            pass
+        elif tournament['format'] == 'Double elimination':
+            pass
             
         
     async def remove_tournament(self, tournament_name):
