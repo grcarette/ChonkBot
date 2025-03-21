@@ -13,7 +13,7 @@ class ReactionHandler:
         reaction_flag = await self.dh.get_reaction_flag(payload=payload)
         
         if reaction_flag:
-            if payload.user_id in reaction_flag['users'] or reaction_flag['users'] == False:
+            if reaction_flag['users'] == False or payload.user_id in reaction_flag['users']:
                 await self.process_reaction_flag(payload, reaction_flag, reaction_added)
                 
     async def process_reaction_flag(self, payload, reaction_flag, reaction_added):
@@ -34,8 +34,13 @@ class ReactionHandler:
             else:
                 await self.configure_tournament(payload, reaction_added)
             
-        if reaction_flag['type'] == 'report_match':
+        elif reaction_flag['type'] == 'report_match':
             pass
+            
+        elif reaction_flag['type'] == 'confirm_registration':
+            if reaction_added:
+                await self.bot.th.process_registration(message, True, is_confirmation=True)
+            
                         
     async def configure_tournament(self, payload, reaction_added):
         message_id = payload.message_id

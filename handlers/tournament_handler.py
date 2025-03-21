@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 
+from utils.reaction_utils import create_reaction_flag
+
 DEFAULT_STAGE_NUMBER = 5
 
 class TournamentHandler():
@@ -59,6 +61,9 @@ class TournamentHandler():
             await role.delete()
         
         for channel in category.channels:
+            is_register_channel = await self.bot.dh.get_registration_flag(channel.id)
+            if is_register_channel:
+                await self.bot.dh.remove_registration_flag(channel.id)
             try:
                 await channel.delete()
             except discord.Discordexception as e:
@@ -114,15 +119,24 @@ class TournamentHandler():
         )
         return new_channel
 
-    async def process_registration(self, channel_id, category_id, user_id, is_register):
+    async def process_registration(self, message, is_register, is_confirmation=False):
+        print('here!')
+        channel_id = message.channel.id
+        category_id = message.channel.category_id
+        user_id = message.author.id
         guild = self.bot.guilds[0]
+        
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         role = discord.utils.get(guild.roles, name=tournament['name'])
-        member = discord.utils.get(guild.members, id=user_id)
+        organizer_role = discord.utils.get(guild.roles, name="Moderator")
+        member = message.author
         
         if is_register:
-            await self.bot.dh.register_player(tournament['name'], user_id)
-            await member.add_roles(role)
+            if tournament['approved_registration'] == True and is_confirmation == False:
+                await create_reaction_flag(self.bot, message, 'confirm_registration', user_filter=tournament['organizer'])
+            else:
+                await self.bot.dh.register_player(tournament['name'], user_id)
+                await member.add_roles(role)
         else:
             await self.bot.dh.unregister_player(tournament['name'], user_id)
             await member.remove_roles(role)

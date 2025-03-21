@@ -17,7 +17,7 @@ class DataHandler:
         if user_filter:
             if not isinstance(user_filter, list):
                 user_filter = [user_filter]
-            filtered_user_ids = [user.id for user in user_filter]
+            filtered_user_ids = [user for user in user_filter]
         else:
             filtered_user_ids = False
             
@@ -104,6 +104,7 @@ class DataHandler:
         }
         result = await self.tournament_collection.insert_one(tournament)
         
+        
     async def update_tournament(self, message_id, update):
         query = {
             'message_id': message_id
@@ -137,6 +138,13 @@ class DataHandler:
         }
         register_flag = await self.register_flag_collection.insert_one(register_flag_data)
         return register_flag
+    
+    async def remove_registration_flag(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        result = await self.register_flag_collection.delete_one(query)
+        return result
     
     async def get_registration_flag(self, channel_id):
         query = {

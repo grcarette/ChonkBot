@@ -23,7 +23,7 @@ class EventCog(commands.Cog):
 
         try:
             await self.bot.dh.create_tournament(event_name, event_time, user.id, message_id=message.id)
-            await create_tournament_configuration(self.bot, message, num_list, user_filter=user)
+            await create_tournament_configuration(self.bot, message, num_list, user_filter=user.id)
         except TournamentExistsError as e:
             await message.delete()
             await ctx.send(str(e))

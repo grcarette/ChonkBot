@@ -17,7 +17,7 @@ class MessageCog(commands.Cog):
             category_id = message.channel.category.id
             register_flag = await self.bot.dh.get_registration_flag(channel_id=channel_id)
             if register_flag:
-                await self.bot.th.process_registration(channel_id, category_id, message.author.id, is_register=is_register)
+                await self.bot.th.process_registration(message, is_register=is_register)
 
 async def setup(bot):
     await bot.add_cog(MessageCog(bot))
