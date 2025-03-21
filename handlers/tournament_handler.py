@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 
+DEFAULT_STAGE_NUMBER = 5
+
 class TournamentHandler():
     def __init__(self, bot):
         self.bot = bot
@@ -33,7 +35,18 @@ class TournamentHandler():
         organizer_chat = await self.create_channel(guild, tournament_category, 'organizer_chat', 'private')
         
         await self.bot.dh.create_registration_flag(register.id, tournament['name'], tournament['approved_registration'])
-        ## create stagelist
+        
+        if tournament['randomized_stagelist'] == True:
+            for i in range(DEFAULT_STAGE_NUMBER):
+                stage = await self.bot.dh.get_random_stage()
+                message = (
+                    f"# {stage['name']}\n"
+                    f"Creator: {stage['creator']}\n"
+                    f"Code: {stage['code']}\n"
+                    f"{stage['imgur']}"
+                )
+                await stage_list.send(message)
+            
         
     async def remove_tournament(self, tournament_name):
         guild = self.bot.guilds[0]

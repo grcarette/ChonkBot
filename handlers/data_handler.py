@@ -2,6 +2,7 @@ from utils.errors import *
 
 import motor.motor_asyncio
 import asyncio
+import random
 
 class DataHandler:
     def __init__(self):
@@ -10,6 +11,7 @@ class DataHandler:
         self.reaction_collection = self.db['reaction_flags']
         self.tournament_collection = self.db['tournaments']
         self.register_flag_collection = self.db['register_flags']
+        self.party_map_collection = self.db['party_maps']
         
     async def add_reaction_flag(self, message_id, flag_type, emojis, user_filter=False, require_all_to_react=False):
         if user_filter:
@@ -171,4 +173,16 @@ class DataHandler:
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
+    
+    async def get_random_stage(self):
+        query = {
+            
+        }
+        legal_stage_count = await self.party_map_collection.count_documents(query)
+        random_index = random.randint(0, legal_stage_count - 1)
+        random_stage_cursor = self.party_map_collection.find().skip(random_index).limit(1)
+        random_stage = await random_stage_cursor.to_list(1)
+        
+        return random_stage[0]
+        
         
