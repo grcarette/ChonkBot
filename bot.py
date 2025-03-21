@@ -4,18 +4,24 @@ import os
 from dotenv import load_dotenv
 
 from handlers.data_handler import DataHandler
+from handlers.tournament_handler import TournamentHandler
+from handlers.message_handler import MessageHandler
 
 class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix, intents=intents)
         
         self.dh = DataHandler()
+        self.th = TournamentHandler(self)
+        self.mh = MessageHandler(self)
+        
+        self.guild = None
            
     async def setup_hook(self):
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")
-        
+         
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):

@@ -1,3 +1,5 @@
+from utils.errors import *
+
 import motor.motor_asyncio
 import asyncio
 
@@ -7,6 +9,7 @@ class DataHandler:
         self.db = client['ChonkBot']
         self.reaction_collection = self.db['reaction_flags']
         self.tournament_collection = self.db['tournaments']
+        self.register_flag_collection = self.db['register_flags']
         
     async def add_reaction_flag(self, message_id, flag_type, emojis, user_filter=False, require_all_to_react=False):
         if user_filter:
@@ -81,6 +84,9 @@ class DataHandler:
         return result
     
     async def create_tournament(self, name, date, organizer, message_id=None):
+        tournament_exists = await self.tournament_collection.find_one({'name': name})
+        if tournament_exists:
+            raise TournamentExistsError(f"Error: Tournament name '{name}' already exists.")
         tournament = {
             'name': name,
             'date': date,
@@ -102,3 +108,67 @@ class DataHandler:
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
+    
+    async def add_category_to_tournament(self, tournament_name, category_id):
+        query = {
+            'name': tournament_name
+        }
+        update = {
+            '$set': {'category_id': category_id}
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        return result
+    
+    async def get_tournament(self, **kwargs):
+        tournament = await self.tournament_collection.find_one(kwargs)
+        if tournament:
+            return tournament
+        else:
+            key, value = next(iter(kwargs.items()))
+            raise TournamentNotFoundError(f"Error: Tournament with {key}: {value} not found")
+        
+    async def create_registration_flag(self, channel_id, tournament_name, require_approval):
+        register_flag_data = {
+            'channel_id': channel_id,
+            'tournament_name': tournament_name,
+            'require_approval': require_approval
+        }
+        register_flag = await self.register_flag_collection.insert_one(register_flag_data)
+        return register_flag
+    
+    async def get_registration_flag(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        registration_flag = await self.register_flag_collection.find_one(query)
+        return registration_flag
+    
+    async def register_player(self, tournament_name, player_id):
+        query = {
+            'name': tournament_name,
+            'entrants': player_id
+        }
+        player_exists = await self.tournament_collection.find_one(query)
+        
+        if not player_exists:
+            query = {
+                'name': tournament_name
+            }
+            update = {
+                "$addToSet": {'entrants': player_id}
+            }
+            result = await self.tournament_collection.update_one(query, update)
+            return result
+        else:
+            return False
+    
+    async def unregister_player(self, tournament_name, player_id):
+        query = {
+            'name': tournament_name
+        }
+        update = {
+            '$pull': {'entrants': player_id}
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        return result
+        

@@ -26,8 +26,11 @@ class ReactionHandler:
         
         if reaction_flag['type'] == 'create_tournament':
             if self.is_same_emoji(INDICATOR_EMOJIS['green_check'], payload.emoji.name):
-                print('confirmed')
-                pass
+                if reaction_added:
+                    await self.bot.th.set_up_tournament(payload.message_id)
+                else:
+                    tournament = await self.bot.dh.get_tournament(message_id=payload.message_id)
+                    await self.bot.th.remove_tournament(tournament['name'])
             else:
                 await self.configure_tournament(payload, reaction_added)
             
@@ -46,15 +49,6 @@ class ReactionHandler:
             "$set": {f'{TOURNAMENT_CONFIGURATION[emoji][0]}': update_content}
         }
         await self.bot.dh.update_tournament(message_id, update)
-        
-        
-                
-                
-
-
-                
-                
-        
         
     def is_same_emoji(self, emoji1, emoji2):
         return str(emoji1) == str(emoji2)

@@ -12,7 +12,6 @@ class MessageDeleteCog(commands.Cog):
         if reaction_flags:
             await self.bot.dh.remove_reaction_flag(message_id)
         
-        
-         
+
 async def setup(bot):
     await bot.add_cog(MessageDeleteCog(bot))
