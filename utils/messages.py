@@ -13,9 +13,19 @@ def get_tournament_creation_message(event_name, event_time):
         f"{INDICATOR_EMOJIS['blue_check']}: Require Check-in\n"
         f"{INDICATOR_EMOJIS['lock']}: Require TO approval for registration\n"
         f"{INDICATOR_EMOJIS['dice']}: Create randomized stagelist\n"
-        f"{INDICATOR_EMOJIS['red_x']}: Require stage bans\n\n"
+        f"{INDICATOR_EMOJIS['red_x']}: Require stage bans\n"
+        f"{INDICATOR_EMOJIS['eye']}: Hide Channels\n"
+        "\n"
         f"React with {INDICATOR_EMOJIS['green_check']}: to confirm your submission"
     )
     return tournament_message
 
-    
+async def get_lobby_instructions(datahandler, lobby_id, tournament_name):
+    lobby = await datahandler.get_lobby(lobby_id, tournament_name)
+    if lobby['stage'] == 'check_in':
+        message = (
+            f"# Welcome to lobby {lobby['lobby_id']}\n"
+            f"To Check in for your match, react to this message with {INDICATOR_EMOJIS['green_check']}"
+        )
+        
+    return message

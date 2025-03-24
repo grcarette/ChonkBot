@@ -11,4 +11,5 @@ INDICATOR_EMOJIS = {
     "lock": '🔒',
     'dice': '🎲',
     'red_x': '❌',
+    'eye': '👁️',
 }

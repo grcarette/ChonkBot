@@ -2,8 +2,6 @@ from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
 from handlers.data_handler import DataHandler
 from utils.reaction_flags import *
 
-
-
 class ReactionHandler:
     def __init__(self, bot):
         self.dh = DataHandler()
@@ -40,6 +38,14 @@ class ReactionHandler:
         elif reaction_flag['type'] == 'confirm_registration':
             if reaction_added:
                 await self.bot.th.process_registration(message, True, is_confirmation=True)
+                
+        elif reaction_flag['type'] == 'match_checkin':
+            if reaction_added:
+                #add reaction
+                pass
+            else:
+                #remove reaction
+                pass
             
                         
     async def configure_tournament(self, payload, reaction_added):

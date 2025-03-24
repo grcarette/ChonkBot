@@ -12,6 +12,7 @@ class DataHandler:
         self.tournament_collection = self.db['tournaments']
         self.register_flag_collection = self.db['register_flags']
         self.party_map_collection = self.db['party_maps']
+        self.lobby_collection = self.db['lobbies']
         
     async def add_reaction_flag(self, message_id, flag_type, emojis, user_filter=False, require_all_to_react=False):
         if user_filter:
@@ -99,6 +100,7 @@ class DataHandler:
             'approved_registration': False,
             'randomized_stagelist': False,
             'require_stage_bans': False,
+            'hide_channels': False,
             'stagelist': [],
             'entrants': []
         }
@@ -192,5 +194,50 @@ class DataHandler:
         random_stage = await random_stage_cursor.to_list(1)
         
         return random_stage[0]
+    
+    async def create_lobby(self, tournament_name, players, pool=None):
+        player_ids = [player.id for player in players]
+        query = {
+            'tournament': tournament_name
+        }
+        lobby_id = await self.lobby_collection.count_documents(query) + 1
+        lobby_data = {
+            'lobby_id': lobby_id,
+            'tournament': tournament_name,
+            'pool': pool,
+            'stage': 'checkin',
+            'players': player_ids,
+            'results': [],
+        }
+        lobby = await self.lobby_collection.insert_one(lobby_data)
+        return lobby_id
+    
+    async def remove_lobby(self, lobby_id):
+        query = {
+            'lobby_id': lobby_id
+        }
+        result = await self.lobby_collection.delete_one(query)
+        return result
+    
+    async def get_lobby(self, lobby_id, tournament_name):
+        query = {
+            'lobby_id': lobby_id,
+            'tournament': tournament_name
+        }
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+        
+    async def add_channel_to_lobby(self, lobby_id, channel_id):
+        query = {
+            'lobby_id': lobby_id
+        }
+        update = {
+            "$set": {
+                'channel_id': channel_id
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        return result
+
         
         

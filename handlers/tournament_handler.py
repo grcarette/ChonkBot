@@ -4,6 +4,16 @@ from discord.ext import commands
 from utils.reaction_utils import create_reaction_flag
 
 DEFAULT_STAGE_NUMBER = 5
+CHANNEL_PERMISSIONS = {
+    'event-info': 'read_only',
+    'event-updates': 'read_only',
+    'stagelist': 'read_only',
+    'event-chat': 'open',
+    'questions': 'open',
+    'register': 'open',
+    'organizer-chat': 'private',
+}
+
 
 class TournamentHandler():
     def __init__(self, bot):
@@ -26,17 +36,19 @@ class TournamentHandler():
         )
         await self.bot.dh.add_category_to_tournament(tournament['name'], tournament_category.id)
         
-        channel_list = []
-
-        event_info = await self.create_channel(guild, tournament_category, 'event-info', 'read_only')
-        event_updates = await self.create_channel(guild, tournament_category, 'event-updates', 'read_only')
-        stage_list = await self.create_channel(guild, tournament_category, 'stagelist', 'read_only')
-        event_chat = await self.create_channel(guild, tournament_category, 'event-chat', 'open')
-        questions = await self.create_channel(guild, tournament_category, 'questions', 'open')
-        register = await self.create_channel(guild, tournament_category, 'register', 'open')
-        organizer_chat = await self.create_channel(guild, tournament_category, 'organizer_chat', 'private')
+        channel_dict = {}
+        hide_channels = tournament['hide_channels']
         
-        await self.bot.dh.create_registration_flag(register.id, tournament['name'], tournament['approved_registration'])
+        for channel in CHANNEL_PERMISSIONS:
+            channel_dict[f'{channel}'] = await self.create_channel(
+                guild=guild, 
+                tournament_category=tournament_category, 
+                hide_channel=hide_channels, 
+                channel_name=f'{channel}', 
+                channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}']
+            )
+        
+        await self.bot.dh.create_registration_flag(channel_dict['register'].id, tournament['name'], tournament['approved_registration'])
         
         if tournament['randomized_stagelist'] == True:
             for i in range(DEFAULT_STAGE_NUMBER):
@@ -47,7 +59,7 @@ class TournamentHandler():
                     f"Code: {stage['code']}\n"
                     f"{stage['imgur']}"
                 )
-                await stage_list.send(message)
+                await channel_dict['stagelist'].send(message)
                 
         if tournament['format'] == 'Single Elimination':
             pass
@@ -80,12 +92,14 @@ class TournamentHandler():
             print(f"Error deleting category {category.name}: {e}")
             
           
-    async def create_channel(self, guild, tournament_category, channel_name, channel_overwrites):
+    async def create_channel(self, guild, tournament_category, hide_channel, channel_name, channel_overwrites):
         overwrites = {}
-        
+        view_channel = False
         if channel_overwrites == 'read_only':
+            if not hide_channel:
+                view_channel = True
             overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=False,
+                view_channel=view_channel,
                 send_messages=False,
                 manage_messages=False,
                 embed_links=False,
@@ -95,8 +109,10 @@ class TournamentHandler():
                 use_external_emojis=True
             )
         elif channel_overwrites == "open":
+            if not hide_channel:
+                view_channel = True
             overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=False,
+                view_channel=view_channel,
                 send_messages=True,
                 manage_messages=False,
                 embed_links=True,
@@ -107,7 +123,7 @@ class TournamentHandler():
             )
         elif channel_overwrites == 'private':
             overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=False,
+                view_channel=view_channel,
                 send_messages=False,
                 manage_messages=False,
                 embed_links=False,
@@ -123,6 +139,17 @@ class TournamentHandler():
             overwrites=overwrites
         )
         return new_channel
+    
+    async def reveal_channels(self, category_id):
+        guild = self.bot.guilds[0]
+        category = discord.utils.get(guild.categories, id=category_id)
+        for channel in category.channels:
+            permissions = CHANNEL_PERMISSIONS[channel.name]
+            if permissions != 'private':
+                overwrite = channel.overwrites_for(guild.default_role)
+                overwrite.view_channel = True
+                
+                await channel.set_permissions(guild.default_role, overwrite=overwrite)
 
     async def process_registration(self, message, is_register, is_confirmation=False):
         print('here!')

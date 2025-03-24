@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from handlers.data_handler import DataHandler
 from handlers.tournament_handler import TournamentHandler
 from handlers.message_handler import MessageHandler
+from handlers.challonge_handler import ChallongeHandler
+from handlers.lobby_handler import LobbyHandler
 
 class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
@@ -14,6 +16,8 @@ class ChonkBot(commands.Bot):
         self.dh = DataHandler()
         self.th = TournamentHandler(self)
         self.mh = MessageHandler(self)
+        self.ch = ChallongeHandler()
+        self.lh = LobbyHandler(self)
         
         self.guild = None
            
