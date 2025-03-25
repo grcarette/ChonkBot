@@ -22,18 +22,33 @@ def get_tournament_creation_message(event_name, event_time):
     )
     return tournament_message
 
-async def get_lobby_instructions(bot, lobby, stage=False):
+async def get_lobby_instructions(bot, lobby, stage=False, winner=False):
     tournament = await bot.dh.get_tournament(name=lobby['tournament'])
     guild = bot.guilds[0]
+    players = [discord.utils.get(guild.members, id=player) for player in lobby['players']]
+    
     if lobby['stage'] == 'checkin':
+        pings = " ".join([f"{player.mention}" for player in players])
         message = (
             f"# Welcome to lobby {lobby['lobby_id']}\n"
-            f"To Check in for your match, react to this message with {INDICATOR_EMOJIS['green_check']}"
+            f"{pings}"
+            f"\nTo Check in for your match, react to this message with {INDICATOR_EMOJIS['green_check']}"
         )
-    if lobby['stage'] == 'reporting':
+    elif lobby['stage'] == 'reporting':
+        pings = "\n".join([f"{NUMBER_EMOJIS[i+1]} {player.mention}" for i, player in enumerate(players)])
         message = (
-            f"## You will be playing on {stage['name']}\nCode: {stage['code']}\n"
-            f"When you the match is finished, report the match by reacting to the player who won"
+            f"## You will be playing on {stage['name']}\n**Code: {stage['code']}**\n\n"
+            f"When the match is finished, report the match by reacting to the **player who won**\n"
+            f"{pings}"
+        )
+    elif lobby['stage'] == 'confirmation':
+        message = (
+            f'## You have reported {winner.mention} as the winner\n'
+            'Is this correct?'
+        )
+    elif lobby['stage'] == 'finished':
+        message = (
+            '## This lobby is now closed. You will be pinged when it is time for your next match'
         )
 
     return message

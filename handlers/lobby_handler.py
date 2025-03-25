@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from utils.messages import get_lobby_instructions, get_stage_ban_message
 from utils.reaction_utils import create_reaction_flag, create_numerical_reaction
-from utils.emojis import NUMBER_EMOJIS, EMOJI_NUMBERS
+from utils.emojis import NUMBER_EMOJIS, EMOJI_NUMBERS, INDICATOR_EMOJIS
 import random
 
 class LobbyHandler:
@@ -26,17 +26,18 @@ class LobbyHandler:
             overwrites[player] = discord.PermissionOverwrite(read_messages=True)
             
         lobby_id = await self.bot.dh.create_lobby(tournament_name, players, pool)
-        lobby_channel = await guild.create_text_channel(name=lobby_id, overwrites=overwrites, category=None)
+        lobby_name = f"Lobby {lobby_id}"
+        lobby_channel = await guild.create_text_channel(name=lobby_name, overwrites=overwrites, category=None)
         await self.bot.dh.add_channel_to_lobby(lobby_id, lobby_channel.id)
         lobby = await self.bot.dh.get_lobby(channel_id=lobby_channel.id)
         await self.advance_lobby(lobby)
         
-    async def advance_lobby(self, lobby):
+    async def advance_lobby(self, lobby, confirmation=False):
         tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
         guild = self.bot.guilds[0]
         channel = discord.utils.get(guild.channels, id=lobby['channel_id'])
         if lobby['stage'] == 'initialize':
-            lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'checkin')
+            lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'checkin')        
             message_content = await get_lobby_instructions(self.bot, lobby)
             message = await channel.send(message_content)
             user_filter = [player for player in lobby['players']]
@@ -45,21 +46,51 @@ class LobbyHandler:
         elif lobby['stage'] == 'checkin':
             if tournament['require_stage_bans'] == True:
                 await self.bot.dh.advance_lobby(lobby['channel_id'], 'stage_bans')
+                
+                new_channel_name = f"Lobby {lobby['lobby_id']} {INDICATOR_EMOJIS['green_check']}"
+                await channel.edit(name=new_channel_name)
+                
                 await self.ban_stages(lobby['channel_id'])
             else:
                 pass
             
         elif lobby['stage'] == 'stage_bans':
-            lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'reporting')
+            lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'reporting')   
+            
             remaining_stages = [stage for stage in tournament['stagelist'] if stage not in lobby['stage_bans']]
             selected_stage_code = random.choice(remaining_stages)
             selected_stage = await self.bot.dh.get_stage(code=selected_stage_code)
+            
             message_content = await get_lobby_instructions(self.bot, lobby, stage=selected_stage)
-            channel = discord.utils.get(self.bot.guilds[0].channels, id=lobby['channel_id'])
             message = await channel.send(message_content)
+            
+            num_list = [i+1 for i, player in enumerate(lobby['players'])]
+            user_filter = lobby['players']
+            
+            await create_numerical_reaction(self.bot, message, num_list, 'match_report', user_filter=user_filter, require_all_to_react=True)
+            
         elif lobby['stage'] == 'reporting':
-            pass
-        pass
+            lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'confirmation')   
+            
+            winner_id = lobby['results'][-1]
+            winner = discord.utils.get(guild.members, id=winner_id)
+            
+            message_content = await get_lobby_instructions(self.bot, lobby, winner=winner)
+            message = await channel.send(message_content)
+            
+            user_filter = lobby['players']
+            await create_reaction_flag(self.bot, message, 'match_confirmation', user_filter=user_filter, require_all_to_react=True)
+            
+        elif lobby['stage'] == 'confirmation':
+            if confirmation:
+                lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'finished')
+                message_content = await get_lobby_instructions(self.bot, lobby)
+                message = await channel.send(message_content)
+                
+            else:
+                lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], last_result_only=True)
+                lobby = await self.bot.dh.advance_lobby(lobby['channel_id'], 'stage_bans')
+                await self.advance_lobby(lobby)
     
     async def ban_stages(self, channel_id, payload=False):
         lobby = await self.bot.dh.get_lobby(channel_id=channel_id)
@@ -89,7 +120,6 @@ class LobbyHandler:
         stages_text_lines = []
         num_list = []
         for i, stage in enumerate(stages):
-            print(stage['code'], lobby['stage_bans'])
             if stage['code'] not in lobby['stage_bans']:
                 stages_text_lines.append(f"{NUMBER_EMOJIS[i+1]} {stage['name']}")
                 num_list.append(i+1)

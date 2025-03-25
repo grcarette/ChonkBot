@@ -39,9 +39,6 @@ class ReactionHandler:
                     tournament = await self.bot.dh.get_tournament(message_id=message_id)
                     await self.bot.th.remove_tournament(tournament['name'])
             
-        elif reaction_flag['type'] == 'report_match':
-            pass
-            
         elif reaction_flag['type'] == 'confirm_registration':
             if reaction_added:
                 await self.bot.th.process_registration(message, True, is_confirmation=True)
@@ -55,10 +52,23 @@ class ReactionHandler:
             channel_id = payload.channel_id
             await message.delete()
             await self.bot.lh.ban_stages(channel_id, payload)
+
+        elif reaction_flag['type'] == 'match_report':
+            channel_id = payload.channel_id
+            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
             await self.bot.dh.remove_reaction_flag(message_id)
+            await self.bot.dh.report_match(channel_id, payload)
+            await self.bot.lh.advance_lobby(lobby)
             
+        elif reaction_flag['type'] == 'match_confirmation':
+            channel_id = payload.channel_id
+            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
+            await self.bot.dh.remove_reaction_flag(message_id)
+            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['green_check']):
+                await self.bot.lh.advance_lobby(lobby, confirmation=True)
+            elif self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
+                await self.bot.lh.advance_lobby(lobby, confirmation=False)
             
-                
 
     def is_same_emoji(self, emoji1, emoji2):
         return str(emoji1) == str(emoji2)

@@ -1,4 +1,5 @@
 from utils.errors import *
+from utils.emojis import EMOJI_NUMBERS
 
 import motor.motor_asyncio
 import asyncio
@@ -260,17 +261,27 @@ class DataHandler:
         lobby = await self.lobby_collection.insert_one(lobby_data)
         return lobby_id
     
-    async def reset_lobby(self, channel_id):
+    async def reset_lobby(self, channel_id, last_result_only=False):
         query = {
             'channel_id': channel_id
         }
-        update = {
-            "$set": {
-                'stage': 'checkin',
-                'stage_bans': [],
-                'results': []
+        if last_result_only:
+            update = {
+                "$pop": {
+                    'results': 1
+                },
+                "$set": {
+                    'stage': 'stage_bans'
+                }
             }
-        }
+        else:
+            update = {
+                "$set": {
+                    'stage': 'checkin',
+                    'stage_bans': [],
+                    'results': []
+                }
+            }
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
@@ -287,6 +298,24 @@ class DataHandler:
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
+    
+    async def report_match(self, channel_id, payload):
+        query = {
+            'channel_id': channel_id
+        }
+        lobby = await self.lobby_collection.find_one(query)
+        
+        emoji = payload.emoji.name
+        player_index = EMOJI_NUMBERS[emoji] - 1
+        winning_player = lobby['players'][player_index]
+
+        update = {
+            '$push': {
+                'results': winning_player
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        return result
     
     
     async def remove_lobby(self, lobby_id):

@@ -29,4 +29,5 @@ INDICATOR_EMOJIS = {
     'dice': '🎲',
     'red_x': '❌',
     'eye': '👁️',
+    'game_controller': '🎮',
 }

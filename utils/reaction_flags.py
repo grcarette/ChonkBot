@@ -21,8 +21,14 @@ MATCH_CHECKIN = {
     INDICATOR_EMOJIS['green_check']: True
 }
 
+MATCH_CONFIRMATION = {
+    INDICATOR_EMOJIS['green_check']: True,
+    INDICATOR_EMOJIS['red_x']: True
+}
+
 FLAG_DICTIONARY = {
     'create_tournament': TOURNAMENT_CONFIGURATION,
     'confirm_registration': REGISTRATION_CONFIRMATION,
-    'match_checkin': MATCH_CHECKIN
+    'match_checkin': MATCH_CHECKIN,
+    'match_confirmation': MATCH_CONFIRMATION
 }
