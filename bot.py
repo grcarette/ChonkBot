@@ -20,6 +20,7 @@ class ChonkBot(commands.Bot):
         self.lh = LobbyHandler(self)
         
         self.guild = None
+        self.admin_id = int(os.getenv('ADMIN_ID'))
            
     async def setup_hook(self):
         await self.load_cogs()

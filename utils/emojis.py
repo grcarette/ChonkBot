@@ -30,4 +30,7 @@ INDICATOR_EMOJIS = {
     'red_x': '❌',
     'eye': '👁️',
     'game_controller': '🎮',
+    'star': '⭐',
+    'down_arrow': '⬇️',
+    'up_arrow': '⬆️',
 }

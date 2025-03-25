@@ -1,3 +1,5 @@
+import discord
+from discord.ext import commands
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
 from handlers.data_handler import DataHandler
 from utils.reaction_flags import *
@@ -44,30 +46,64 @@ class ReactionHandler:
                 await self.bot.th.process_registration(message, True, is_confirmation=True)
                 
         elif reaction_flag['type'] == 'match_checkin':
-            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-            await self.bot.dh.remove_reaction_flag(message_id)
-            await self.bot.lh.advance_lobby(lobby)
+            if reaction_added:
+                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
+                await self.bot.dh.remove_reaction_flag(message_id)
+                await self.bot.lh.advance_lobby(lobby)
             
         elif reaction_flag['type'] == 'stage_ban':
-            channel_id = payload.channel_id
-            await message.delete()
-            await self.bot.lh.ban_stages(channel_id, payload)
+            if reaction_added:
+                channel_id = payload.channel_id
+                await message.delete()
+                await self.bot.lh.ban_stages(channel_id, payload)
 
         elif reaction_flag['type'] == 'match_report':
-            channel_id = payload.channel_id
-            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-            await self.bot.dh.remove_reaction_flag(message_id)
-            await self.bot.dh.report_match(channel_id, payload)
-            await self.bot.lh.advance_lobby(lobby)
+            if reaction_added:
+                channel_id = payload.channel_id
+                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
+                await self.bot.dh.remove_reaction_flag(message_id)
+                await self.bot.dh.report_match(channel_id, payload)
+                await self.bot.lh.advance_lobby(lobby)
             
         elif reaction_flag['type'] == 'match_confirmation':
-            channel_id = payload.channel_id
-            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-            await self.bot.dh.remove_reaction_flag(message_id)
-            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['green_check']):
-                await self.bot.lh.advance_lobby(lobby, confirmation=True)
-            elif self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
-                await self.bot.lh.advance_lobby(lobby, confirmation=False)
+            if reaction_added:
+                channel_id = payload.channel_id
+                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
+                await self.bot.dh.remove_reaction_flag(message_id)
+                if self.is_same_emoji(emoji, INDICATOR_EMOJIS['green_check']):
+                    await self.bot.lh.advance_lobby(lobby, confirmation=True)
+                elif self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
+                    await self.bot.lh.advance_lobby(lobby, confirmation=False)
+                
+        elif reaction_flag['type'] == 'random_stage':
+            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
+                category = 'blocked_maps'
+            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['star']):
+                category = 'favorite_maps'
+            map_code = reaction_flag['value']
+            guild = self.bot.get_guild(payload.guild_id)
+            user = guild.get_member(payload.user_id)
+            await self.bot.dh.update_map_preference(user, map_code, category, reaction_added)
+            
+        elif reaction_flag['type'] == 'link_confirmation':
+            if reaction_added:
+                message = await channel.fetch_message(reaction_flag['message_id'])
+                user = message.author
+                player = reaction_flag['value']
+                try:
+                    await self.bot.dh.link_user_to_player(user, player)
+                
+                    message_content = (
+                        f'User: *{user.name}* linked to player: *{player}* successfully'
+                    )
+                    await channel.send(message_content)
+                except:
+                    await channel.send("Unknown Error")
+                await self.bot.dh.remove_reaction_flag(reaction_flag['message_id'])
+
+            
+            
+            
             
 
     def is_same_emoji(self, emoji1, emoji2):

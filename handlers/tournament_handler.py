@@ -174,7 +174,6 @@ class TournamentHandler():
                 await channel.set_permissions(guild.default_role, overwrite=overwrite)
 
     async def process_registration(self, message, is_register, is_confirmation=False):
-        print('here!')
         channel_id = message.channel.id
         category_id = message.channel.category_id
         user_id = message.author.id

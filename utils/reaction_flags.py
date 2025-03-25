@@ -1,4 +1,5 @@
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
+import time
 
 
 TOURNAMENT_CONFIGURATION = {
@@ -26,9 +27,39 @@ MATCH_CONFIRMATION = {
     INDICATOR_EMOJIS['red_x']: True
 }
 
-FLAG_DICTIONARY = {
-    'create_tournament': TOURNAMENT_CONFIGURATION,
-    'confirm_registration': REGISTRATION_CONFIRMATION,
-    'match_checkin': MATCH_CHECKIN,
-    'match_confirmation': MATCH_CONFIRMATION
+RANDOM_STAGE = {
+    INDICATOR_EMOJIS['red_x']: True,
+    INDICATOR_EMOJIS['star']: True,
 }
+
+LINK_CONFIRMATION = {
+    INDICATOR_EMOJIS['green_check']: True
+}
+
+FLAG_DICTIONARY = {
+    'create_tournament': {
+        'dict': TOURNAMENT_CONFIGURATION,
+        'timestamp': None
+    },
+    'confirm_registration': {
+        'dict': REGISTRATION_CONFIRMATION,
+        'timestamp': None
+    },
+    'match_checkin': {
+        'dict': MATCH_CHECKIN,
+        'timestamp': time.time() + 600
+    },
+    'match_confirmation': {
+        'dict': MATCH_CONFIRMATION,
+        'timestamp': time.time() + 3600
+    },
+    'random_stage': {
+        'dict': RANDOM_STAGE,
+        'timestamp': time.time() + 3600
+    },
+    'link_confirmation': {
+        'dict': LINK_CONFIRMATION,
+        'timestamp': None
+    }
+}
+

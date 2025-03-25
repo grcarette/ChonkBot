@@ -4,6 +4,7 @@ from utils.emojis import EMOJI_NUMBERS
 import motor.motor_asyncio
 import asyncio
 import random
+import re
 
 class DataHandler:
     def __init__(self):
@@ -14,8 +15,14 @@ class DataHandler:
         self.register_flag_collection = self.db['register_flags']
         self.party_map_collection = self.db['party_maps']
         self.lobby_collection = self.db['lobbies']
+        self.user_collection = self.db['users']
         
-    async def add_reaction_flag(self, message_id, flag_type, emojis, user_filter=False, require_all_to_react=False):
+        self.tdb = client['UCHTournamentData']
+        self.match_collection = self.tdb['matches']
+        self.player_collection = self.tdb['players']
+        self.tournament_data_collection = self.tdb['tournaments']
+        
+    async def add_reaction_flag(self, message_id, flag_type, emojis, user_filter=False, require_all_to_react=False, value=None, timestamp=None):
         if user_filter:
             if not isinstance(user_filter, list):
                 user_filter = [user_filter]
@@ -49,7 +56,9 @@ class DataHandler:
                 'users': filtered_user_ids,
                 'has_confirmation': False,
                 'require_all_to_react': require_all_to_react,
-                'emojis': emoji_reactions
+                'emojis': emoji_reactions,
+                'value': value,
+                'timestamp': timestamp,
             }
             await self.reaction_collection.insert_one(reaction_flag)
     
@@ -228,19 +237,30 @@ class DataHandler:
             key, value = next(iter(kwargs.items()))
             raise TournamentNotFoundError(f"Error: Tournament with {key}: {value} not found")
     
-    async def get_random_stages(self, number):
-        query = {}
-        legal_stage_count = await self.party_map_collection.count_documents(query)
+    async def get_random_stages(self, number, user=False):
+        if user:
+            user_info = await self.user_collection.find_one({'user_id': user.id})
+            if not user_info:
+                user_info = await self.register_user(user)
+            query = {
+                'code': {
+                    '$nin': user_info['blocked_maps']
+                }
+            }
+        else:
+            query = {}
+            
+        pipeline = [
+            {'$match': query},
+            {"$sample": {
+                "size": number
+            }}
+        ]
         
+        random_stages = await self.party_map_collection.aggregate(pipeline).to_list(None)
         
-        random_indices = random.sample(range(legal_stage_count), number)
-        
-        random_stages = []
-
-        for index in random_indices:
-            random_stage_cursor = self.party_map_collection.find().skip(index).limit(1)
-            random_stages += await random_stage_cursor.to_list(1)
-        
+        if len(random_stages) == 0:
+            raise NoStagesFoundError
         return random_stages
     
     async def create_lobby(self, tournament_name, players, pool=None):
@@ -363,5 +383,123 @@ class DataHandler:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
+    async def register_user(self, user):
+        query = {
+            'user_id': user.id
+        }
+        user_exists = await self.user_collection.find_one(query)
+        if not user_exists:
+            user_data = {
+                'user_id': user.id,
+                'name': user.name,
+                'mention': user.mention,
+                'favorite_maps': [],
+                'blocked_maps': []
+            }
+            result = await self.user_collection.insert_one(user_data)
+            user = await self.user_collection.find_one(query)
+            return user
+    
+    async def get_user(self, **kwargs):
+        user = await self.user_collection.find_one(kwargs)
+        if user:
+            return user
+        else:
+            key, value = next(iter(kwargs.items()))
+            raise UserNotFoundError(f"Error: User with {key}: {value} not found")
+        
+    async def update_map_preference(self, user, map_code, category, reaction_added):
+        if reaction_added:
+            update_type = "$addToSet"
+        else:
+            update_type = "$pull"
+        if not category == 'favorite_maps' and not category == 'blocked_maps':
+            print('error')
+            return
+        query = {
+            'user_id': user.id
+        }
+        user_exists = await self.user_collection.find_one(query)
+        if not user_exists:
+            await self.register_user(user)
+        update = {
+            f'{update_type}': {
+                f'{category}': map_code
+            }
+        }
+        result = await self.user_collection.update_one(query, update)
+        return result
+
+    async def link_user_to_player(self, user, player_name):
+        player = await self.lookup_player(player_name)
+        if player:
+            query = {
+                'user_id': user.id
+            }
+            user_exists = await self.user_collection.find_one(query)
+            if not user_exists:
+                await self.register_user(user)
+            update = {
+                '$set':{
+                    'player_id': player['_id']
+                }
+            }
+            result = await self.user_collection.update_one(query, update)
+            return result
+        else:
+            raise PlayerNotFoundError
+        
+    async def lookup_player(self, name):
+        search_regex = "^" + re.escape(name) + "$"
+        player_data = await self.player_collection.find_one({
+            "$or": [
+                {"name": {"$regex": search_regex, "$options": "i"}},
+                {"aliases": {"$elemMatch": {"$regex": search_regex, "$options": "i"}}}
+            ]
+        })
+        if player_data:
+            return player_data
+        else:
+            raise PlayerNotFoundError
+        
+    async def get_player_by_id(self, player_id):
+        query = {
+            '_id': player_id
+        }
+        player = await self.player_collection.find_one(query)
+        return player
+        
+    async def check_user_link(self, user):
+        query = {
+            'user_id': user.id,
+            'player_id': {
+                '$exists': True
+            }
+        }
+        link_exists = await self.user_collection.find_one(query)
+        return link_exists
+    
+    async def check_player_link(self, player_name):
+        player = await self.lookup_player(player_name)
+        query = {
+            'player_id' : player['_id']
+        }
+        link_exists = await self.user_collection.find_one(query)
+        return link_exists
+    
+    async def remove_player_link(self, user):
+        query = {
+            'user_id': user.id
+        }
+        update = {
+            '$unset': {
+                'player_id': ''
+            }
+        }
+        result = await self.user_collection.update_one(query, update)
+        return result
+        
+        
+        
 
         
