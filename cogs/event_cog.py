@@ -44,6 +44,12 @@ class EventCog(commands.Cog):
     @commands.command(name="create_lobby")
     async def create_lobby(self, ctx):
         await self.bot.lh.create_lobby()
+        
+    @commands.has_role('Event Organizer')
+    @commands.command(name="reset_lobby")
+    async def reset_lobby(self, ctx):
+        lobby = await self.bot.dh.reset_lobby(ctx.channel.id)
+        await self.bot.lh.advance_lobby(lobby)
 
         
             

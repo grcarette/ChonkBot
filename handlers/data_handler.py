@@ -24,6 +24,9 @@ class DataHandler:
             
         if not isinstance(emojis, list):
             emojis = [emojis]
+        emoji_reactions = {}
+        for emoji in emojis:
+            emoji_reactions[emoji] = []
             
         query = {
             'message_id': message_id,
@@ -33,10 +36,8 @@ class DataHandler:
         
         if flag_exists:
             update = {
-                "$addToSet": {
-                    'emojis': {
-                        "$each": emojis
-                        }
+                "$set": {
+                    f"emojis.{emoji}": [] for emoji in emoji_reactions.keys()
                 }
             }
             await self.reaction_collection.update_one(query, update)
@@ -47,9 +48,29 @@ class DataHandler:
                 'users': filtered_user_ids,
                 'has_confirmation': False,
                 'require_all_to_react': require_all_to_react,
-                'emojis': emojis
+                'emojis': emoji_reactions
             }
             await self.reaction_collection.insert_one(reaction_flag)
+    
+    async def update_reaction_to_flag(self, message_id, emoji, userid, reaction_added):
+        query = {
+            'message_id': message_id
+        }
+        if reaction_added:
+            update = {
+                "$push": {
+                    f'emojis.{emoji}': userid
+                    }
+            }
+        else:
+            update = {
+                "$pull": {
+                    f'emojis.{emoji}': userid
+                }
+            }
+        result = await self.reaction_collection.update_one(query, update)
+        updated_flag = await self.reaction_collection.find_one(query)
+        return updated_flag
     
     async def add_confirmation_to_flag(self, message_id):
         query = {
@@ -106,7 +127,6 @@ class DataHandler:
         }
         result = await self.tournament_collection.insert_one(tournament)
         
-        
     async def update_tournament(self, message_id, update):
         query = {
             'message_id': message_id
@@ -120,6 +140,21 @@ class DataHandler:
         }
         update = {
             '$set': {'category_id': category_id}
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        return result
+    
+    async def add_stages_to_tournament(self, tournament_name, stages):
+        stage_codes = [stage['code'] for stage in stages]
+        query = {
+            'name': tournament_name,
+        }
+        update = {
+            '$push': {
+                'stagelist': {
+                    '$each': stage_codes
+                }
+            }
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
@@ -184,16 +219,28 @@ class DataHandler:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
-    async def get_random_stage(self):
-        query = {
-            
-        }
+    async def get_stage(self, **kwargs):
+        map = await self.party_map_collection.find_one(kwargs)
+        if map:
+            return map
+        else:
+            key, value = next(iter(kwargs.items()))
+            raise TournamentNotFoundError(f"Error: Tournament with {key}: {value} not found")
+    
+    async def get_random_stages(self, number):
+        query = {}
         legal_stage_count = await self.party_map_collection.count_documents(query)
-        random_index = random.randint(0, legal_stage_count - 1)
-        random_stage_cursor = self.party_map_collection.find().skip(random_index).limit(1)
-        random_stage = await random_stage_cursor.to_list(1)
         
-        return random_stage[0]
+        
+        random_indices = random.sample(range(legal_stage_count), number)
+        
+        random_stages = []
+
+        for index in random_indices:
+            random_stage_cursor = self.party_map_collection.find().skip(index).limit(1)
+            random_stages += await random_stage_cursor.to_list(1)
+        
+        return random_stages
     
     async def create_lobby(self, tournament_name, players, pool=None):
         player_ids = [player.id for player in players]
@@ -205,12 +252,42 @@ class DataHandler:
             'lobby_id': lobby_id,
             'tournament': tournament_name,
             'pool': pool,
-            'stage': 'checkin',
+            'stage': 'initialize',
             'players': player_ids,
+            'stage_bans': [],
             'results': [],
         }
         lobby = await self.lobby_collection.insert_one(lobby_data)
         return lobby_id
+    
+    async def reset_lobby(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        update = {
+            "$set": {
+                'stage': 'checkin',
+                'stage_bans': [],
+                'results': []
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+        
+    async def ban_stage(self, channel_id, banned_stage):
+        query = {
+            'channel_id': channel_id
+        }
+        update = {
+            '$push': {
+                'stage_bans': banned_stage
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+    
     
     async def remove_lobby(self, lobby_id):
         query = {
@@ -219,11 +296,16 @@ class DataHandler:
         result = await self.lobby_collection.delete_one(query)
         return result
     
-    async def get_lobby(self, lobby_id, tournament_name):
-        query = {
-            'lobby_id': lobby_id,
-            'tournament': tournament_name
-        }
+    async def get_lobby(self, lobby_id=False, tournament_name=False, channel_id=False):
+        if channel_id:
+            query = {
+                'channel_id': channel_id
+            }
+        else:
+            query = {
+                'lobby_id': lobby_id,
+                'tournament': tournament_name
+            }
         lobby = await self.lobby_collection.find_one(query)
         return lobby
         
@@ -239,5 +321,18 @@ class DataHandler:
         result = await self.lobby_collection.update_one(query, update)
         return result
 
-        
+    async def advance_lobby(self, channel_id, stage):
+        query = {
+            'channel_id': channel_id
+        }
+        update = {
+            '$set': {
+                'stage': stage
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+    
+
         

@@ -21,16 +21,23 @@ class ReactionHandler:
             return
 
         message = await channel.fetch_message(payload.message_id)
+        emoji = payload.emoji.name
+        user_id = payload.user_id
+        message_id = payload.message_id
         
+        reaction_flag = await self.bot.dh.update_reaction_to_flag(message_id, emoji, user_id, reaction_added)
+        
+        if reaction_flag['require_all_to_react'] == True:
+            if not set(reaction_flag['users']) == set(reaction_flag['emojis'][emoji]):
+                return
+            
         if reaction_flag['type'] == 'create_tournament':
-            if self.is_same_emoji(INDICATOR_EMOJIS['green_check'], payload.emoji.name):
+            if self.is_same_emoji(INDICATOR_EMOJIS['green_check'], emoji):
                 if reaction_added:
-                    await self.bot.th.set_up_tournament(payload.message_id)
+                    await self.bot.th.set_up_tournament(message_id)
                 else:
-                    tournament = await self.bot.dh.get_tournament(message_id=payload.message_id)
+                    tournament = await self.bot.dh.get_tournament(message_id=message_id)
                     await self.bot.th.remove_tournament(tournament['name'])
-            else:
-                await self.configure_tournament(payload, reaction_added)
             
         elif reaction_flag['type'] == 'report_match':
             pass
@@ -40,26 +47,18 @@ class ReactionHandler:
                 await self.bot.th.process_registration(message, True, is_confirmation=True)
                 
         elif reaction_flag['type'] == 'match_checkin':
-            if reaction_added:
-                #add reaction
-                pass
-            else:
-                #remove reaction
-                pass
+            lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
+            await self.bot.dh.remove_reaction_flag(message_id)
+            await self.bot.lh.advance_lobby(lobby)
             
-                        
-    async def configure_tournament(self, payload, reaction_added):
-        message_id = payload.message_id
-        emoji = payload.emoji.name
-        if not reaction_added and TOURNAMENT_CONFIGURATION[emoji][1] == True:
-            update_content = False
-        else:
-            update_content = TOURNAMENT_CONFIGURATION[emoji][1]
+        elif reaction_flag['type'] == 'stage_ban':
+            channel_id = payload.channel_id
+            await message.delete()
+            await self.bot.lh.ban_stages(channel_id, payload)
+            await self.bot.dh.remove_reaction_flag(message_id)
+            
+            
+                
 
-        update = {
-            "$set": {f'{TOURNAMENT_CONFIGURATION[emoji][0]}': update_content}
-        }
-        await self.bot.dh.update_tournament(message_id, update)
-        
     def is_same_emoji(self, emoji1, emoji2):
         return str(emoji1) == str(emoji2)

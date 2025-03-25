@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 
 from utils.reaction_utils import create_reaction_flag
+from utils.reaction_flags import TOURNAMENT_CONFIGURATION
+from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
 
 DEFAULT_STAGE_NUMBER = 5
 CHANNEL_PERMISSIONS = {
@@ -22,6 +24,8 @@ class TournamentHandler():
     async def set_up_tournament(self, message_id):
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.get_tournament(message_id=message_id)
+        
+        await self.configure_tournament(tournament['name'])
         
         organizer_role = discord.utils.get(guild.roles, name='Event Organizer')
         tournament_role = await guild.create_role(name=f"{tournament['name']}")
@@ -49,24 +53,42 @@ class TournamentHandler():
             )
         
         await self.bot.dh.create_registration_flag(channel_dict['register'].id, tournament['name'], tournament['approved_registration'])
-        
-        if tournament['randomized_stagelist'] == True:
-            for i in range(DEFAULT_STAGE_NUMBER):
-                stage = await self.bot.dh.get_random_stage()
-                message = (
-                    f"# {stage['name']}\n"
-                    f"Creator: {stage['creator']}\n"
-                    f"Code: {stage['code']}\n"
-                    f"{stage['imgur']}"
-                )
-                await channel_dict['stagelist'].send(message)
-                
+                   
+        await self.post_stages(tournament['name'], channel_dict['stagelist'])  
         if tournament['format'] == 'Single Elimination':
             pass
         elif tournament['format'] == 'Double elimination':
             pass
-            
         
+    async def post_stages(self, tournament_name, channel):
+        tournament = await self.bot.dh.get_tournament(name=tournament_name)
+        for stage_code in tournament['stagelist']:
+            stage = await self.bot.dh.get_stage(code=stage_code)
+            message = (
+                f"# {stage['name']}\n"
+                f"Creator: {stage['creator']}\n"
+                f"Code: {stage['code']}\n"
+                f"{stage['imgur']}"
+            )
+            await channel.send(message)
+        
+    async def configure_tournament(self, tournament_name):
+        tournament = await self.bot.dh.get_tournament(name=tournament_name)
+        message_id = tournament['message_id']
+        reaction_flag = await self.bot.dh.get_reaction_flag(message_id=message_id)
+        for emoji in reaction_flag['emojis'].keys():
+            if reaction_flag['emojis'][emoji] and not emoji == INDICATOR_EMOJIS['green_check']:
+                update_content = TOURNAMENT_CONFIGURATION[emoji][1]
+                update = {
+                    "$set": {f'{TOURNAMENT_CONFIGURATION[emoji][0]}': update_content}
+                }
+                await self.bot.dh.update_tournament(message_id, update)
+                
+        tournament = await self.bot.dh.get_tournament(name=tournament_name)
+        if tournament['randomized_stagelist'] == True:
+            stages = await self.bot.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
+            await self.bot.dh.add_stages_to_tournament(tournament['name'], stages)
+
     async def remove_tournament(self, tournament_name):
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.get_tournament(name=tournament_name)
