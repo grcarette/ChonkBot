@@ -14,7 +14,7 @@ class LobbyHandler:
         guild = self.bot.guilds[0]
         organizer_role = discord.utils.get(guild.roles, name="Event Organizer")
         if self.debug == True:
-            player1 = discord.utils.get(guild.members, id=659876874347872257)
+            player1 = discord.utils.get(guild.members, id=1017833723506475069)
             player2 = discord.utils.get(guild.members, id=142798704703700992)
             players = [player1, player2]
             

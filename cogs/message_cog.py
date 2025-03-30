@@ -38,7 +38,7 @@ class MessageCog(commands.Cog):
             )
             await ctx.channel.send(message_content)
             return
-        if ctx.channel.name == 'secret-bot-testing':
+        if ctx.channel.name == 'temporary-bot-testing':
             try:
                 stages = await self.bot.dh.get_random_stages(random_number, user=ctx.message.author)
             except NoStagesFoundError:
