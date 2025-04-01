@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 from dotenv import load_dotenv
 
@@ -8,6 +8,7 @@ from handlers.tournament_handler import TournamentHandler
 from handlers.message_handler import MessageHandler
 from handlers.challonge_handler import ChallongeHandler
 from handlers.lobby_handler import LobbyHandler
+from handlers.reaction_handler import ReactionHandler
 
 class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
@@ -18,6 +19,7 @@ class ChonkBot(commands.Bot):
         self.mh = MessageHandler(self)
         self.ch = ChallongeHandler()
         self.lh = LobbyHandler(self)
+        self.rh = ReactionHandler(self)
         
         self.guild = None
         self.admin_id = int(os.getenv('ADMIN_ID'))
@@ -26,6 +28,8 @@ class ChonkBot(commands.Bot):
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")
+        
+        self.clean_reaction_flags.start()
          
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):
@@ -35,6 +39,14 @@ class ChonkBot(commands.Bot):
                     print(f"Loaded {filename}")
                 except Exception as e:
                     print(f"Failed to load cog {filename}: {e}")
+                    
+    @tasks.loop(minutes=2)
+    async def clean_reaction_flags(self):
+        await self.dh.clean_reaction_flags()
+        
+    @clean_reaction_flags.before_loop
+    async def before_clean_reaction_flags(self):
+        await self.wait_until_ready()
 
 if __name__=="__main__":
     load_dotenv()

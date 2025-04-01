@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from utils.reaction_utils import create_reaction_flag
+from utils.command_utils import get_usage_message, COMMAND_DICT
 from utils.errors import NoStagesFoundError
 
 DEFAULT_RANDOM_NUMBER = 1
@@ -24,8 +25,57 @@ class MessageCog(commands.Cog):
             if register_flag:
                 await self.bot.th.process_registration(message, is_register=is_register)
                 
-    @commands.command(name="random")
+    @commands.command(name="help")
+    async def help(self, ctx):
+        message_content = (
+            
+        )
+                
+    @commands.command(name="command_usage", aliases=['usage'])
+    async def command_usage(self, ctx, command_name):
+        channel = ctx.channel
+        for cmd in self.bot.commands:
+            if command_name in cmd.aliases or command_name == cmd.name:
+                command = cmd
+                break
+        message_content = get_usage_message(command.name)
+        await channel.send(message_content)
+        
+    @commands.command(name="list_commands", aliases=['commands'])
+    async def command_list(self, ctx):
+        categorized_commands = {}
+
+        for command_name, data in COMMAND_DICT.items():
+            command = self.bot.get_command(command_name)
+
+            if command:
+                try:
+                    if await command.can_run(ctx):
+                        tag = data['tag']
+                        if tag not in categorized_commands:
+                            categorized_commands[tag] = []
+                        categorized_commands[tag].append(command_name)
+                except:
+                    continue 
+
+        embed = discord.Embed(
+            title="Commands",
+            color=discord.Color.blue()
+        )
+
+        for tag, commands in categorized_commands.items():
+            command_list = "\n".join([f"`!{cmd}`" for cmd in commands])
+            embed.add_field(name=f"{tag.title()}", value=command_list, inline=False)
+
+        embed.set_footer(text="Use !usage <command> to learn more about a specific command.")
+
+        await ctx.send(embed=embed)
+        
+                
+    @commands.command(name="random_level", aliases=['random'])
     async def random(self, ctx, *, random_number: str = None):
+        channel = ctx.channel
+        user_id = ctx.message.author.id
         if random_number is None:
             random_number = DEFAULT_RANDOM_NUMBER
         try:
@@ -38,7 +88,7 @@ class MessageCog(commands.Cog):
             )
             await ctx.channel.send(message_content)
             return
-        if ctx.channel.name == 'temporary-bot-testing':
+        if channel.name == 'temporary-bot-testing':
             try:
                 stages = await self.bot.dh.get_random_stages(random_number, user=ctx.message.author)
             except NoStagesFoundError:
@@ -49,15 +99,9 @@ class MessageCog(commands.Cog):
                 return
             
             for stage in stages:
-                message_content = (
-                    f"# {stage['name']}\n"
-                    f"Creator: {stage['creator']}\n"
-                    f"Code: {stage['code']}\n"
-                    f"{stage['imgur']}"
-                )
-                message = await ctx.channel.send(message_content)
-                user_id = ctx.message.author.id
+                message = await self.bot.mh.send_level_message(stage, channel)
                 await create_reaction_flag(self.bot, message, 'random_stage', user_filter=user_id, value=stage['code'])
+    
                 
 
 async def setup(bot):

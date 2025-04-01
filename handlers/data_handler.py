@@ -1,7 +1,7 @@
 from utils.errors import *
 from utils.emojis import EMOJI_NUMBERS
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
 import motor.motor_asyncio
@@ -180,7 +180,7 @@ class DataHandler:
             return tournament
         else:
             key, value = next(iter(kwargs.items()))
-            raise TournamentNotFoundError(f"Error: Tournament with {key}: {value} not found")
+            raise TournamentNotFoundError(key, value, 'get_tournament')
         
     async def create_registration_flag(self, channel_id, tournament_name, require_approval):
         register_flag_data = {
@@ -240,7 +240,7 @@ class DataHandler:
             return map
         else:
             key, value = next(iter(kwargs.items()))
-            raise TournamentNotFoundError(f"Error: Tournament with {key}: {value} not found")
+            raise TournamentNotFoundError(key, value, 'get_stage')
     
     async def get_random_stages(self, number, user=False):
         if user:
@@ -267,6 +267,28 @@ class DataHandler:
         if len(random_stages) == 0:
             raise NoStagesFoundError
         return random_stages
+    
+    async def add_legal_stage(self, level_name, creator, code, length, multiple_paths, includes_hazards, imgur):
+        query = {
+            'code': code
+        }
+        level_exists = await self.party_map_collection.find_one(query)
+        if level_exists:
+            raise LevelExistsError
+        level_name = level_name.replace("_", " ")
+        level_data = {
+            'name': level_name,
+            'code': code,
+            'creator': creator,
+            'length': length,
+            'multiple_paths': multiple_paths,
+            'includes_hazards': includes_hazards,
+            'tournament_legal': True,
+            'imgur': imgur
+        }
+        result = await self.party_map_collection.insert_one(level_data)
+        new_level = await self.party_map_collection.find_one(query)
+        return new_level
     
     async def create_lobby(self, tournament_name, players, pool=None):
         player_ids = [player.id for player in players]
@@ -419,7 +441,6 @@ class DataHandler:
         else:
             update_type = "$pull"
         if not category == 'favorite_maps' and not category == 'blocked_maps':
-            print('error')
             return
         query = {
             'user_id': user.id
@@ -452,7 +473,7 @@ class DataHandler:
             result = await self.user_collection.update_one(query, update)
             return result
         else:
-            raise PlayerNotFoundError
+            raise PlayerNotFoundError(player_name, 'link_user_to_player')
         
     async def lookup_player(self, name, use_alias=True):
         search_regex = "^" + re.escape(name) + "$"
@@ -472,7 +493,7 @@ class DataHandler:
         if player_data:
             return player_data
         else:
-            raise PlayerNotFoundError
+            raise PlayerNotFoundError(name, 'lookup_player')
         
     async def find_closest_player_name(self, name):
         all_players = await self.player_collection.find().to_list(None)
@@ -493,11 +514,9 @@ class DataHandler:
                 best_match = player['name']
                 
         if best_match:
-            print(best_match, best_score)
             return best_match
         else:
-            print(best_score)
-            raise PlayerNotFoundError
+            raise PlayerNotFoundError(name, 'find_closest_player_name')
         
     async def get_player_by_id(self, player_id):
         query = {
@@ -514,7 +533,12 @@ class DataHandler:
             }
         }
         link_exists = await self.user_collection.find_one(query)
-        return link_exists
+        if link_exists:
+            player_query = {
+                '_id': link_exists['player_id']
+            }
+            player = await self.player_collection.find_one(player_query)
+            raise UserLinkExistsError(link_exists['name'], player['name'], 'check_user_link')
     
     async def check_player_link(self, player_name):
         player = await self.lookup_player(player_name)
@@ -522,12 +546,16 @@ class DataHandler:
             'player_id' : player['_id']
         }
         link_exists = await self.user_collection.find_one(query)
-        return link_exists
+        if link_exists:
+            raise PlayerLinkExistsError(player_name, link_exists['name'], 'check_player_link')
     
     async def remove_player_link(self, user):
         query = {
             'user_id': user.id
         }
+        user = await self.user_collection.find_one(query)
+        if not 'player_id' in user:
+            raise PlayerNotRegisteredError
         update = {
             '$unset': {
                 'player_id': ''
@@ -831,7 +859,6 @@ class DataHandler:
                 query = {
                     'id': match['tournament_id']
                 }
-                print(match['tournament_id'])
                 tournament = await self.tournament_data_collection.find_one(query)
                 tournament_name = tournament['name'][:max_tourney_name_length]
                 if len(tournament['name']) > max_tourney_name_length:
@@ -842,13 +869,101 @@ class DataHandler:
                 )
                 recent_matches_text += f"```{formatted_string}```"
             return player_1_wins, player_2_wins, recent_matches_text
-        except PlayerNotFoundError:
-            raise PlayerNotFoundError
+        except PlayerNotFoundError as e:
+            raise PlayerNotFoundError(e.player_name, 'get_head_to_head') from e
+        
+    async def get_leaderboard(self, timeframe, start_timestamp=None, end_timestamp=None):
+        min_match_count = 16
+        leaderboard_length = 10
+        
+        if timeframe.lower() == 'season':
+            start_timestamp=datetime(2025,1,1)
+            end_timestamp=datetime(2025,7,1)
+        elif timeframe.lower() == 'year':
+            start_timestamp=datetime.now(timezone.utc) - timedelta(days=365)
+            end_timestamp=datetime.now(timezone.utc)
+        elif timeframe.lower() == 'custom':
+            start_timestamp=start_timestamp
+            end_timestamp=end_timestamp
+            min_match_count = 8
+        else:
+            start_timestamp=datetime(2000,1,1)
+            end_timestamp=datetime(2030,1,1)
+            
+        valid_tournaments = await self.tournament_data_collection.find(
+            {
+                "amateur": False, 
+                "date": {"$gte": start_timestamp, "$lte": end_timestamp} 
+            },
+            {"_id": 0, "id": 1}
+        ).to_list(length=None)
+        valid_tournament_ids = [tournament["id"] for tournament in valid_tournaments]
+
+        pipeline = [
+            {"$match": {
+                "is_dq": {"$ne": True},
+                "tournament_id": {"$in": valid_tournament_ids}
+            }},
+            {
+                "$project": {
+                    "players": [
+                        {"player_id": "$winner_id", "win": 1},
+                        {"player_id": "$loser_id", "win": 0}
+                    ]
+                }
+            },
+            {"$unwind": "$players"},
+
+            {
+                "$group": {
+                    "_id": "$players.player_id",
+                    "total_wins": {"$sum": "$players.win"},
+                    "total_matches": {"$sum": 1}
+                }
+            },
+
+            {
+                "$project": {
+                    "player_id": "$_id",
+                    "_id": 0,
+                    "total_wins": 1,
+                    "total_matches": 1,
+                    "win_rate": {
+                        "$cond": {
+                            "if": {"$gt": ["$total_matches", 0]},
+                            "then": {"$divide": ["$total_wins", "$total_matches"]},
+                            "else": 0
+                        }
+                    }
+                }
+            },
+
+            {"$match": {"total_matches": {"$gte": min_match_count}}},
+            {"$sort": {"win_rate": -1}},
+            {"$limit": leaderboard_length}
+        ]
+        
+        result = await self.match_collection.aggregate(pipeline).to_list(length=None)
+        leaderboard = []
+        for player in result:
+            query = {
+                '_id': player['player_id']
+            }
+            player_data = await self.player_collection.find_one(query)
+            losses = player['total_matches'] - player['total_wins']
+            leaderboard_data = {
+                'name': player_data['name'],
+                'wins': player['total_wins'],
+                'losses': losses,
+                'winrate': round(player['win_rate'], 2)
+            }
+            leaderboard.append(leaderboard_data)
+        return leaderboard
 
     async def change_name(self, user_id, name):
         name_exists = await self.check_unique_name(name)
         if name_exists:
-            raise NameNotUniqueError
+            raise NameNotUniqueError(name, 'change_name')
         user = await self.get_user(user_id=user_id)
         if 'player_id' in user:
             query = {
@@ -867,7 +982,7 @@ class DataHandler:
             return result
 
         else:
-            raise PlayerNotFoundError
+            raise PlayerNotRegisteredError
         
     async def get_bracket(self, bracket_name):
         search_regex = "^" + re.escape(bracket_name) + "$"
@@ -908,6 +1023,17 @@ class DataHandler:
             return True
         else:
             return False
+        
+    async def clean_reaction_flags(self):
+        current_time = datetime.now(timezone.utc)
+        query = {
+            'timestamp': {
+                '$lt': current_time
+            }
+        }
+        result = await self.reaction_collection.delete_many(query)
+        
+        
 
 
 

@@ -100,11 +100,6 @@ class ReactionHandler:
                 except:
                     await channel.send("Unknown Error")
                 await self.bot.dh.remove_reaction_flag(reaction_flag['message_id'])
-
-            
-            
-            
-            
-
+                
     def is_same_emoji(self, emoji1, emoji2):
         return str(emoji1) == str(emoji2)

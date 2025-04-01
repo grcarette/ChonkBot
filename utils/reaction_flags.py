@@ -1,6 +1,6 @@
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
+from datetime import datetime, timezone
 import time
-
 
 TOURNAMENT_CONFIGURATION = {
     NUMBER_EMOJIS[1]: ['format', 'Single Elimination'],
@@ -47,19 +47,29 @@ FLAG_DICTIONARY = {
     },
     'match_checkin': {
         'dict': MATCH_CHECKIN,
-        'timestamp': time.time() + 600
+        'timestamp': 600
     },
     'match_confirmation': {
         'dict': MATCH_CONFIRMATION,
-        'timestamp': time.time() + 3600
+        'timestamp': 3600
     },
     'random_stage': {
         'dict': RANDOM_STAGE,
-        'timestamp': time.time() + 3600
+        'timestamp': 3600
     },
     'link_confirmation': {
         'dict': LINK_CONFIRMATION,
         'timestamp': None
+    },
+    'stage_ban': {
+        'dict': None,
+        'timestamp': None
+    },
+    'match_report': {
+        'dict': None,
+        'timestamp': None
     }
 }
 
+
+     
