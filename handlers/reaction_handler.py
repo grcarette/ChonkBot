@@ -1,16 +1,14 @@
 import discord
 from discord.ext import commands
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
-from handlers.data_handler import DataHandler
 from utils.reaction_flags import *
 
 class ReactionHandler:
     def __init__(self, bot):
-        self.dh = DataHandler()
         self.bot = bot
         
     async def process_reaction(self, payload, reaction_added):
-        reaction_flag = await self.dh.get_reaction_flag(payload=payload)
+        reaction_flag = await self.bot.dh.get_reaction_flag(payload=payload)
         
         if reaction_flag:
             if reaction_flag['users'] == False or payload.user_id in reaction_flag['users']:

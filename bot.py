@@ -3,12 +3,15 @@ from discord.ext import commands, tasks
 import os
 from dotenv import load_dotenv
 
-from handlers.data_handler import DataHandler
+from data.data_handler import DataHandler
 from handlers.tournament_handler import TournamentHandler
 from handlers.message_handler import MessageHandler
 from handlers.challonge_handler import ChallongeHandler
 from handlers.lobby_handler import LobbyHandler
 from handlers.reaction_handler import ReactionHandler
+
+from ui.register_control import RegisterControlView
+from ui.bot_control import BotControlView
 
 class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
@@ -28,6 +31,9 @@ class ChonkBot(commands.Bot):
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")
+            
+        self.add_view(RegisterControlView(self))
+        self.add_view(BotControlView(self))
         
         self.clean_reaction_flags.start()
          
