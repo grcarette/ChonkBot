@@ -20,7 +20,6 @@ CHANNEL_PERMISSIONS = {
     'bot-control': 'private',
 }
 
-
 class TournamentHandler():
     def __init__(self, bot):
         self.bot = bot
@@ -100,7 +99,9 @@ class TournamentHandler():
             stages = await self.bot.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
             await self.bot.dh.add_stages_to_tournament(tournament['name'], stages)
 
-    async def remove_tournament(self, category_id):
+    async def remove_tournament(self, input, category_id):
+        if input == False:
+            return
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         category_id = tournament['category_id']

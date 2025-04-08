@@ -25,6 +25,7 @@ class TournamentSettingsView(discord.ui.View):
         self.require_check_in = False
         self.to_approved_registration = False
         self.randomized_stagelist = False
+        self.stage_bans = False
         
         self.config_button = None
         self.submit_button = None
@@ -80,6 +81,12 @@ class TournamentSettingsView(discord.ui.View):
         button.label = f"Require Check-in {self.toggle_label(self.require_check_in)}"
         await interaction.response.edit_message(view=self)
         
+    @discord.ui.button(label=f"Require Stage Bans {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.secondary, row=2)
+    async def toggle_stage_bans(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stage_bans = not self.stage_bans
+        button.label = f"Require Stage Bans {self.toggle_label(self.stage_bans)}"
+        await interaction.response.edit_message(view=self)
+        
     @discord.ui.button(label=f"TO Approved Registrations {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_to_approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.to_approved_registration = not self.to_approved_registration
@@ -92,7 +99,7 @@ class TournamentSettingsView(discord.ui.View):
         button.label = f"Randomized Stagelist {self.toggle_label(self.randomized_stagelist)}"
         await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(label=f"Submit", style=discord.ButtonStyle.success, disabled=True, row=2)
+    @discord.ui.button(label=f"Submit", style=discord.ButtonStyle.success, disabled=True, row=3)
     async def submit_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(f"Tournament `{self.tournament_name}` created.")
         await interaction.message.delete()
@@ -102,6 +109,7 @@ class TournamentSettingsView(discord.ui.View):
             'organizer': self.user.id,
             'format': self.tournament_format,
             'check-in': self.require_check_in,
+            'stage_bans': self.stage_bans,
             'approved_registration': self.to_approved_registration,
             'randomized_stagelist': self.randomized_stagelist,
         }

@@ -5,30 +5,24 @@ from utils.errors import *
 from utils.messages import get_tournament_creation_message
 from utils.reaction_utils import create_tournament_configuration
 
+from ui.create_tournament import TournamentSettingsView
+from ui.confirmation import ConfirmationView
+
 class EventCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
     @commands.has_role('Event Organizer')
     @commands.command(name="create_tournament")
-    async def create_tournament(self, ctx, *, event_data: str):
+    async def create_tournament(self, ctx):
+        embed = discord.Embed(
+            title="Setup Tournament",
+            description="Click the buttons below to configure your tournament.",
+            color=discord.Color.green()
+        )
         user = ctx.author
-        num_list = [1,2,3,4]
+        await ctx.send(embed=embed, view=TournamentSettingsView(user, self.bot))
         
-        event_data = event_data.split('-')
-        event_name = event_data[0]
-        event_time = event_data[1]
-        
-        message_content = get_tournament_creation_message(event_name, event_time)
-        message = await ctx.send(message_content)
-
-        try:
-            await self.bot.dh.create_tournament(event_name, event_time, user.id, message_id=message.id)
-            await create_tournament_configuration(self.bot, message, num_list, user_filter=user.id)
-        except TournamentExistsError as e:
-            await message.delete()
-            await ctx.send(str(e))
-    
     @commands.has_role('Event Organizer')
     @commands.command(name="reveal_tournament")
     async def reveal_tournament(self, ctx):
@@ -49,8 +43,19 @@ class EventCog(commands.Cog):
     @commands.command(name="reset_lobby")
     async def reset_lobby(self, ctx):
         lobby = await self.bot.dh.reset_lobby(ctx.channel.id)
-        await self.bot.lh.advance_lobby(lobby)
+        await self.bot.lh.end_checkin(lobby)
         
-            
+    @commands.has_role("Moderator")
+    @commands.command(name="delete_tournament", aliases=['r'])
+    async def delete_tournament(self, ctx):
+        channel = ctx.channel
+        category_id = ctx.channel.category.id
+        embed = discord.Embed(
+            title="Are you sure you want to delete this tournament?",
+            color=discord.Color.red()
+        )
+        view = ConfirmationView(self.bot.th.remove_tournament, category_id)
+        await channel.send(embed=embed, view=view)
+         
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

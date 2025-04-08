@@ -4,6 +4,9 @@ from utils.reaction_utils import create_reaction_flag
 from utils.command_utils import get_usage_message, COMMAND_DICT
 from utils.errors import NoStagesFoundError
 
+from ui.random_level import RandomLevelView
+from ui.level_submission import SubmitLevelButton
+
 DEFAULT_RANDOM_NUMBER = 1
 MAX_RANDOM_NUMBER = 5
 
@@ -25,8 +28,8 @@ class MessageCog(commands.Cog):
             if register_flag:
                 await self.bot.th.process_registration(message, is_register=is_register)
                 
-    @commands.command(name="help")
-    async def help(self, ctx):
+    @commands.command(name="helpp")
+    async def helpp(self, ctx):
         message_content = (
             
         )
@@ -73,34 +76,17 @@ class MessageCog(commands.Cog):
         
                 
     @commands.command(name="random_level", aliases=['random'])
-    async def random(self, ctx, *, random_number: str = None):
+    async def random(self, ctx):
         channel = ctx.channel
-        user_id = ctx.message.author.id
-        if random_number is None:
-            random_number = DEFAULT_RANDOM_NUMBER
-        try:
-            random_number = int(random_number)
-            if random_number > MAX_RANDOM_NUMBER:
-                random_number = MAX_RANDOM_NUMBER
-        except:
-            message_content = (
-                "Error: Please provide a valid number of random stages"
-            )
-            await ctx.channel.send(message_content)
-            return
-        if channel.name == 'temporary-bot-testing':
-            try:
-                stages = await self.bot.dh.get_random_stages(random_number, user=ctx.message.author)
-            except NoStagesFoundError:
-                message_content = (
-                    "You have blocked every legal stage, are you trying to break me??"
-                )
-                message = await ctx.channel.send(message_content)
-                return
-            
-            for stage in stages:
-                message = await self.bot.mh.send_level_message(stage, channel)
-                await create_reaction_flag(self.bot, message, 'random_stage', user_filter=user_id, value=stage['code'])
+        view = RandomLevelView(self.bot)
+        await channel.send(view=view)
+        
+    @commands.has_role('Moderator')
+    @commands.command(name="submit_level")
+    async def submit_level(self, ctx):
+        channel = ctx.channel
+        view = SubmitLevelButton(self.bot)
+        await channel.send(view=view)
     
                 
 
