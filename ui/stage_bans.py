@@ -87,6 +87,8 @@ class BanStagesButton(discord.ui.View):
         embed = self.generate_embed()
         await self.message.edit(embed=embed, view=self)
         if set(self.finished_users) == set(self.lobby['players']):
+            self.stop()
+            await self.message.delete()
             await self.bot.lh.end_stage_bans(self.lobby, self.banned_stages)
     
     def generate_embed(self):

@@ -42,8 +42,15 @@ class EventCog(commands.Cog):
     @commands.has_role('Event Organizer')
     @commands.command(name="reset_lobby")
     async def reset_lobby(self, ctx):
-        lobby = await self.bot.dh.reset_lobby(ctx.channel.id)
-        await self.bot.lh.end_checkin(lobby)
+        lobby = await self.bot.dh.get_lobby(channel_id=ctx.channel.id)
+        await self.bot.lh.reset_lobby(lobby)
+        
+    @commands.has_role('Event Organizer')
+    @commands.command(name="reset_report")
+    async def reset_report(self, ctx):
+        lobby = await self.bot.dh.get_lobby(channel_id=ctx.channel.id)
+        await self.bot.lh.reset_report(lobby)
+
         
     @commands.has_role("Moderator")
     @commands.command(name="delete_tournament", aliases=['r'])

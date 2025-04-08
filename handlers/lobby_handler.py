@@ -7,6 +7,7 @@ import random
 
 from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
+from ui.match_report import MatchReportButton
 
 DEFAULT_STAGE_BANS = 2
 
@@ -15,13 +16,15 @@ class LobbyHandler:
         self.bot = bot
         self.debug = True
     
-    async def create_lobby(self, tournament_name='test', players=[], stage=None, pool=None):
+    async def create_lobby(self, tournament_name='test', players=[], stage=None, num_winners=1, pool=None):
         guild = self.bot.guilds[0]
         organizer_role = discord.utils.get(guild.roles, name="Event Organizer")
         if self.debug == True:
             player1 = discord.utils.get(guild.members, id=1017833723506475069)
             player2 = discord.utils.get(guild.members, id=142798704703700992)
-            players = [player1, player2]
+            # player3 = discord.utils.get(guild.members, id=486189871921364994)
+            player4 = discord.utils.get(guild.members, id=659876874347872257)
+            players = [player1, player2, player4]
             
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -34,13 +37,12 @@ class LobbyHandler:
         
         if stage == None:
             stages = tournament['stagelist']
-            stage_bans = DEFAULT_STAGE_BANS
+            num_stage_bans = DEFAULT_STAGE_BANS
         else:
             stages = [stage]
-            stage_bans = False
+            num_stage_bans = 0
             
-        print(stage_bans)
-        lobby_id = await self.bot.dh.create_lobby(tournament, players, stages, stage_bans, pool)
+        lobby_id = await self.bot.dh.create_lobby(tournament, players, stages, num_stage_bans, num_winners, pool)
         lobby_name = f"Lobby {lobby_id}"
         lobby_channel = await guild.create_text_channel(name=lobby_name, overwrites=overwrites, category=None)
         await self.bot.dh.add_channel_to_lobby(lobby_id, lobby_channel.id)
@@ -78,9 +80,56 @@ class LobbyHandler:
         await channel.send(' '.join(mentions), embed=embed, view=view)
     
     async def end_stage_bans(self, lobby, banned_stages):
-        print(banned_stages)
-    
+        remaining_stages = [stage for stage in lobby['stages'] if stage not in banned_stages]
+        final_stage = random.choice(remaining_stages)
+        print(final_stage)
+        
+        lobby = await self.bot.dh.pick_lobby_stage(lobby['channel_id'], final_stage)
+        await self.start_reporting(lobby)
+
     async def start_reporting(self, lobby):
-        pass
+        stage = await self.bot.dh.get_stage(code=lobby['picked_stage'])
+        channel = await self.get_lobby_channel(lobby)
+        message_content = (
+            f"You will be playing on **{stage['name']} - {stage['code']}**\n"
+            f"Sort out among yourselves who will host the lobby. Make sure you are playing in party mode with the tournament ruleset.\n\n"
+            f"When the match is over, report the winner of the match with the dropdown menu below."
+        )
+        view = MatchReportButton(self.bot, lobby)
+        embed = discord.Embed(
+            title = 'Match Ready!',
+            description = message_content,
+            color = discord.Color.yellow()
+        )
+        mentions = await self.get_mentions(lobby)
+        await channel.send(' '.join(mentions), embed=embed, view=view)
+        
+    async def end_reporting(self, lobby, winner_id):
+        channel = await self.get_lobby_channel(lobby)
+        
+        message_content = (
+            f'Congratulations <@{winner_id}>'
+        )
+        await channel.send(message_content)
+        
+        lobby = await self.bot.dh.report_match(lobby['channel_id'], winner_id)
+        if len(lobby['results']) < lobby['num_winners']:
+            print('go again!')
+            pass
+        else:
+            message_content = (
+                'This lobby is now closed.'
+            )
+            await channel.send(message_content)
+        
+        
+        
+    async def reset_lobby(self, lobby):
+        lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state='stage_bans')
+        await self.bot.lh.start_stage_bans(lobby)
+    
+    async def reset_report(self, lobby):
+        lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state='report')
+        await self.bot.lh.start_reporting(lobby)
     
     
