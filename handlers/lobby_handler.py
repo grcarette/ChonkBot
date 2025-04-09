@@ -14,9 +14,9 @@ DEFAULT_STAGE_BANS = 2
 class LobbyHandler:
     def __init__(self, bot):
         self.bot = bot
-        self.debug = True
+        self.debug = False
     
-    async def create_lobby(self, tournament_name='test', players=[], stage=None, num_winners=1, pool=None):
+    async def create_lobby(self, tournament_name, players=[], stage=None, num_winners=1, pool=None):
         guild = self.bot.guilds[0]
         organizer_role = discord.utils.get(guild.roles, name="Event Organizer")
         if self.debug == True:
@@ -24,7 +24,7 @@ class LobbyHandler:
             player2 = discord.utils.get(guild.members, id=142798704703700992)
             # player3 = discord.utils.get(guild.members, id=486189871921364994)
             player4 = discord.utils.get(guild.members, id=659876874347872257)
-            players = [player1, player2, player4]
+            players = [player1, player2]
             
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -45,7 +45,7 @@ class LobbyHandler:
         lobby_id = await self.bot.dh.create_lobby(tournament, players, stages, num_stage_bans, num_winners, pool)
         lobby_name = f"Lobby {lobby_id}"
         lobby_channel = await guild.create_text_channel(name=lobby_name, overwrites=overwrites, category=None)
-        await self.bot.dh.add_channel_to_lobby(lobby_id, lobby_channel.id)
+        await self.bot.dh.add_channel_to_lobby(lobby_id, tournament_name, lobby_channel.id)
         lobby = await self.bot.dh.get_lobby(channel_id=lobby_channel.id)
         await self.start_checkin(lobby, lobby_channel)
         
@@ -67,7 +67,7 @@ class LobbyHandler:
         
     async def end_checkin(self, lobby):
         tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
-        if lobby['num_stage_bans'] == None:
+        if lobby['config']['num_stage_bans'] == None:
             await self.start_reporting(lobby)
         else:
             await self.start_stage_bans(lobby)
@@ -113,7 +113,7 @@ class LobbyHandler:
         await channel.send(message_content)
         
         lobby = await self.bot.dh.report_match(lobby['channel_id'], winner_id)
-        if len(lobby['results']) < lobby['num_winners']:
+        if len(lobby['results']) < lobby['config']['num_winners']:
             print('go again!')
             pass
         else:

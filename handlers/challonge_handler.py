@@ -1,22 +1,39 @@
 import challonge
 import os
 from dotenv import load_dotenv
+import asyncio
+import datetime
 
 load_dotenv()
 
 class ChallongeHandler:
-    def __init__(self):
+    def __init__(self, tournament_url=None):
         api_key = os.getenv('CHALLONGE_KEY')
         username = os.getenv('CHALLONGE_USERNAME')
         challonge.set_credentials(username, api_key)
-        self.tournament_url = 'g78avo67'
+        self.tournament_url = tournament_url
     
-    async def register_player(self, name):
-        player = challonge.participants.create(self.tournament_url, name=name)
+    async def register_player(self, tournament_url, player_name):
+        player = challonge.participants.create(tournament_url, name=player_name)
         return player['id']
+    
+    async def unregister_player(self, tournament_id, player_id):
+        challonge.participants.destroy(tournament_id, player_id)
+    
+    async def start_tournament(self, tournament_id):
+        tournament = challonge.tournaments.show(tournament_id)
         
-    async def get_pending_matches(self):
-        matches = challonge.matches.index(self.tournament_url)
+        if tournament['state'] != 'pending':
+            return
+
+        challonge.tournaments.start(tournament_id)
+        
+    async def get_tournament_from_url(self, tournament_url):
+        tournament = challonge.tournaments.show(tournament_url)
+        return tournament
+        
+    async def get_pending_matches(self, tournament_url):
+        matches = challonge.matches.index(tournament_url)
         pending_matches = [match for match in matches if match["state"] == "open"]
         return pending_matches
             
@@ -42,16 +59,37 @@ class ChallongeHandler:
             winner_id=winner_id,
             scores_csv=scores
         )
+    
+    async def reset_match(self, tournament_id, match_id):
+        challonge.matches.reset(tournament_id, match_id)
         
     async def disqualify_player(self, player_id):
         challonge.participants.update(self.tournament_url, player_id, disqualified=True)
         
-    async def create_tournament(self, name, tournament_type, url=None):
+    async def create_tournament(self, name, tournament_type, url=None, start_time=None):
+        if isinstance(start_time, datetime.datetime):
+            start_time = start_time
+        else:
+            start_time = datetime.datetime.now()
+            
         tournament = challonge.tournaments.create(
             name=name,
             tournament_type=tournament_type,
+            start_time=start_time,
             url=url,
             open_signup=False,
             ranked=False
         )
-        return tournament['url']
+        self.tournament_url = tournament['url']
+        return tournament
+    
+async def main():
+    ch = ChallongeHandler()
+    tournament = await ch.get_tournament_from_url('di22gs44')
+    matches = await ch.get_pending_matches()
+    for match in matches:
+        await ch.report_match(match['id'], winner_id=match['player1_id'])
+    
+        
+if __name__ == "__main__":
+    asyncio.run(main())

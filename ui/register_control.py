@@ -15,17 +15,16 @@ class RegisterControlView(discord.ui.View):
         
         tournament_name = tournament['name']
         player_registered = await self.bot.dh.get_registration_status(tournament_name, user_id)
-        print(player_registered)
         
         if player_registered:
-            await self.bot.dh.unregister_player(tournament_name, user_id)
+            await self.bot.th.unregister_player(tournament_name, user_id)
             message_content = (
                 f"You are no longer registered for {tournament['name']}\n"
                 f"You may still choose to register again by pressing the button."
             )
             await interaction.response.send_message(message_content, ephemeral=True)
         else:
-            await self.bot.dh.register_player(tournament_name, user_id)
+            await self.bot.th.register_player(tournament_name, user_id)
             message_content = (
                 f"You are now registered for {tournament['name']}\n"
                 f"If you wish to unregister, press the button again."

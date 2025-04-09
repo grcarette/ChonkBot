@@ -44,7 +44,7 @@ class StageBansView(discord.ui.View):
     async def setup(self):
         for stage_code in self.lobby['stages']:
             stage = await self.bot.dh.get_stage(code=stage_code)
-            button = StageButton(self.lobby['num_stage_bans'], stage)
+            button = StageButton(self.lobby['config']['num_stage_bans'], stage)
             self.add_item(button)
             
         confirm_button = discord.ui.Button(label='Confirm', style=discord.ButtonStyle.success, disabled=True, custom_id='confirm_button')

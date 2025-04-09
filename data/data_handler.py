@@ -135,19 +135,25 @@ class DataHandler:
         tournament_exists = await self.tournament_collection.find_one({'name': tournament['name']})
         if tournament_exists:
             raise TournamentExistsError(f"Error: Tournament name '{tournament['name']}' already exists.")
+        config_data = {
+            'check-in': tournament['check-in'],
+            'approved_registration': tournament['approved_registration'],
+            'randomized_stagelist': tournament['randomized_stagelist'],
+            'stage_bans': tournament['stage_bans']
+        }
         tournament = {
             'name': tournament['name'],
             'date': tournament['date'],
             'organizer': tournament['organizer'],
             'format': tournament['format'],
-            'check-in': tournament['check-in'],
-            'approved_registration': tournament['approved_registration'],
-            'randomized_stagelist': tournament['randomized_stagelist'],
-            'stage_bans': tournament['stage_bans'],
+            'active': True,
+            'config': config_data,
             'stagelist': [],
-            'entrants': []
+            'entrants': {}
         }
         result = await self.tournament_collection.insert_one(tournament)
+        tournament = await self.get_tournament(name=tournament['name'])
+        return tournament
         
     async def delete_tournament(self, category_id):
         query = {
@@ -187,6 +193,23 @@ class DataHandler:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
+    async def add_challonge_to_tournament(self, tournament_name, url, tournament_id):
+        query = {
+            'name': tournament_name
+        }
+        challonge_data = {
+            'url': url,
+            'id': tournament_id
+        }
+        update = {
+            '$set': {
+                'challonge_data': challonge_data
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        tournament = await self.tournament_collection.find_one(query)
+        return tournament
+    
     async def get_tournament(self, **kwargs):
         tournament = await self.tournament_collection.find_one(kwargs)
         if tournament:
@@ -194,6 +217,13 @@ class DataHandler:
         else:
             key, value = next(iter(kwargs.items()))
             raise TournamentNotFoundError(key, value, 'get_tournament')
+        
+    async def get_active_events(self):
+        query = {
+            'active': True
+        }
+        active_events = await self.tournament_collection.find(query).to_list(None)
+        return active_events
         
     async def create_registration_flag(self, channel_id, tournament_name, require_approval):
         register_flag_data = {
@@ -218,35 +248,62 @@ class DataHandler:
         registration_flag = await self.register_flag_collection.find_one(query)
         return registration_flag
     
-    async def get_registration_status(self, tournament_name, player_id):
+    async def get_registration_status(self, tournament_name, user_id):
         query = {
             'name': tournament_name,
-            'entrants': player_id
+            f'entrants.{user_id}': {
+                '$exists': True
+            }
         }
         player_exists = await self.tournament_collection.find_one(query)
         return player_exists
         
-    async def register_player(self, tournament_name, player_id):
-        player_exists = await self.get_registration_status(tournament_name, player_id)
+    async def register_player(self, tournament_name, user_id, player_id):
+        player_exists = await self.get_registration_status(tournament_name, user_id)
         
         if not player_exists:
             query = {
                 'name': tournament_name
             }
+
             update = {
-                "$addToSet": {'entrants': player_id}
+                "$set": {
+                    f"entrants.{user_id}": player_id
+                }
             }
             result = await self.tournament_collection.update_one(query, update)
             return result
         else:
             return False
     
-    async def unregister_player(self, tournament_name, player_id):
+    async def unregister_player(self, tournament_name, user_id):
+        query = {
+            'name': tournament_name
+        }
+        tournament = await self.get_tournament(name=tournament_name)
+        
+        update = {}
+            
+        if str(user_id) in tournament.get('entrants', {}):
+            update.setdefault('$unset', {})[f'entrants.{user_id}'] = ""
+        
+        if 'checked_in' in tournament and user_id in tournament['checked_in']:
+            update.setdefault('$pull', {})['checked_in'] = user_id
+            
+        if update:
+            result = await self.tournament_collection.update_one(query, update)
+            return result
+        else:
+            return None
+    
+    async def checkin_player(self, tournament_name, user_id):
         query = {
             'name': tournament_name
         }
         update = {
-            '$pull': {'entrants': player_id}
+            '$addToSet': {
+                'checked_in': user_id
+            }
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
@@ -373,16 +430,16 @@ class DataHandler:
         else:
             return upvotes, downvotes
         
-    async def get_user_map_preference(self, user, map_code):
+    async def get_user_map_preference(self, discord_user, map_code):
         is_favorite = False
         is_blocked = False
         rating = None
         query = {
-            'user_id': user.id
+            'user_id': discord_user.id
         }
         user = await self.user_collection.find_one(query)
         if not user:
-            await self.register_user(user)
+            await self.register_user(discord_user)
             user = await self.user_collection.find_one(query)
             
         if map_code in user['favorite_maps']:
@@ -419,6 +476,11 @@ class DataHandler:
         }
         lobby_id = await self.lobby_collection.count_documents(query) + 1
         
+        config_data = {
+            'num_stage_bans': num_stage_bans,
+            'num_winners': num_winners,
+        }
+        
         lobby_data = {
             'lobby_id': lobby_id,
             'tournament': tournament['name'],
@@ -426,9 +488,7 @@ class DataHandler:
             'state': 'initialize',
             'players': player_ids,
             'stages': stages,
-            'num_stage_bans': num_stage_bans,
-            'num_winners': num_winners,
-            'checked_in': [],
+            'config': config_data,
             'results': [],
         }
         lobby = await self.lobby_collection.insert_one(lobby_data)
@@ -527,9 +587,10 @@ class DataHandler:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
         
-    async def add_channel_to_lobby(self, lobby_id, channel_id):
+    async def add_channel_to_lobby(self, lobby_id, tournament_name, channel_id):
         query = {
-            'lobby_id': lobby_id
+            'lobby_id': lobby_id,
+            'tournament': tournament_name
         }
         update = {
             "$set": {
@@ -576,6 +637,13 @@ class DataHandler:
         else:
             key, value = next(iter(kwargs.items()))
             raise UserNotFoundError(f"Error: User with {key}: {value} not found")
+        
+    async def get_user_by_challonge(self, tournament_name, challonge_id):
+        tournament = await self.get_tournament(name=tournament_name)
+        for discord_id, player_id in tournament['entrants'].items():
+            if player_id == challonge_id:
+                return discord_id
+        return None
         
     async def update_map_preference(self, user, map_code, category, reaction_added):
         if reaction_added:
