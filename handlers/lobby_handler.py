@@ -16,7 +16,7 @@ class LobbyHandler:
         self.bot = bot
         self.debug = False
     
-    async def create_lobby(self, tournament_name, match_id, players=[], stage=None, num_winners=1, pool=None):
+    async def create_lobby(self, tournament_name, match_id, prerequisite_matches, players=[], stage=None, num_winners=1, pool=None):
         guild = self.bot.guilds[0]
         organizer_role = discord.utils.get(guild.roles, name="Event Organizer")
         if self.debug == True:
@@ -42,7 +42,7 @@ class LobbyHandler:
             stages = [stage]
             num_stage_bans = 0
             
-        lobby_id = await self.bot.dh.create_lobby(tournament, match_id, players, stages, num_stage_bans, num_winners, pool)
+        lobby_id = await self.bot.dh.create_lobby(tournament, match_id, prerequisite_matches, players, stages, num_stage_bans, num_winners, pool)
         lobby_name = f"Lobby {lobby_id}"
         lobby_channel = await guild.create_text_channel(name=lobby_name, overwrites=overwrites, category=None)
         await self.bot.dh.add_channel_to_lobby(lobby_id, tournament_name, lobby_channel.id)
@@ -58,7 +58,7 @@ class LobbyHandler:
     async def get_mentions(self, lobby):
         mentions = [f"<@{id}>" for id in lobby['players']]
         return mentions
-        
+    
     async def start_checkin(self, lobby, channel):
         view = CheckinView(self.bot, lobby)
         embed = view.generate_embed()
@@ -86,6 +86,11 @@ class LobbyHandler:
         
         lobby = await self.bot.dh.pick_lobby_stage(lobby['channel_id'], final_stage)
         await self.start_reporting(lobby)
+        
+    async def delete_lobby(self, lobby):
+        channel = await self.get_lobby_channel(lobby)
+        await channel.delete()
+        await self.bot.dh.delete_lobby(lobby)
 
     async def start_reporting(self, lobby):
         stage = await self.bot.dh.get_stage(code=lobby['picked_stage'])

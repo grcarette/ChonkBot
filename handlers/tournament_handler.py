@@ -26,11 +26,13 @@ CHANNEL_PERMISSIONS = {
     'bot-control': 'private',
     'check-in': 'read_only',
     'match-calling': 'private',
+    'active-matches': 'private'
 }
 
 NONDEFAULT_CHANNELS = [
     'check-in',
-    'match-calling'
+    'match-calling',
+    'active-matches',
 ]
 
 class TournamentHandler():
@@ -45,10 +47,14 @@ class TournamentHandler():
             await self.initialize_event(event)
 
     async def initialize_event(self, event):
+        category_id = event['category_id']
         if event['format'] == 'single elimination' or event['format'] == 'double elimination':
             bracket_handler = BracketHandler(self.bot, event)
+            self.tournaments[category_id] = bracket_handler
             await bracket_handler.initialize_event()
-            self.tournaments[event['category_id']] = bracket_handler
+            if event['state'] == 'active':
+                await self.refresh_match_calls(category_id)
+                
         elif event['format'] == 'swiss':
             pass
         elif event['format'] == 'FFA Filter':
@@ -159,18 +165,33 @@ class TournamentHandler():
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         tournament_category = self.get_tournament_category(category_id)
         
-        match_call_channel = await self.create_channel(
-            guild=guild,
-            tournament_category=tournament_category,
-            hide_channel=True,
-            channel_name='match-calling',
-            channel_overwrites=CHANNEL_PERMISSIONS['match-calling'] 
-        )
+        match_call_channel = discord.utils.get(tournament_category.channels, name='match-calling')
+        active_match_channel = discord.utils.get(tournament_category.channels, name='active-matches')
+        
+        if not match_call_channel:
+            match_call_channel = await self.create_channel(
+                guild=guild,
+                tournament_category=tournament_category,
+                hide_channel=True,
+                channel_name='match-calling',
+                channel_overwrites=CHANNEL_PERMISSIONS['match-calling'] 
+            )
+        if not active_match_channel:
+            active_match_channel = await self.create_channel(
+                guild=guild,
+                tournament_category=tournament_category,
+                hide_channel=True,
+                channel_name='active-matches',
+                channel_overwrites=CHANNEL_PERMISSIONS['active-matches'] 
+            ) 
+        
         checkin_channel = discord.utils.get(tournament_category.channels, name='check-in')
         if checkin_channel:
             await checkin_channel.delete()
             
-        await self.tournaments[tournament['category_id']].start_tournament()
+        tournament_handler = self.tournaments[tournament['category_id']]
+        await tournament_handler.start_tournament()
+        await tournament_handler.call_matches()
         
     async def get_players_from_match(self, match_data):
         player_1_id = match_data['player_1']
@@ -188,6 +209,9 @@ class TournamentHandler():
         
         player_1, player_2 = await self.get_players_from_match(match_data)
         
+        waiting_since = await self.bot.dh.get_lobby_time(match_data['prerequisite_matches'])
+        waiting_since = waiting_since.strftime("%I:%M%p").lstrip("0")
+
         if match_data['bracket'] == 'Winners':
             color = discord.Color.green()
         else:
@@ -195,7 +219,7 @@ class TournamentHandler():
         
         embed = discord.Embed(
             title = f"{match_data['bracket']} round {match_data['round']} - {player_1['name']} vs {player_2['name']}",
-            description = f"{match_data['waiting_since']}",
+            description = f"{waiting_since}",
             color  = color
         )
         view = MatchCallView(self.bot, match_data)
@@ -214,22 +238,37 @@ class TournamentHandler():
         await self.bot.lh.create_lobby(
             tournament_name = match_data['tournament'],
             match_id = match_data['match_id'],
+            prerequisite_matches = match_data['prerequisite_matches'],
             players = players,
             stage=None,
             num_winners=1,
             pool=None
         )
         
+    async def create_match_calls(self, category_id):
+        tournament_handler = self.tournaments[category_id]
+        await tournament_handler.call_matches()
+        
+    async def refresh_match_calls(self, category_id):
+        tournament_category = self.get_tournament_category(category_id)
+        channel = discord.utils.get(tournament_category.channels, name='match-calling')
+        await channel.purge(limit=None)
+        await self.create_match_calls(category_id)
+        
     async def report_match(self, lobby):
         await self.bot.dh.end_match(lobby['channel_id'])
         tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
-        await self.tournaments[tournament['category_id']].report_match(lobby)
+        category_id = tournament['category_id']
+        await self.tournaments[category_id].report_match(lobby)
+        await self.create_match_calls(category_id)
         
     async def confirm_reset_lobby(self, user_id, lobby, state):
+        dependent_matches = await self.bot.dh.get_dependent_matches(lobby['match_id'])
+        num_dependent = len(dependent_matches)
         guild = self.bot.guilds[0]
         channel = discord.utils.get(guild.channels, id=lobby['channel_id'])
         embed = discord.Embed(
-            title="Are you sure you want to reset this lobby?",
+            title=f"**CAUTION:**\nAre you absolutely sure you want to reset this lobby? This will also reset {num_dependent} dependent matches",
             color=discord.Color.red()
         )
         

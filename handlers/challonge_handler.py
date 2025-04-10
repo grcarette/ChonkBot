@@ -89,10 +89,9 @@ class ChallongeHandler:
     
 async def main():
     ch = ChallongeHandler()
-    tournament = await ch.get_tournament_from_url('di22gs44')
-    matches = await ch.get_pending_matches()
+    matches = await ch.get_pending_matches('p7nxt030')
     for match in matches:
-        await ch.report_match(match['id'], winner_id=match['player1_id'])
+        print(match['prerequisite_match_ids_csv'])
     
         
 if __name__ == "__main__":

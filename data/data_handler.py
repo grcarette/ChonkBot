@@ -146,7 +146,7 @@ class DataHandler:
             'date': tournament['date'],
             'organizer': tournament['organizer'],
             'format': tournament['format'],
-            'active': True,
+            'state': 'initialized',
             'config': config_data,
             'stagelist': [],
             'entrants': {}
@@ -220,7 +220,10 @@ class DataHandler:
         
     async def get_active_events(self):
         query = {
-            'active': True
+            '$or': [
+                {'state': 'initialized'},
+                {'state': 'active'}
+            ]
         }
         active_events = await self.tournament_collection.find(query).to_list(None)
         return active_events
@@ -469,7 +472,7 @@ class DataHandler:
         level = await self.level_collection.find_one(query)
         return level
         
-    async def create_lobby(self, tournament, match_id, players, stages, num_stage_bans, num_winners, pool=None):
+    async def create_lobby(self, tournament, match_id, prerequisite_matches, players, stages, num_stage_bans, num_winners, pool=None):
         player_ids = [player.id for player in players]
         query = {
             'tournament': tournament['name']
@@ -481,10 +484,13 @@ class DataHandler:
             'num_winners': num_winners,
         }
         
+        prerequisite_matches = await self.get_prerequisite_matches(prerequisite_matches)
+        
         lobby_data = {
             'lobby_id': lobby_id,
             'tournament': tournament['name'],
             'match_id': match_id,
+            'prerequisite_match_ids': prerequisite_matches,
             'pool': pool,
             'state': 'initialize',
             'players': player_ids,
@@ -495,10 +501,43 @@ class DataHandler:
         lobby = await self.lobby_collection.insert_one(lobby_data)
         return lobby_id
     
+    async def delete_lobby(self, lobby):
+        query = {
+            'channel_id': lobby['channel_id']
+        }
+        result = await self.lobby_collection.delete_one(query)
+        return result
+    
+    async def get_dependent_matches(self, match_id):
+        query = {
+            'prerequisite_match_ids': int(match_id)
+        }
+        lobbies = await self.lobby_collection.find(query).to_list(length=None)
+        return lobbies
+    
+    async def get_prerequisite_matches(self, initial_matches):
+        prerequisite_matches = set(initial_matches)
+        to_process = initial_matches
+        
+        while to_process:
+            print(to_process)
+            current_match_id = to_process.pop()
+            print(current_match_id)
+            match_data = await self.find_match(current_match_id)
+            print(match_data)
+            
+            if 'prerequisite_match_ids' in match_data:
+                new_prereqs = set(match_data['prerequisite_match_ids'])
+                prerequisite_matches.update(new_prereqs)
+                to_process.extend(new_prereqs)
+                
+        return list(prerequisite_matches)
+    
     async def reset_lobby(self, channel_id, state=None):
         query = {
             'channel_id': channel_id
         }
+        lobby = await self.lobby_collection.find_one(query)
         if state == 'last_result':
             await self.undo_last_result(channel_id)
             update = {
@@ -507,20 +546,38 @@ class DataHandler:
                 }
             }
         elif state == 'stage_bans':
+            await self.reset_players(lobby)
             update = {
                 "$set": {
                     'state': 'stage_bans',
-                    'results': [],
                     'picked_stage': None
                 }
             }
         elif state == 'report':
-            await self.undo_last_result(channel_id)
+            await self.reset_players(lobby)
             update = {
                 "$set": {
                     'state': 'reporting',
                 }
             }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+    
+    async def reset_players(self, lobby):
+        query = {
+            'channel_id': lobby['channel_id']
+        }
+        update = {
+            '$push':{
+                'players': {
+                    '$each': lobby['results']
+                }
+            },
+            '$set': {
+                'results': []
+            }
+        }
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
@@ -598,16 +655,44 @@ class DataHandler:
         query = {
             'channel_id': channel_id
         }
-        update = [
-            {
-                "$set": {
-                    "listB": {"$setUnion": ["$listB", "$listA"]}
+        lobby = await self.lobby_collection.find_one(query)
+        remaining_players = lobby['players']
+        update = {
+            '$set': {
+                'players': [],
+                'finished_at': datetime.now()
+            },
+            '$push': {
+                'results': {
+                    '$each': remaining_players
                 }
             }
-        ]
+        }
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
+    
+    async def get_lobby_time(self, prerequisite_match_ids):
+        if len(prerequisite_match_ids) < 1:
+            return datetime.now()
+        
+        pipeline = [
+            {
+                "$match": {
+                    "match_id": {"$in": prerequisite_match_ids}
+                }
+            },
+            {
+                "$sort": {
+                    "finished_at": -1
+                }
+            },
+            {
+                "$limit": 1
+            }
+]
+        most_recent_match = await self.lobby_collection.aggregate(pipeline).to_list(None)
+        return most_recent_match[0]['finished_at']
     
     async def remove_lobby(self, lobby_id):
         query = {

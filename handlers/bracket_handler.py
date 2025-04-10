@@ -30,7 +30,6 @@ class BracketHandler():
             await self.bot.th.unregister_player(tournament['name'], int(player_id))
             
         await self.ch.start_tournament(tournament['challonge_data']['id'])
-        await self.call_matches()
     
     async def call_matches(self):
         tournament = await self.get_tournament()
@@ -44,7 +43,6 @@ class BracketHandler():
     async def parse_match_data(self, match):
         tournament = await self.get_tournament()
         format = tournament['format']
-        waiting_since = datetime.now().strftime("%I:%M%p").lstrip("0")
         player_1_id = await self.bot.dh.get_user_by_challonge(tournament['name'], match['player1_id'])
         player_2_id = await self.bot.dh.get_user_by_challonge(tournament['name'], match['player2_id'])
         
@@ -56,15 +54,24 @@ class BracketHandler():
                 bracket = "Winners"
             else:
                 bracket = "Losers"
-            
+                
+        pre_reqs = match['prerequisite_match_ids_csv']
+        if pre_reqs == '':
+            prerequisite_matches = []
+        elif isinstance(pre_reqs, float):
+            prerequisite_matches = [int(pre_reqs)]
+        elif isinstance(pre_reqs, str):
+            pre_req_ids = pre_reqs.split(',')
+            prerequisite_matches = [int(pre_req) for pre_req in pre_req_ids]
+               
         match_data = {
             'player_1': int(player_1_id),
             'player_2': int(player_2_id),
             'match_id': match['id'],
-            'waiting_since': waiting_since,
             'round': round_number,
             'bracket': bracket, 
-            'tournament': tournament['name']
+            'tournament': tournament['name'],
+            'prerequisite_matches': prerequisite_matches
         }
         return match_data
     
@@ -77,6 +84,10 @@ class BracketHandler():
     async def reset_match(self, lobby):
         tournament = await self.get_tournament()
         match_reset = await self.ch.reset_match(tournament['challonge_data']['id'], lobby['match_id'])
+        
+        dependent_matches = await self.bot.dh.get_dependent_matches(lobby['match_id'])
+        for lobby in dependent_matches:
+            await self.bot.lh.delete_lobby(lobby)
         return match_reset
         
     async def get_tournament(self):
