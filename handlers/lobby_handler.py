@@ -16,7 +16,7 @@ class LobbyHandler:
         self.bot = bot
         self.debug = False
     
-    async def create_lobby(self, tournament_name, players=[], stage=None, num_winners=1, pool=None):
+    async def create_lobby(self, tournament_name, match_id, players=[], stage=None, num_winners=1, pool=None):
         guild = self.bot.guilds[0]
         organizer_role = discord.utils.get(guild.roles, name="Event Organizer")
         if self.debug == True:
@@ -42,7 +42,7 @@ class LobbyHandler:
             stages = [stage]
             num_stage_bans = 0
             
-        lobby_id = await self.bot.dh.create_lobby(tournament, players, stages, num_stage_bans, num_winners, pool)
+        lobby_id = await self.bot.dh.create_lobby(tournament, match_id, players, stages, num_stage_bans, num_winners, pool)
         lobby_name = f"Lobby {lobby_id}"
         lobby_channel = await guild.create_text_channel(name=lobby_name, overwrites=overwrites, category=None)
         await self.bot.dh.add_channel_to_lobby(lobby_id, tournament_name, lobby_channel.id)
@@ -114,15 +114,13 @@ class LobbyHandler:
         
         lobby = await self.bot.dh.report_match(lobby['channel_id'], winner_id)
         if len(lobby['results']) < lobby['config']['num_winners']:
-            print('go again!')
-            pass
+            await self.start_stage_bans(lobby)
         else:
             message_content = (
                 'This lobby is now closed.'
             )
             await channel.send(message_content)
-        
-        
+            await self.bot.th.report_match(lobby)
         
     async def reset_lobby(self, lobby):
         lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state='stage_bans')

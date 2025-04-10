@@ -55,16 +55,24 @@ class BracketHandler():
                 bracket = "Winners"
             else:
                 bracket = "Losers"
+            
         match_data = {
             'player_1': int(player_1_id),
             'player_2': int(player_2_id),
+            'match_id': match['id'],
             'waiting_since': waiting_since,
             'round': round_number,
             'bracket': bracket, 
             'tournament': tournament['name']
         }
         return match_data
-
+    
+    async def report_match(self, lobby):
+        tournament = await self.get_tournament()
+        winner_user_id = str(lobby['results'][0])
+        winner_id = tournament['entrants'][winner_user_id]
+        await self.ch.report_match(lobby['match_id'], winner_id)
+        
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament(name=self.tournament_name)
         return tournament

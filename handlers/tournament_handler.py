@@ -214,11 +214,17 @@ class TournamentHandler():
         
         await self.bot.lh.create_lobby(
             tournament_name = match_data['tournament'],
+            match_id = match_data['match_id'],
             players = players,
             stage=None,
             num_winners=1,
             pool=None
         )
+        
+    async def report_match(self, lobby):
+        await self.bot.dh.end_match(lobby['channel_id'])
+        tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
+        await self.tournaments[tournament['category_id']].report_match(lobby)
         
     async def post_stages(self, tournament_name, channel):
         tournament = await self.bot.dh.get_tournament(name=tournament_name)
