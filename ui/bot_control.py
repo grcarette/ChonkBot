@@ -36,13 +36,14 @@ class BotControlView(discord.ui.View):
     @discord.ui.button(label=f"Start Tournament {INDICATOR_EMOJIS['game_controller']}", style=discord.ButtonStyle.success, custom_id="start_tournament")
     async def start_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
         category_id = interaction.channel.category_id
+        user_id = interaction.user.id
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         
         embed = discord.Embed(
             title="Are you sure you want to start the tournament?",
             color=discord.Color.yellow()
         )
-        view = ConfirmationView(self.bot.th.start_tournament, tournament['category_id'])
+        view = ConfirmationView(self.bot.th.start_tournament, user_id, category_id=tournament['category_id'])
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         

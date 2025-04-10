@@ -469,7 +469,7 @@ class DataHandler:
         level = await self.level_collection.find_one(query)
         return level
         
-    async def create_lobby(self, tournament, players, stages, num_stage_bans, num_winners, pool=None):
+    async def create_lobby(self, tournament, match_id, players, stages, num_stage_bans, num_winners, pool=None):
         player_ids = [player.id for player in players]
         query = {
             'tournament': tournament['name']
@@ -484,6 +484,7 @@ class DataHandler:
         lobby_data = {
             'lobby_id': lobby_id,
             'tournament': tournament['name'],
+            'match_id': match_id,
             'pool': pool,
             'state': 'initialize',
             'players': player_ids,
@@ -499,10 +500,8 @@ class DataHandler:
             'channel_id': channel_id
         }
         if state == 'last_result':
+            await self.undo_last_result(channel_id)
             update = {
-                "$pop": {
-                    'results': 1
-                },
                 "$set": {
                     'state': 'reporting'
                 }
@@ -516,15 +515,42 @@ class DataHandler:
                 }
             }
         elif state == 'report':
+            await self.undo_last_result(channel_id)
             update = {
                 "$set": {
                     'state': 'reporting',
-                    'results': [],
                 }
             }
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
+    
+    async def undo_last_result(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        lobby = await self.lobby_collection.find_one(query)
+        if not lobby or not lobby.get('results'):
+            return lobby
+        
+        last_result = lobby['results'][-1]
+        update = {
+            '$push': {
+                'players': last_result
+            },
+            '$pull': {
+                'results': last_result
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        return result
+    
+    async def find_match(self, match_id):
+        query = {
+            'match_id': match_id
+        }
+        match_exists = await self.lobby_collection.find_one(query)
+        return match_exists
         
     async def ban_stage(self, channel_id, banned_stage):
         query = {
@@ -556,13 +582,29 @@ class DataHandler:
         query = {
             'channel_id': channel_id
         }
-        lobby = await self.lobby_collection.find_one(query)
-        
         update = {
             '$push': {
                 'results': winner_id
+            },
+            '$pull': {
+                'players': winner_id
             }
         }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+    
+    async def end_match(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        update = [
+            {
+                "$set": {
+                    "listB": {"$setUnion": ["$listB", "$listA"]}
+                }
+            }
+        ]
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby

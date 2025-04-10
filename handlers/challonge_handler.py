@@ -37,7 +37,7 @@ class ChallongeHandler:
         pending_matches = [match for match in matches if match["state"] == "open"]
         return pending_matches
             
-    async def report_match(self, match_id, winner_id, is_dq=False):
+    async def report_match(self, tournament_url, match_id, winner_id, is_dq=False):
         match = challonge.matches.show(self.tournament_url, match_id)
         
         player1_id = match['player1_id']
@@ -54,14 +54,18 @@ class ChallongeHandler:
                 scores = "0-1"
         
         challonge.matches.update(
-            self.tournament_url,
+            tournament_url,
             match_id,
             winner_id=winner_id,
             scores_csv=scores
         )
     
     async def reset_match(self, tournament_id, match_id):
-        challonge.matches.reset(tournament_id, match_id)
+        match = challonge.matches.show(tournament_id, match_id)
+        
+        if match['state'] == 'complete':
+            challonge.matches.reopen(tournament_id, int(match_id))
+        return True
         
     async def disqualify_player(self, player_id):
         challonge.participants.update(self.tournament_url, player_id, disqualified=True)

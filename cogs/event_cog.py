@@ -42,14 +42,16 @@ class EventCog(commands.Cog):
     @commands.has_role('Event Organizer')
     @commands.command(name="reset_lobby")
     async def reset_lobby(self, ctx):
+        user_id = ctx.message.author.id
         lobby = await self.bot.dh.get_lobby(channel_id=ctx.channel.id)
-        await self.bot.lh.reset_lobby(lobby)
+        await self.bot.th.confirm_reset_lobby(user_id, lobby, 'stage_bans')
         
     @commands.has_role('Event Organizer')
     @commands.command(name="reset_report")
     async def reset_report(self, ctx):
+        user_id = ctx.message.author.id
         lobby = await self.bot.dh.get_lobby(channel_id=ctx.channel.id)
-        await self.bot.lh.reset_report(lobby)
+        await self.bot.th.confirm_reset_lobby(user_id, lobby, 'report')
 
         
     @commands.has_role("Moderator")
@@ -61,7 +63,7 @@ class EventCog(commands.Cog):
             title="Are you sure you want to delete this tournament?",
             color=discord.Color.red()
         )
-        view = ConfirmationView(self.bot.th.remove_tournament, category_id)
+        view = ConfirmationView(self.bot.th.remove_tournament, category_id=category_id)
         await channel.send(embed=embed, view=view)
          
 async def setup(bot):

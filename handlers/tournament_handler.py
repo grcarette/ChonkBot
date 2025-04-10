@@ -9,6 +9,7 @@ from ui.bot_control import BotControlView
 from ui.register_control import RegisterControlView
 from ui.tournament_checkin import TournamentCheckinView
 from ui.match_call import MatchCallView
+from ui.confirmation import ConfirmationView
 
 from .bracket_handler import BracketHandler
 from .challonge_handler import ChallongeHandler
@@ -152,10 +153,8 @@ class TournamentHandler():
 
         await checkin_channel.send(content=message_content, embed=embed, view=view)
         
-    async def start_tournament(self, response, category_id):
-        if response == False:
-            return
-        
+    async def start_tournament(self, kwargs):
+        category_id = kwargs.get('category_id')
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         tournament_category = self.get_tournament_category(category_id)
@@ -225,6 +224,30 @@ class TournamentHandler():
         await self.bot.dh.end_match(lobby['channel_id'])
         tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
         await self.tournaments[tournament['category_id']].report_match(lobby)
+        
+    async def confirm_reset_lobby(self, user_id, lobby, state):
+        guild = self.bot.guilds[0]
+        channel = discord.utils.get(guild.channels, id=lobby['channel_id'])
+        embed = discord.Embed(
+            title="Are you sure you want to reset this lobby?",
+            color=discord.Color.red()
+        )
+        
+        view = ConfirmationView(self.reset_lobby, user_id, lobby=lobby, state=state)
+        await channel.send(embed=embed, view=view)
+        
+    async def reset_lobby(self, kwargs):
+        lobby = kwargs.get('lobby')
+        state = kwargs.get('state')
+        
+        tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
+        match_reset = await self.tournaments[tournament['category_id']].reset_match(lobby)
+
+        lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state=state)
+        if state == 'stage_bans':
+            await self.bot.lh.start_stage_bans(lobby)
+        elif state == 'report':
+            await self.bot.lh.start_reporting(lobby)
         
     async def post_stages(self, tournament_name, channel):
         tournament = await self.bot.dh.get_tournament(name=tournament_name)

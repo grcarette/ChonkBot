@@ -122,12 +122,7 @@ class LobbyHandler:
             await channel.send(message_content)
             await self.bot.th.report_match(lobby)
         
-    async def reset_lobby(self, lobby):
-        lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state='stage_bans')
-        await self.bot.lh.start_stage_bans(lobby)
+
     
-    async def reset_report(self, lobby):
-        lobby = await self.bot.dh.reset_lobby(lobby['channel_id'], state='report')
-        await self.bot.lh.start_reporting(lobby)
     
     

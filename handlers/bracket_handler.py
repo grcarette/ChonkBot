@@ -24,7 +24,6 @@ class BracketHandler():
             await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
             
     async def start_tournament(self):
-        #go through checked in players in tournament
         tournament = await self.get_tournament()
         removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
         for player_id in removed_players:
@@ -38,7 +37,9 @@ class BracketHandler():
         pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
         for match in pending_matches:
             match_data = await self.parse_match_data(match)
-            await self.bot.th.add_match_call(match_data, tournament['category_id'])
+            match_exists = await self.bot.dh.find_match(match_data['match_id'])
+            if not match_exists:
+                await self.bot.th.add_match_call(match_data, tournament['category_id'])
             
     async def parse_match_data(self, match):
         tournament = await self.get_tournament()
@@ -71,7 +72,12 @@ class BracketHandler():
         tournament = await self.get_tournament()
         winner_user_id = str(lobby['results'][0])
         winner_id = tournament['entrants'][winner_user_id]
-        await self.ch.report_match(lobby['match_id'], winner_id)
+        await self.ch.report_match(tournament['challonge_data']['url'], lobby['match_id'], winner_id)
+        
+    async def reset_match(self, lobby):
+        tournament = await self.get_tournament()
+        match_reset = await self.ch.reset_match(tournament['challonge_data']['id'], lobby['match_id'])
+        return match_reset
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament(name=self.tournament_name)
