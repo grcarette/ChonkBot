@@ -83,7 +83,7 @@ class MatchReportButton(discord.ui.View):
         )
         await channel.send(message_content)
         self.stop()
-        await self.bot.lh.reset_report(self.lobby)
+        await self.bot.th.reset_lobby(lobby=self.lobby, state='reporting')
         
         
     

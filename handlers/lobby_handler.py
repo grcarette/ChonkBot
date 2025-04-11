@@ -60,6 +60,7 @@ class LobbyHandler:
         return mentions
     
     async def start_checkin(self, lobby, channel):
+        await self.bot.dh.update_lobby_state(lobby, 'checkin')
         view = CheckinView(self.bot, lobby)
         embed = view.generate_embed()
         mentions = await self.get_mentions(lobby)
@@ -73,6 +74,7 @@ class LobbyHandler:
             await self.start_stage_bans(lobby)
         
     async def start_stage_bans(self, lobby):
+        await self.bot.dh.update_lobby_state(lobby, 'stage_bans')
         channel = await self.get_lobby_channel(lobby)
         view = BanStagesButton(self.bot, lobby)
         embed = view.generate_embed()
@@ -93,6 +95,7 @@ class LobbyHandler:
         await self.bot.dh.delete_lobby(lobby)
 
     async def start_reporting(self, lobby):
+        await self.bot.dh.update_lobby_state(lobby, 'reporting')
         stage = await self.bot.dh.get_stage(code=lobby['picked_stage'])
         channel = await self.get_lobby_channel(lobby)
         message_content = (
@@ -110,6 +113,7 @@ class LobbyHandler:
         await channel.send(' '.join(mentions), embed=embed, view=view)
         
     async def end_reporting(self, lobby, winner_id):
+        await self.bot.dh.update_lobby_state(lobby, 'finished')
         channel = await self.get_lobby_channel(lobby)
         
         message_content = (

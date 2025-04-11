@@ -45,7 +45,7 @@ class TournamentHandler():
         active_events = await self.bot.dh.get_active_events()
         for event in active_events:
             await self.initialize_event(event)
-
+            
     async def initialize_event(self, event):
         category_id = event['category_id']
         if event['format'] == 'single elimination' or event['format'] == 'double elimination':
@@ -59,6 +59,17 @@ class TournamentHandler():
             pass
         elif event['format'] == 'FFA Filter':
             pass
+        await self.initialize_active_lobbies(event)
+        
+    async def initialize_active_lobbies(self, event):
+        active_lobbies = await self.bot.dh.get_active_lobbies(event['name'])
+        for lobby in active_lobbies:
+            if lobby['state'] == 'check-in':
+                await self.bot.lh.start_stage_bans
+            elif lobby['state'] == 'stage_bans':
+                await self.bot.lh.start_stage_bans(lobby)
+            elif lobby['state'] == 'reporting':
+                await self.bot.lh.start_reporting(lobby)
     
     async def set_up_tournament(self, tournament):
         guild = self.bot.guilds[0]
@@ -99,6 +110,7 @@ class TournamentHandler():
     async def register_player(self, tournament_name, user_id):
         guild = self.bot.guilds[0]
         discord_user = discord.utils.get(guild.members, id=user_id)
+        await self.bot.dh.register_user(discord_user)
         tournament_role = discord.utils.get(guild.roles, name=tournament_name)
         await discord_user.add_roles(tournament_role)
         
@@ -161,8 +173,8 @@ class TournamentHandler():
         
     async def start_tournament(self, kwargs):
         category_id = kwargs.get('category_id')
-        guild = self.bot.guilds[0]
-        tournament = await self.bot.dh.get_tournament(category_id=category_id)
+        guild = self.bot.guild
+
         tournament_category = self.get_tournament_category(category_id)
         
         match_call_channel = discord.utils.get(tournament_category.channels, name='match-calling')
@@ -189,9 +201,10 @@ class TournamentHandler():
         if checkin_channel:
             await checkin_channel.delete()
             
-        tournament_handler = self.tournaments[tournament['category_id']]
+        tournament_handler = self.tournaments[category_id]
+        await self.bot.dh.start_tournament(category_id)
         await tournament_handler.start_tournament()
-        await tournament_handler.call_matches()
+        await self.refresh_match_calls(category_id)
         
     async def get_players_from_match(self, match_data):
         player_1_id = match_data['player_1']
@@ -201,6 +214,9 @@ class TournamentHandler():
         player_2 = await self.bot.dh.get_user(user_id=player_2_id)       
         
         return player_1, player_2
+    
+    async def get_short_timestamp(self, timestamp):
+        return timestamp.strftime("%I:%M%p").lstrip("0")
         
     async def add_match_call(self, match_data, category_id):
         guild = self.bot.guilds[0]
@@ -210,7 +226,7 @@ class TournamentHandler():
         player_1, player_2 = await self.get_players_from_match(match_data)
         
         waiting_since = await self.bot.dh.get_lobby_time(match_data['prerequisite_matches'])
-        waiting_since = waiting_since.strftime("%I:%M%p").lstrip("0")
+        waiting_since = await self.get_short_timestamp(waiting_since)
 
         if match_data['bracket'] == 'Winners':
             color = discord.Color.green()
@@ -224,7 +240,6 @@ class TournamentHandler():
         )
         view = MatchCallView(self.bot, match_data)
         await channel.send(embed=embed, view=view)
-        pass
     
     async def call_match(self, match_data):
         guild = self.bot.guilds[0]
@@ -245,6 +260,16 @@ class TournamentHandler():
             pool=None
         )
         
+    async def get_lobby_string(self, lobby):
+        players = []
+        for user_id in lobby['players']:
+            user = await self.bot.dh.get_user(user_id=user_id)
+            players.append(user['name'])
+        player_string = ' vs '.join(players)
+        timestamp = await self.get_short_timestamp(lobby['state_timestamp'])
+        lobby_string = f'{player_string} - {timestamp}\n'
+        return lobby_string
+        
     async def create_match_calls(self, category_id):
         tournament_handler = self.tournaments[category_id]
         await tournament_handler.call_matches()
@@ -260,7 +285,10 @@ class TournamentHandler():
         tournament = await self.bot.dh.get_tournament(name=lobby['tournament'])
         category_id = tournament['category_id']
         await self.tournaments[category_id].report_match(lobby)
-        await self.create_match_calls(category_id)
+        await self.refresh_match_calls(tournament['category_id'])
+        
+    async def update_matches(self, tournament):
+        await self.refresh_match_calls(tournament['category_id'])
         
     async def confirm_reset_lobby(self, user_id, lobby, state):
         dependent_matches = await self.bot.dh.get_dependent_matches(lobby['match_id'])
@@ -287,6 +315,7 @@ class TournamentHandler():
             await self.bot.lh.start_stage_bans(lobby)
         elif state == 'report':
             await self.bot.lh.start_reporting(lobby)
+        await self.update_matches(tournament)
         
     async def post_stages(self, tournament_name, channel):
         tournament = await self.bot.dh.get_tournament(name=tournament_name)
@@ -305,9 +334,8 @@ class TournamentHandler():
             stages = await self.bot.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
             await self.bot.dh.add_stages_to_tournament(tournament['name'], stages)
 
-    async def remove_tournament(self, input, category_id):
-        if input == False:
-            return
+    async def remove_tournament(self, kwargs):
+        category_id = kwargs.get('category_id')
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         category_id = tournament['category_id']
@@ -331,7 +359,7 @@ class TournamentHandler():
         except discord.DiscordException as e:
             print(f"Error deleting category {category.name}: {e}")
             
-        await self.bot.dh.delete_tournament(category_id)
+        await self.bot.dh.delete_tournament(int(category_id))
             
     async def create_channel(self, guild, tournament_category, hide_channel, channel_name, channel_overwrites):
         overwrites = {}

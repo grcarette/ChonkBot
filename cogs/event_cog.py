@@ -57,14 +57,22 @@ class EventCog(commands.Cog):
     @commands.has_role("Moderator")
     @commands.command(name="delete_tournament", aliases=['r'])
     async def delete_tournament(self, ctx):
+        user_id = ctx.message.author.id
         channel = ctx.channel
         category_id = ctx.channel.category.id
         embed = discord.Embed(
             title="Are you sure you want to delete this tournament?",
             color=discord.Color.red()
         )
-        view = ConfirmationView(self.bot.th.remove_tournament, category_id=category_id)
+        view = ConfirmationView(self.bot.th.remove_tournament, user_id, category_id=category_id)
         await channel.send(embed=embed, view=view)
+        
+    @commands.has_role("Moderator")
+    @commands.command(name='reset_call')
+    async def reset_call(self, ctx):
+        category_id = ctx.channel.category.id
+        kwargs={'category_id': category_id}
+        await self.bot.th.start_tournament(kwargs)
          
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

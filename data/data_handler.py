@@ -161,6 +161,18 @@ class DataHandler:
         }
         result = await self.tournament_collection.delete_one(query)
         
+    async def start_tournament(self, category_id):
+        query = {
+            'category_id': category_id
+        }
+        update = {
+            '$set': {
+                'state': 'active'
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        
+        
     async def update_tournament(self, message_id, update):
         query = {
             'message_id': message_id
@@ -673,6 +685,7 @@ class DataHandler:
         return lobby
     
     async def get_lobby_time(self, prerequisite_match_ids):
+        print(prerequisite_match_ids)
         if len(prerequisite_match_ids) < 1:
             return datetime.now()
         
@@ -713,6 +726,16 @@ class DataHandler:
             }
         lobby = await self.lobby_collection.find_one(query)
         return lobby
+    
+    async def get_active_lobbies(self, tournament_name):
+        query = {
+            'tournament': tournament_name,
+            'state': {
+                '$ne': 'finished'
+            }
+        }
+        active_lobbies = await self.lobby_collection.find(query).to_list(None)
+        return active_lobbies
         
     async def add_channel_to_lobby(self, lobby_id, tournament_name, channel_id):
         query = {
@@ -727,18 +750,18 @@ class DataHandler:
         result = await self.lobby_collection.update_one(query, update)
         return result
 
-    async def advance_lobby(self, channel_id, stage):
+    async def update_lobby_state(self, lobby, state):
         query = {
-            'channel_id': channel_id
+            'channel_id': lobby['channel_id']
         }
         update = {
             '$set': {
-                'stage': stage
+                'state': state,
+                'state_timestamp': datetime.now()
             }
         }
         result = await self.lobby_collection.update_one(query, update)
-        lobby = await self.lobby_collection.find_one(query)
-        return lobby
+        return result
     
     async def register_user(self, user):
         query = {

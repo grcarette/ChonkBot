@@ -15,11 +15,10 @@ class ConfirmationView(discord.ui.View):
             return
 
         await self.disable_buttons()
-        print(self.kwargs)
-        await self.on_confirm(self.kwargs)
         await interaction.response.edit_message(view=self)
-        
         await self.delete_message(interaction.message)
+        await self.on_confirm(self.kwargs)
+
     
     @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
     async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):

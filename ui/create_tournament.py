@@ -29,6 +29,7 @@ class TournamentSettingsView(discord.ui.View):
         
         self.config_button = None
         self.submit_button = None
+        self.format_select = None
 
         for child in self.children:
             if isinstance(child, discord.ui.Button):
@@ -54,6 +55,9 @@ class TournamentSettingsView(discord.ui.View):
     async def tournament_format_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.tournament_format = select.values[0]
         select.placeholder = select.values[0]
+        self.format_select = True
+        if not self.submit_button == None and not self.format_select == None:
+            self.submit_button.disabled = False
         await interaction.response.edit_message(view=self)
         
     @discord.ui.button(label="Set Name/Time", style=discord.ButtonStyle.primary, row=2)
@@ -70,9 +74,8 @@ class TournamentSettingsView(discord.ui.View):
         self.tournament_date = time
         if not self.config_button == None:
             self.config_button.label = f"{name} - {time}"
-        if not self.submit_button == None:
+        if not self.submit_button == None and not self.format_select == None:
             self.submit_button.disabled = False
-        print(self.config_button, self.submit_button)
         await interaction.response.edit_message(view=self)
         
     @discord.ui.button(label=f"Require Check-in {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.secondary, row=2)
