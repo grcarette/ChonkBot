@@ -1,12 +1,193 @@
-import motor.motor_asyncio
-
-from utils.errors import PlayerNotFoundError
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
-class StatsHandler:
-    def __init__(self):
-        pass
+from utils.errors import *
+
+class StatsMethodsMixin:
+    pass
     
+    async def find_special_opponents(self, player_id):
+        query = {
+            '$or': [
+                {'winner_id': player_id},
+                {'loser_id': player_id}
+            ],
+            'is_dq': False
+        }
+        matches = await self.match_collection.find(query).to_list(None)
+        
+        head_to_head = defaultdict(lambda: {'wins': 0, 'losses': 0})
+        
+        for match in matches:
+            if match['loser_id'] == player_id:
+                opponent_id = match['winner_id']
+                head_to_head[opponent_id]['losses'] += 1
+            else:
+                opponent_id = match['loser_id']
+                head_to_head[opponent_id]['wins'] += 1
+                
+        worst_ratio = None
+        bracket_demon = None
+        rival = None
+        max_rival_matches = 0
+        match_threshold = 2
+        ratio_offset = 1
+        closeness_factor = 2
+        
+        for opponent, record in head_to_head.items():
+            total_matches = record['wins'] + record['losses']
+            if total_matches < match_threshold:
+                continue
+            
+            win_ratio = (record['wins'] + ratio_offset) / (total_matches + ratio_offset)
+
+            if worst_ratio is None or win_ratio < worst_ratio:
+                worst_ratio = win_ratio
+                bracket_demon = {'id': opponent, 'wins': record['wins'], 'losses': record['losses']}
+            
+            win_loss_diff = abs(record['wins'] - record['losses'])
+            if win_loss_diff <= total_matches / closeness_factor:
+                if total_matches > max_rival_matches:
+                    max_rival_matches = total_matches
+                    rival = {'id': opponent, 'wins': record['wins'], 'losses': record['losses']}
+                
+        return bracket_demon, rival
+    
+    async def get_player_stats(self, player_name): #stats
+        player = await self.lookup_player(player_name, use_alias=True)
+        if not player:
+            return False
+        
+        start_date = datetime(2025, 1, 14)
+        end_date = datetime(2025, 6, 14)
+        
+        winrate_data = await self.find_winrate_data(player['_id'], start_date, end_date)
+        placement_data = await self.find_placement_data(player['_id'])
+        bracket_demon, rival = await self.find_special_opponents(player['_id'])
+
+        lifetime_wins = winrate_data['lifetime_wins']
+        lifetime_losses = winrate_data['lifetime_losses']
+        if lifetime_wins == 0 and lifetime_losses == 0:
+            lifetime_winrate = 0
+        else:
+            lifetime_winrate = lifetime_wins / (lifetime_wins + lifetime_losses)
+            
+        season_wins = winrate_data['season_wins']
+        season_losses = winrate_data['season_losses']      
+        if season_wins == 0 and season_losses == 0:
+            season_winrate = 0
+        else:
+            season_winrate = season_wins / (season_wins + season_losses)
+
+        placements = [f"{placement['name']}: {placement['player_result']['placement']}/{placement['total_entrants']}" for placement in placement_data]
+        
+        if bracket_demon == None:
+            bracket_demon_stats = None
+        else:
+            bracket_demon_player = await self.get_player_by_id(bracket_demon['id'])
+            bracket_demon_name = bracket_demon_player['name']
+            bracket_demon_wins = bracket_demon['wins']
+            bracket_demon_losses = bracket_demon['losses']
+            bracket_demon_stats = {
+                'name': bracket_demon_name,
+                'wins': bracket_demon_wins,
+                'losses': bracket_demon_losses
+            }
+        if rival == None:
+            rival_stats = None
+        else:
+            rival_player = await self.get_player_by_id(rival['id'])
+            rival_player_name = rival_player['name']
+            rival_wins = rival['wins']
+            rival_losses = rival['losses']
+            rival_stats = {
+                'name': rival_player_name,
+                'wins': rival_wins,
+                'losses': rival_losses
+            }
+        
+        player_stats = {
+            'lifetime': {
+                'wins': lifetime_wins,
+                'losses': lifetime_losses,
+                'winrate': round(lifetime_winrate, 2)
+            },
+            'season': {
+                'wins': season_wins,
+                'losses': season_losses,
+                'winrate': round(season_winrate, 2)
+            },
+            'placements': placements,
+            'bracket_demon': bracket_demon_stats,
+            'rival': rival_stats,
+        }
+        return player_stats
+    
+    async def find_winrate_data(self, player_id, start_date, end_date): #stats
+        pipeline = [
+            {
+                "$match": {
+                    "is_dq": False,
+                    "$or": [
+                        {"winner_id": player_id},
+                        {"loser_id": player_id}
+                    ]
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    
+                    "lifetime_wins": {"$sum": {"$cond": [{"$eq": ["$winner_id", player_id]}, 1, 0]}},
+                    "lifetime_losses": {"$sum": {"$cond": [{"$eq": ["$loser_id", player_id]}, 1, 0]}},
+
+                    "season_wins": {
+                        "$sum": {
+                            "$cond": [
+                                {"$and": [
+                                    {"$eq": ["$winner_id", player_id]},
+                                    {"$gte": ["$date", start_date]},
+                                    {"$lte": ["$date", end_date]}
+                                ]}, 
+                                1, 
+                                0
+                            ]
+                        }
+                    },
+                    "season_losses": {
+                        "$sum": {
+                            "$cond": [
+                                {"$and": [
+                                    {"$eq": ["$loser_id", player_id]},
+                                    {"$gte": ["$date", start_date]},
+                                    {"$lte": ["$date", end_date]}
+                                ]}, 
+                                1, 
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+        
+        result = await self.match_collection.aggregate(pipeline).to_list(1)
+        
+        if result:
+            return {
+                'lifetime_wins': result[0]['lifetime_wins'],
+                'lifetime_losses': result[0]['lifetime_losses'],
+                'season_wins': result[0]['season_wins'],
+                'season_losses': result[0]['season_losses']
+                }
+        
+        return {
+            'lifetime_wins': 0, 
+            'lifetime_losses': 0,
+            'season_wins': 0,
+            'season_losses': 0
+            }
+        
     async def find_placement_data(self, player_id):
         query = {
             '_id': player_id
@@ -68,7 +249,6 @@ class StatsHandler:
         return result
     
     async def get_head_to_head(self, player1_name, player2_name, set_limit='5'):
-        await self.stats.get_head_to_head(self)
         if set_limit.lower() == "all":
             set_limit = 999
         else:
@@ -104,7 +284,7 @@ class StatsHandler:
                 'is_dq': False
             }
             
-            recent_matches = await self.match_collection.find(query).sort('date', -1).limit(set_limit).to_list(None)
+            recent_matches = await self.match_collection.find(query).sort('date', 1).limit(set_limit).to_list(None)
             recent_matches_text = ''
             
             max_tourney_name_length = 21
@@ -221,73 +401,3 @@ class StatsHandler:
             }
             leaderboard.append(leaderboard_data)
         return leaderboard
-    
-    async def get_player_stats(self, player_name):
-        player = await self.lookup_player(player_name, use_alias=True)
-        if not player:
-            return False
-        
-        start_date = datetime(2025, 1, 14)
-        end_date = datetime(2025, 6, 14)
-        
-        winrate_data = await self.find_winrate_data(player['_id'], start_date, end_date)
-        placement_data = await self.find_placement_data(player['_id'])
-        bracket_demon, rival = await self.find_special_opponents(player['_id'])
-
-        lifetime_wins = winrate_data['lifetime_wins']
-        lifetime_losses = winrate_data['lifetime_losses']
-        if lifetime_wins == 0 and lifetime_losses == 0:
-            lifetime_winrate = 0
-        else:
-            lifetime_winrate = lifetime_wins / (lifetime_wins + lifetime_losses)
-            
-        season_wins = winrate_data['season_wins']
-        season_losses = winrate_data['season_losses']      
-        if season_wins == 0 and season_losses == 0:
-            season_winrate = 0
-        else:
-            season_winrate = season_wins / (season_wins + season_losses)
-
-        placements = [f"{placement['name']}: {placement['player_result']['placement']}/{placement['total_entrants']}" for placement in placement_data]
-        
-        if bracket_demon == None:
-            bracket_demon_stats = None
-        else:
-            bracket_demon_player = await self.get_player_by_id(bracket_demon['id'])
-            bracket_demon_name = bracket_demon_player['name']
-            bracket_demon_wins = bracket_demon['wins']
-            bracket_demon_losses = bracket_demon['losses']
-            bracket_demon_stats = {
-                'name': bracket_demon_name,
-                'wins': bracket_demon_wins,
-                'losses': bracket_demon_losses
-            }
-        if rival == None:
-            rival_stats = None
-        else:
-            rival_player = await self.get_player_by_id(rival['id'])
-            rival_player_name = rival_player['name']
-            rival_wins = rival['wins']
-            rival_losses = rival['losses']
-            rival_stats = {
-                'name': rival_player_name,
-                'wins': rival_wins,
-                'losses': rival_losses
-            }
-        
-        player_stats = {
-            'lifetime': {
-                'wins': lifetime_wins,
-                'losses': lifetime_losses,
-                'winrate': round(lifetime_winrate, 2)
-            },
-            'season': {
-                'wins': season_wins,
-                'losses': season_losses,
-                'winrate': round(season_winrate, 2)
-            },
-            'placements': placements,
-            'bracket_demon': bracket_demon_stats,
-            'rival': rival_stats,
-        }
-        return player_stats

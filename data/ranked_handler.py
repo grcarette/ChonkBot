@@ -1,3 +1,0 @@
-class RankedHandler:
-    pass
-

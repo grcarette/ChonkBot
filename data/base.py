@@ -1,34 +1,7 @@
-from .base import DataHandlerBase
-from .users import UserMethodsMixin
-from .tournaments import TournamentMethodsMixin
-from .stats import StatsMethodsMixin
-from .lobby import LobbyMethodsMixin
-from .stage import StageMethodsMixin
-from .stats_data import StatsDataMethodsMixin
-
-
-from utils.errors import *
-from utils.emojis import EMOJI_NUMBERS
-
-from datetime import datetime, timezone, timedelta
-from collections import defaultdict
-
 import motor.motor_asyncio
-import asyncio
-import math
 
-
-class DataHandler(
-    DataHandlerBase, 
-    UserMethodsMixin, 
-    TournamentMethodsMixin, 
-    StatsMethodsMixin, 
-    LobbyMethodsMixin, 
-    StageMethodsMixin,
-    StatsDataMethodsMixin,
-    ):
+class DataHandlerBase:
     def __init__(self):
-        super().__init__()    
         client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
         
         self.db = client['ChonkBot']
