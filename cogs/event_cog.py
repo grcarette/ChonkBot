@@ -73,6 +73,22 @@ class EventCog(commands.Cog):
         category_id = ctx.channel.category.id
         kwargs={'category_id': category_id}
         await self.bot.th.start_tournament(kwargs)
+        
+    @commands.has_role("Moderator")
+    @commands.command(name='disqualify_player', aliases = ['dq'])
+    async def disqualify_player(self, ctx, member: discord.Member):
+        channel = ctx.channel
+        await self.bot.th.disqualify_player(channel, member)
+        
+    @disqualify_player.error
+    async def disqualify_player_error(self, ctx, error):
+        if isinstance(error.original, TournamentNotFoundError):
+            await ctx.send('There is no tournament associated with this channel')
+        elif isinstance(error.original, PlayerNotFoundError):
+            await ctx.send('This player is not in this tournament')
+        else:
+            await ctx.send(f'{error}')
+        
          
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
 
-from utils.reaction_utils import create_reaction_flag
-from utils.reaction_flags import TOURNAMENT_CONFIGURATION
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
+from utils.errors import PlayerNotFoundError
 
 from ui.bot_control import BotControlView
 from ui.register_control import RegisterControlView
@@ -132,6 +131,15 @@ class TournamentHandler():
 
         await self.bot.dh.unregister_player(tournament_name, user_id)
         await self.ch.unregister_player(challonge_id, player_id)
+        
+    async def disqualify_player(self, channel, user):
+        user_id = user.id
+        tournament = await self.bot.dh.get_tournament_by_channel(channel)
+        if not tournament:
+            raise PlayerNotFoundError
+        dq_successful = await self.bot.dh.disqualify_player(tournament, user_id)
+        if dq_successful == False:
+            await self.unregister_player(tournament['name'], user_id)
         
     async def add_register_control(self, tournament, channel):
         view = RegisterControlView(self.bot)
@@ -344,16 +352,6 @@ class TournamentHandler():
         
         if role:
             await role.delete()
-        
-        for channel in category.channels:
-            is_register_channel = await self.bot.dh.get_registration_flag(channel.id)
-            if is_register_channel:
-                await self.bot.dh.remove_registration_flag(channel.id)
-            try:
-                await channel.delete()
-            except discord.Discordexception as e:
-                print(f"Error deleting channel {channel.name}: {e}")
-        
         try:
             await category.delete()
         except discord.DiscordException as e:

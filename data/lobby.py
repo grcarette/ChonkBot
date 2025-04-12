@@ -227,14 +227,14 @@ class LobbyMethodsMixin:
         most_recent_match = await self.lobby_collection.aggregate(pipeline).to_list(None)
         return most_recent_match[0]['finished_at']
     
-    async def remove_lobby(self, lobby_id): #lobby
+    async def remove_lobby(self, lobby_id):
         query = {
             'lobby_id': lobby_id
         }
         result = await self.lobby_collection.delete_one(query)
         return result
     
-    async def get_lobby(self, lobby_id=False, tournament_name=False, channel_id=False): #lobby
+    async def get_lobby(self, lobby_id=False, tournament_name=False, channel_id=False):
         if channel_id:
             query = {
                 'channel_id': channel_id
@@ -247,7 +247,7 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def get_active_lobbies(self, tournament_name): #lobby
+    async def get_active_lobbies(self, tournament_name): 
         query = {
             'tournament': tournament_name,
             'state': {
@@ -257,7 +257,7 @@ class LobbyMethodsMixin:
         active_lobbies = await self.lobby_collection.find(query).to_list(None)
         return active_lobbies
     
-    async def add_channel_to_lobby(self, lobby_id, tournament_name, channel_id): #lobby
+    async def add_channel_to_lobby(self, lobby_id, tournament_name, channel_id): 
         query = {
             'lobby_id': lobby_id,
             'tournament': tournament_name

@@ -1,7 +1,7 @@
 from .challonge_handler import ChallongeHandler
 from datetime import datetime
 
-class BracketHandler():
+class BracketHandler:
     def __init__(self, bot, tournament):
         self.bot = bot
         self.tournament_name = tournament['name']

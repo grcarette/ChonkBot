@@ -21,7 +21,8 @@ class TournamentMethodsMixin:
             'state': 'initialized',
             'config': config_data,
             'stagelist': [],
-            'entrants': {}
+            'entrants': {},
+            'dqs': [],
         }
         result = await self.tournament_collection.insert_one(tournament)
         tournament = await self.get_tournament(name=tournament['name'])
@@ -158,6 +159,34 @@ class TournamentMethodsMixin:
             return result
         else:
             return None
+        
+    async def get_tournament_by_channel(self, channel):
+        if channel.category == None:
+            lobby = await self.get_lobby(channel_id=channel.id)
+            query = {
+                'name': lobby['tournament']
+            }
+        else:
+            category_id = channel.category.id
+            query = {
+                'category_id': category_id
+            }
+        tournament = await self.tournament_collection.find_one(query)
+        return tournament
+        
+    async def disqualify_player(self, tournament, user_id):
+        if str(user_id) not in tournament['entrants']:
+            raise PlayerNotFoundError(user_id, 'disqualify_player')
+        if tournament['state'] != 'active':
+            return False
+
+        update = {
+            '$addToSet': {
+                'dqs': user_id
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        return True
         
     async def checkin_player(self, tournament_name, user_id): #tournament
         query = {

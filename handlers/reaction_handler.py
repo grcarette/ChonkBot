@@ -15,7 +15,6 @@ class ReactionHandler:
                 await self.process_reaction_flag(payload, reaction_flag, reaction_added)
                 
     async def process_reaction_flag(self, payload, reaction_flag, reaction_added):
-        print('processing reaction flag')
         channel = self.bot.get_channel(payload.channel_id)
         if channel is None:
             return
@@ -30,58 +29,6 @@ class ReactionHandler:
         if reaction_flag['require_all_to_react'] == True:
             if not set(reaction_flag['users']) == set(reaction_flag['emojis'][emoji]):
                 return
-            
-        if reaction_flag['type'] == 'create_tournament':
-            if self.is_same_emoji(INDICATOR_EMOJIS['green_check'], emoji):
-                if reaction_added:
-                    await self.bot.th.set_up_tournament(message_id)
-                else:
-                    tournament = await self.bot.dh.get_tournament(message_id=message_id)
-                    await self.bot.th.remove_tournament(tournament['name'])
-            
-        elif reaction_flag['type'] == 'confirm_registration':
-            if reaction_added:
-                await self.bot.th.process_registration(message, True, is_confirmation=True)
-                
-        elif reaction_flag['type'] == 'match_checkin':
-            if reaction_added:
-                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-                await self.bot.dh.remove_reaction_flag(message_id)
-                await self.bot.lh.advance_lobby(lobby)
-            
-        elif reaction_flag['type'] == 'stage_ban':
-            if reaction_added:
-                channel_id = payload.channel_id
-                await message.delete()
-                await self.bot.lh.ban_stages(channel_id, payload)
-
-        elif reaction_flag['type'] == 'match_report':
-            if reaction_added:
-                channel_id = payload.channel_id
-                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-                await self.bot.dh.remove_reaction_flag(message_id)
-                await self.bot.dh.report_match(channel_id, payload)
-                await self.bot.lh.advance_lobby(lobby)
-            
-        elif reaction_flag['type'] == 'match_confirmation':
-            if reaction_added:
-                channel_id = payload.channel_id
-                lobby = await self.bot.dh.get_lobby(channel_id=channel.id)
-                await self.bot.dh.remove_reaction_flag(message_id)
-                if self.is_same_emoji(emoji, INDICATOR_EMOJIS['green_check']):
-                    await self.bot.lh.advance_lobby(lobby, confirmation=True)
-                elif self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
-                    await self.bot.lh.advance_lobby(lobby, confirmation=False)
-                
-        elif reaction_flag['type'] == 'random_stage':
-            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['red_x']):
-                category = 'blocked_maps'
-            if self.is_same_emoji(emoji, INDICATOR_EMOJIS['star']):
-                category = 'favorite_maps'
-            map_code = reaction_flag['value']
-            guild = self.bot.get_guild(payload.guild_id)
-            user = guild.get_member(payload.user_id)
-            await self.bot.dh.update_map_preference(user, map_code, category, reaction_added)
             
         elif reaction_flag['type'] == 'link_confirmation':
             if reaction_added:

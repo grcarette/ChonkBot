@@ -64,7 +64,6 @@ class DataCog(commands.Cog):
         else:
             print(error)
             
-        
     @commands.command(name='unregister_player', aliases=['unregister player', 'unregister'])
     async def unregister_player(self, ctx):
         if ctx.channel.name != "temporary-bot-testing":
@@ -190,6 +189,8 @@ class DataCog(commands.Cog):
                 f'Error: Invalid number of sets provided. Please provide a valid integer or "all"'
             )
             await channel.send(message_content)
+        else:
+            print(error)
             
     @commands.command(name='get_leaderboard', aliases=['leaderboard'])
     async def get_leaderboard(self, ctx, timeframe: str='False', start_timestamp: str=None, end_timestamp: str=None):
