@@ -9,9 +9,15 @@ from ui.register_control import RegisterControlView
 from ui.tournament_checkin import TournamentCheckinView
 from ui.match_call import MatchCallView
 from ui.confirmation import ConfirmationView
+from ui.checkin import CheckinView
+from ui.stage_bans import BanStagesButton
+from ui.match_report import MatchReportButton
+
+from tournaments.match_lobby import MatchLobby
+from tournaments.tournament_manager import TournamentManager
 
 from .bracket_handler import BracketHandler
-from .challonge_handler import ChallongeHandler
+from tournaments.challonge_handler import ChallongeHandler
 
 DEFAULT_STAGE_NUMBER = 5
 CHANNEL_PERMISSIONS = {
@@ -46,36 +52,40 @@ class TournamentHandler():
             await self.initialize_event(event)
             
     async def initialize_event(self, event):
-        category_id = event['category_id']
-        if event['format'] == 'single elimination' or event['format'] == 'double elimination':
-            bracket_handler = BracketHandler(self.bot, event)
-            self.tournaments[category_id] = bracket_handler
-            await bracket_handler.initialize_event()
-            if event['state'] == 'active':
-                await self.refresh_match_calls(category_id)
-                
-        elif event['format'] == 'swiss':
-            pass
-        elif event['format'] == 'FFA Filter':
-            pass
-        await self.initialize_active_lobbies(event)
-        
-    async def initialize_active_lobbies(self, event):
-        active_lobbies = await self.bot.dh.get_active_lobbies(event['name'])
+        active_lobbies = await self.bot.dh.get_active_lobbies(event['_id'])
+        tournament_manager = TournamentManager(self.bot, event) 
+        await tournament_manager.initialize_event()
         for lobby in active_lobbies:
-            if lobby['state'] == 'check-in':
-                await self.bot.lh.start_stage_bans
+            match_lobby = await MatchLobby.create(
+                tournament_id=event['_id'],
+                match_id=lobby['match_id'],
+                lobby_name=lobby['lobby_name'],
+                prereq_matches=lobby['prereq_matches'],
+                players=lobby['players'],
+                stages=lobby['stages'],
+                num_winners=lobby['num_winners'],
+                tournament_manager=tournament_manager,
+                datahandler=self.bot.dh,
+                guild=self.bot.guild,
+            )
+            if lobby['state'] == 'initialize':
+                pass
+            elif lobby['state'] == 'checkin':
+                self.bot.add_view(CheckinView(match_lobby))
             elif lobby['state'] == 'stage_bans':
-                await self.bot.lh.start_stage_bans(lobby)
+                self.bot.add_view(BanStagesButton(match_lobby))
             elif lobby['state'] == 'reporting':
-                await self.bot.lh.start_reporting(lobby)
-    
+                self.bot.add_view(MatchReportButton(match_lobby))
+
+        #add register button
+        #add bot control view
+
     async def set_up_tournament(self, tournament):
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.create_tournament(tournament)
         await self.add_stages_tournament(tournament)
         
-        organizer_role = discord.utils.get(guild.roles, name='Event Organizer')
+        organizer_role = await guild.create_role(name=f"{tournament['name']} TO")
         tournament_role = await guild.create_role(name=f"{tournament['name']}")
         
         overwrites = {
@@ -231,7 +241,10 @@ class TournamentHandler():
         category = self.get_tournament_category(category_id)
         channel = discord.utils.get(category.channels, name='match-calling')
         
+        tournament = await self.bot.dh.get_tournament(category_id=category_id)
+        
         player_1, player_2 = await self.get_players_from_match(match_data)
+        players = [player_1, player_2]
         
         waiting_since = await self.bot.dh.get_lobby_time(match_data['prerequisite_matches'])
         waiting_since = await self.get_short_timestamp(waiting_since)

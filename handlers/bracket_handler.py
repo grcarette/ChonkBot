@@ -1,4 +1,4 @@
-from .challonge_handler import ChallongeHandler
+from tournaments.challonge_handler import ChallongeHandler
 from datetime import datetime
 
 class BracketHandler:
@@ -93,6 +93,9 @@ class BracketHandler:
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament(name=self.tournament_name)
         return tournament
+    
+
+    
         
             
 

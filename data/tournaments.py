@@ -1,4 +1,5 @@
 from utils.errors import *
+from bson import ObjectId, SON
 
 class TournamentMethodsMixin:
     pass
@@ -112,9 +113,9 @@ class TournamentMethodsMixin:
         active_events = await self.tournament_collection.find(query).to_list(None)
         return active_events
     
-    async def get_registration_status(self, tournament_name, user_id):
+    async def get_registration_status(self, tournament_id, user_id):
         query = {
-            'name': tournament_name,
+            '_id': ObjectId(tournament_id),
             f'entrants.{user_id}': {
                 '$exists': True
             }
@@ -122,12 +123,12 @@ class TournamentMethodsMixin:
         player_exists = await self.tournament_collection.find_one(query)
         return player_exists
     
-    async def register_player(self, tournament_name, user_id, player_id):
-        player_exists = await self.get_registration_status(tournament_name, user_id)
+    async def register_player(self, tournament_id, user_id, player_id):
+        player_exists = await self.get_registration_status(tournament_id, user_id)
         
         if not player_exists:
             query = {
-                'name': tournament_name
+                '_id': ObjectId(tournament_id)
             }
 
             update = {
@@ -140,11 +141,11 @@ class TournamentMethodsMixin:
         else:
             return False
         
-    async def unregister_player(self, tournament_name, user_id):
+    async def unregister_player(self, tournament_id, user_id):
         query = {
-            'name': tournament_name
+            '_id': ObjectId(tournament_id)
         }
-        tournament = await self.get_tournament(name=tournament_name)
+        tournament = await self.get_tournament_by_id(tournament_id)
         
         update = {}
             
@@ -159,6 +160,13 @@ class TournamentMethodsMixin:
             return result
         else:
             return None
+        
+    async def get_tournament_by_id(self, tournament_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        tournament = await self.tournament_collection.find_one(query)
+        return tournament
         
     async def get_tournament_by_channel(self, channel):
         if channel.category == None:
@@ -179,6 +187,10 @@ class TournamentMethodsMixin:
             raise PlayerNotFoundError(user_id, 'disqualify_player')
         if tournament['state'] != 'active':
             return False
+        
+        query = {
+            'category_id': tournament['category_id']
+        }
 
         update = {
             '$addToSet': {

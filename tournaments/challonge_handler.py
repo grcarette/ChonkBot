@@ -67,9 +67,6 @@ class ChallongeHandler:
             challonge.matches.reopen(tournament_id, int(match_id))
         return True
         
-    async def disqualify_player(self, player_id):
-        challonge.participants.update(self.tournament_url, player_id, disqualified=True)
-        
     async def create_tournament(self, name, tournament_type, url=None, start_time=None):
         if isinstance(start_time, datetime.datetime):
             start_time = start_time
