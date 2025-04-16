@@ -33,7 +33,6 @@ class TournamentSettingsView(discord.ui.View):
 
         for child in self.children:
             if isinstance(child, discord.ui.Button):
-                print(child)
                 if child.label == "Submit":
                     self.submit_button = child
                 elif child.label == "Set Name/Time":

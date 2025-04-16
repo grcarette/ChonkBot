@@ -4,18 +4,25 @@ from utils.emojis import INDICATOR_EMOJIS
 from .confirmation import ConfirmationView
 
 class TournamentCheckinView(discord.ui.View):
-    def __init__(self, bot, tournament):
-        super().__init__()
-        self.bot = bot
-        self.tournament = tournament
+    def __init__(self, tournament_manager, timeout=None):
+        super().__init__(timeout=timeout)
+        self.tm = tournament_manager
+        self.tournament = self.tm.tournament
         self.checked_in = set()
         
-    @discord.ui.button(label=f"Unregister {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.danger)
-    async def unregister_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.checkin_button = discord.ui.Button(label=f"Check In {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.success, custom_id=f"{self.tournament['name']}-checkin")
+        self.unregister_button = discord.ui.Button(label=f"Unregister {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.danger, custom_id=f"{self.tournament['name']}-unregister")
+        self.checkin_button.callback = self.tournament_checkin
+        self.unregister_button.callback = self.unregister
+        
+        self.add_item(self.checkin_button)
+        self.add_item(self.unregister_button)
+        
+    async def unregister(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         if user_id in self.checked_in:
             self.checked_in.remove(user_id)
-        await self.bot.th.unregister_player(self.tournament['name'], user_id)
+        await self.tm.unregister_player(self.tournament['name'], user_id)
         message_content = (
             'You have successfully unregistered.\n'
             'If you change your mind, you may still register through the register channel.'
@@ -25,8 +32,7 @@ class TournamentCheckinView(discord.ui.View):
         embed = await self.generate_embed()
         await interaction.message.edit(embed=embed, view=self)
         
-    @discord.ui.button(label=f"Check In {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.success)
-    async def tournament_checkin(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def tournament_checkin(self, interaction: discord.Interaction):
         entrants = await self.get_entrants()
         user_id = interaction.user.id
         
@@ -42,10 +48,10 @@ class TournamentCheckinView(discord.ui.View):
         embed = await self.generate_embed()
         
         await interaction.response.edit_message(embed=embed, view=self)
-        await self.bot.dh.checkin_player(self.tournament['name'], user_id)
+        await self.tm.bot.dh.checkin_player(self.tournament['name'], user_id)
         
     async def get_entrants(self):
-        tournament = await self.bot.dh.get_tournament(name=self.tournament['name'])
+        tournament = await self.tm.bot.dh.get_tournament(name=self.tournament['name'])
         entrants = [int(user_id) for user_id in tournament['entrants'].keys()]
         return entrants
     

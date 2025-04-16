@@ -66,6 +66,9 @@ class ChallongeHandler:
         if match['state'] == 'complete':
             challonge.matches.reopen(tournament_id, int(match_id))
         return True
+    
+    async def reset_tournament(self, tournament_id):
+        challonge.tournaments.reset(tournament_id)
         
     async def create_tournament(self, name, tournament_type, url=None, start_time=None):
         if isinstance(start_time, datetime.datetime):
@@ -83,6 +86,9 @@ class ChallongeHandler:
         )
         self.tournament_url = tournament['url']
         return tournament
+    
+    async def delete_tournament(self, tournament_id):
+        challonge.tournaments.destroy(tournament_id)
     
 async def main():
     ch = ChallongeHandler()

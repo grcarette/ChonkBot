@@ -1,17 +1,16 @@
 import discord
 
 class MatchReportView(discord.ui.View):
-    def __init__(self, bot, lobby, parent):
+    def __init__(self, lobby, parent):
         super().__init__()
-        self.bot = bot
         self.lobby = lobby
         self.winner = None
         self.parent = parent
         self.players = {}
         
     async def setup(self):
-        for user_id in self.lobby['players']:
-            player = await self.bot.dh.get_user(user_id=user_id)
+        for user_id in self.lobby.remaining_players:
+            player = await self.lobby.dh.get_user(user_id=user_id)
             self.players[user_id] = player['name']
         
         options = []
@@ -28,7 +27,6 @@ class MatchReportView(discord.ui.View):
         
     async def select_winner(self, interaction: discord.Interaction):
         self.winner = self.select_menu.values[0]
-        print(self.players)
         self.select_menu.placeholder = self.players[int(self.select_menu.values[0])]
         for child in self.children:
             if child.custom_id == 'report_submit':
@@ -45,45 +43,51 @@ class MatchReportView(discord.ui.View):
         
         await self.parent.add_report(user, self.winner)
         
-        
-        
 class MatchReportButton(discord.ui.View):
-    def __init__(self, bot, lobby):
-        super().__init__()
-        self.bot = bot
+    def __init__(self, lobby, timeout=None):
+        super().__init__(timeout=timeout)
         self.lobby = lobby
         self.reports = []
         self.user_reports = []
         
-    @discord.ui.button(label='Report Match', style=discord.ButtonStyle.success)
-    async def report_match(self, interaction: discord.Interaction, button: discord.Button):
-        view = MatchReportView(self.bot, self.lobby, self)
-        await view.setup()
-        await interaction.response.send_message(view=view, ephemeral=True)
+        self.report_button = discord.ui.Button(label='Report Match', style=discord.ButtonStyle.success, custom_id=f"{self.lobby.match_id}-report")
+        self.report_button.callback = self.report_match
+        self.add_item(self.report_button)
+        
+    async def report_match(self, interaction: discord.Interaction):
+        user = interaction.user
+        if any(role.name == self.lobby.override_role for role in user.roles) or user.id in self.lobby.remaining_players:
+            view = MatchReportView(self.lobby, self)
+            await view.setup()
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            message_content = (
+                'You are not a player in this match.'
+            )
+            await interaction.response.send_message(message_content, ephemeral=True)
         
     async def add_report(self, user, report):
         self.reports.append(int(report))
         self.user_reports.append(int(user.id))
         
-        if any(role.name == 'Event Organizer' for role in user.roles):
-            pass
-            # await self.bot.lh.end_reporting(self.lobby, self.reports[0])
-        if set(self.user_reports) == set(self.lobby['players']):
+        if any(role.name == self.lobby.override_role for role in user.roles):
+            await self.lobby.end_reporting(report)
+        elif set(self.user_reports) == set(self.lobby.remaining_players):
             if len(set(self.reports)) > 1:
                 await self.redo_report()
             else:
-                await self.bot.lh.end_reporting(self.lobby, self.reports[0])
+                await self.lobby.end_reporting(int(self.reports[0]))
                 
     async def redo_report(self):
-        guild = self.bot.guilds[0]
-        channel = discord.utils.get(guild.channels, id=self.lobby['channel_id'])
+        channel = self.lobby.channel
         message_content = (
             '# Error: Result was not unanimous\n'
             '## Report the match again. Make sure you select the player who **won**'
         )
         await channel.send(message_content)
-        self.stop()
-        await self.bot.th.reset_lobby(lobby=self.lobby, state='reporting')
+        self.user_reports = []
+        self.reports = []
+        
         
         
     

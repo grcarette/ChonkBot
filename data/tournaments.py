@@ -29,9 +29,9 @@ class TournamentMethodsMixin:
         tournament = await self.get_tournament(name=tournament['name'])
         return tournament
     
-    async def delete_tournament(self, category_id): 
+    async def delete_tournament(self, tournament_id): 
         query = {
-            'category_id': category_id
+            '_id': ObjectId(tournament_id)
         }
         result = await self.tournament_collection.delete_one(query)
         
@@ -199,8 +199,19 @@ class TournamentMethodsMixin:
         }
         result = await self.tournament_collection.update_one(query, update)
         return True
+    
+    async def update_tournament_state(self, tournament_id, state):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': {
+                'state': state
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
         
-    async def checkin_player(self, tournament_name, user_id): #tournament
+    async def checkin_player(self, tournament_name, user_id):
         query = {
             'name': tournament_name
         }

@@ -1,5 +1,6 @@
 import discord
 from utils.emojis import INDICATOR_EMOJIS
+from utils.messages import get_mentions
 
 class StageButton(discord.ui.Button):
     def __init__(self, stage_bans, stage):
@@ -34,17 +35,17 @@ class StageButton(discord.ui.Button):
         await interaction.response.edit_message(view=self.view)
                 
 class StageBansView(discord.ui.View):
-    def __init__(self, bot, lobby, original_button):
+    def __init__(self, original_button):
         super().__init__()
-        self.bot = bot
-        self.lobby = lobby
+        self.lobby = original_button.lobby
         self.original_button = original_button
+        self.num_stage_bans = self.original_button.num_stage_bans
         self.banned_stages = []
         
     async def setup(self):
-        for stage_code in self.lobby['stages']:
-            stage = await self.bot.dh.get_stage(code=stage_code)
-            button = StageButton(self.lobby['config']['num_stage_bans'], stage)
+        for stage_code in self.lobby.stages:
+            stage = await self.lobby.dh.get_stage(code=stage_code)
+            button = StageButton(self.num_stage_bans, stage)
             self.add_item(button)
             
         confirm_button = discord.ui.Button(label='Confirm', style=discord.ButtonStyle.success, disabled=True, custom_id='confirm_button')
@@ -65,17 +66,20 @@ class StageBansView(discord.ui.View):
         self.stop()
             
 class BanStagesButton(discord.ui.View):
-    def __init__(self, bot, lobby):
-        super().__init__()
-        self.bot = bot
+    def __init__(self, lobby, timeout=None):
+        super().__init__(timeout=timeout)
         self.lobby = lobby
+        self.num_stage_bans = self.calculate_num_stage_bans()
         self.banned_stages = set()
         self.finished_users = []
         self.message = None
         
-    @discord.ui.button(label="Ban Stages", style=discord.ButtonStyle.primary)
-    async def ban_stages(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = StageBansView(self.bot, self.lobby, self)
+        self.stage_ban_button = discord.ui.Button(label="Ban Stages", style=discord.ButtonStyle.primary, custom_id=f"{self.lobby.match_id}-stageban")
+        self.stage_ban_button.callback = self.ban_stages
+        self.add_item(self.stage_ban_button)
+        
+    async def ban_stages(self, interaction: discord.Interaction):
+        view = StageBansView(self)
         await view.setup()
         self.message = interaction.message
         await interaction.response.send_message(view=view, ephemeral=True)
@@ -86,14 +90,14 @@ class BanStagesButton(discord.ui.View):
         self.finished_users.append(user.id)
         embed = self.generate_embed()
         await self.message.edit(embed=embed, view=self)
-        if set(self.finished_users) == set(self.lobby['players']):
+        if set(self.finished_users) == set(self.lobby.remaining_players):
             self.stop()
             await self.message.delete()
-            await self.bot.lh.end_stage_bans(self.lobby, self.banned_stages)
+            await self.lobby.end_stage_bans(self.banned_stages)
     
     def generate_embed(self):
-        remaining_ids = [pid for pid in self.lobby['players'] if pid not in self.finished_users]
-        mentions = [f"<@{pid}>" for pid in remaining_ids]
+        remaining_ids = [pid for pid in self.lobby.remaining_players if pid not in self.finished_users]
+        mentions = get_mentions(remaining_ids)
 
         if mentions:
             checkin_message = (
@@ -111,6 +115,13 @@ class BanStagesButton(discord.ui.View):
             color=discord.Color.blue()
         )
         return embed
+    
+    def calculate_num_stage_bans(self):
+        num_stages = len(self.lobby.stages)
+        num_players = len(self.lobby.remaining_players)
+        num_stage_bans = (num_stages - (num_stages % num_players)) / num_players
+        
+        return num_stage_bans
             
         
         

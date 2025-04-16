@@ -29,9 +29,9 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.insert_one(lobby_data)
         return lobby_id
 
-    async def delete_lobby(self, lobby): #lobby
+    async def delete_lobby(self, match_id):
         query = {
-            'channel_id': lobby['channel_id']
+            'match_id': match_id
         }
         result = await self.lobby_collection.delete_one(query)
         return result

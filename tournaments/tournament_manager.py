@@ -1,10 +1,15 @@
 from .challonge_handler import ChallongeHandler
 from datetime import datetime
 
+from utils.channel_permissions import CHANNEL_PERMISSIONS
+
 from ui.match_call import MatchCallView
 from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
 from ui.match_report import MatchReportButton
+from ui.register_control import RegisterControlView
+from ui.bot_control import BotControlView
+from ui.tournament_checkin import TournamentCheckinView
 
 from .match_lobby import MatchLobby
 
@@ -58,10 +63,13 @@ class TournamentManager:
             elif lobby['state'] == 'reporting':
                 self.bot.add_view(MatchReportButton(match_lobby))
                 
-            #add register button
-            #add bot control view
+        self.bot.add_view(RegisterControlView(self))
+        self.bot.add_view(BotControlView(self))
+        
+        if self.tournament['state'] == 'checkin':
+            self.bot.add_view(TournamentCheckinView(self))
                 
-        if tournament['state'] == 'active':
+        elif tournament['state'] == 'active':
             await self.start_tournament_loop()
             
     async def register_player(self, user_id):
@@ -76,7 +84,7 @@ class TournamentManager:
         tournament = await self.get_tournament()
         player_id = await self.ch.register_player(tournament['challonge_data']['url'], user['name'])
         
-        await self.bot.dh.register_player(tournament['name'], user_id, player_id)
+        await self.bot.dh.register_player(tournament['_id'], user_id, player_id)
         
     async def unregister_player(self, user_id):
         guild = self.guild
@@ -238,6 +246,11 @@ class TournamentManager:
         lobby = kwargs.get('lobby')
         await self.lobbies[lobby['match_id']].reset_report()
         await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
+          
+    async def reset_tournament(self):
+        await self.ch.reset_tournament(self.tournament['challonge_data']['id'])
+        for lobby in self.lobbies:
+            self.lobbies[lobby].delete_lobby()
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
@@ -250,3 +263,58 @@ class TournamentManager:
 
     def get_short_timestamp(self, timestamp):
         return timestamp.strftime("%I:%M%p").lstrip("0")
+    
+    async def toggle_reveal_channels(self):
+        guild = self.bot.guilds[0]
+        category = self.get_tournament_category()
+        for channel in category.channels:
+            permissions = CHANNEL_PERMISSIONS[channel.name]
+            if permissions != 'private':
+                overwrite = channel.overwrites_for(guild.default_role)
+                overwrite.view_channel = not overwrite.view_channel
+                await channel.set_permissions(guild.default_role, overwrite=overwrite)
+    
+    async def start_checkin(self):
+        await self.bot.dh.update_tournament_state(self.tournament['_id'], 'checkin')
+        tournament = await self.get_tournament(0)
+        guild = self.bot.guild
+        tournament_category = await self.get_tournament_category(0)
+        checkin_channel = await self.create_channel(
+            guild=guild,
+            tournament_category=tournament_category,
+            hide_channel=True,
+            channel_name='check-in',
+            channel_overwrites=CHANNEL_PERMISSIONS['check-in'] 
+        )
+        await checkin_channel.edit(position=1)
+
+        tournament_role = discord.utils.get(guild.roles, name=tournament['name'])
+        
+        message_content = (
+            f'{tournament_role.mention}'
+        )
+        view = TournamentCheckinView(self.bot, tournament)
+        embed = await view.generate_embed()
+
+        await checkin_channel.send(content=message_content, embed=embed, view=view)
+        
+    async def delete_tournament(self):
+        tournament = await self.get_tournament()
+        guild = self.bot.guild
+        
+        await self.ch.delete_tournament(tournament['challonge_data']['id'])
+        tournament_category = self.get_tournament_category()
+        for channel in tournament_category.channels:
+            await channel.delete()
+        for lobby in self.lobbies:
+            await lobby.delete_lobby()
+        await self.bot.dh.delete_tournament(tournament['_id'])
+        
+        tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
+        tournament_to_role = discord.utils.get(guild.roles, name=f"{tournament['name']} TO")
+        
+        print(tournament_role, tournament_to_role)
+        
+        await tournament_role.delete()
+        await tournament_to_role.delete()
+        await tournament_category.delete()

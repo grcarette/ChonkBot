@@ -1,40 +1,44 @@
 import discord
 from utils.emojis import INDICATOR_EMOJIS
+from utils.messages import get_mentions
 
 class CheckinView(discord.ui.View):
-    def __init__(self, bot, lobby):
-        super().__init__()
-        self.bot = bot
+    def __init__(self, lobby, timeout=None):
+        super().__init__(timeout=timeout)
         self.lobby = lobby
-        self.checked_in = set()
         self.message = None
         
-    @discord.ui.button(label="Check in", style=discord.ButtonStyle.success)
-    async def checkin_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.checkin_button = discord.ui.Button(label="Check in", style=discord.ButtonStyle.success, custom_id=f"{self.lobby.match_id}-checkin")
+        self.checkin_button.callback = self.check_in
+        self.add_item(self.checkin_button)
+        
+    async def check_in(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         message = interaction.message 
+        lobby = await self.lobby.get_lobby()
         
-        if user_id not in self.lobby['players']:
+        if user_id not in self.lobby.remaining_players:
             await interaction.response.send_message("You're not part of this match!", ephemeral=True)
             return
         
-        if user_id in self.checked_in:
+        if user_id in lobby['checked_in']:
             await interaction.response.send_message("You've already checked in!", ephemeral=True)
             return
         
-        self.checked_in.add(user_id)
-        embed = self.generate_embed()
+        lobby = await self.lobby.checkin_player(user_id)
+        embed = await self.generate_embed()
 
         await interaction.response.edit_message(embed=embed, view=self)
         
-        if len(self.checked_in) == len(self.lobby['players']):
+        if len(lobby['checked_in']) == len(self.lobby.remaining_players):
             self.stop()
             await interaction.message.delete()
-            await self.bot.lh.end_checkin(self.lobby)
+            await self.lobby.end_checkin()
             
-    def generate_embed(self):
-        remaining_ids = [pid for pid in self.lobby['players'] if pid not in self.checked_in]
-        mentions = [f"<@{pid}>" for pid in remaining_ids]
+    async def generate_embed(self):
+        lobby = await self.lobby.get_lobby()
+        remaining_ids = [player_id for player_id in self.lobby.remaining_players if player_id not in lobby['checked_in']]
+        mentions = get_mentions(remaining_ids)
 
         if mentions:
             checkin_message = (
