@@ -29,7 +29,6 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.insert_one(lobby_data)
         return lobby_id
 
-    
     async def delete_lobby(self, lobby): #lobby
         query = {
             'channel_id': lobby['channel_id']
@@ -59,14 +58,27 @@ class LobbyMethodsMixin:
                 to_process.extend(new_prereqs)
                 
         return list(prereq_matches)
+
+    async def lobby_checkin_player(self, match_id, player_id):
+        query = {
+            'match_id': match_id
+        }
+        update = {
+            '$addToSet': {
+                'checked_in': player_id
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
+        lobby = await self.get_lobby(match_id)
+        return lobby
     
-    async def reset_lobby(self, channel_id, state=None): #lobby
+    async def reset_lobby(self, match_id, state=None): #lobby
         query = { 
-            'channel_id': channel_id
+            'match_id': match_id
         }
         lobby = await self.lobby_collection.find_one(query)
         if state == 'last_result':
-            await self.undo_last_result(channel_id)
+            await self.undo_last_result(match_id)
             update = {
                 "$set": {
                     'state': 'reporting'
@@ -91,22 +103,9 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def lobby_checkin_player(self, match_id, player_id):
+    async def reset_players(self, lobby):
         query = {
-            'match_id': match_id
-        }
-        update = {
-            '$addToSet': {
-                'checked_in': player_id
-            }
-        }
-        result = await self.lobby_collection.update_one(query, update)
-        lobby = await self.get_lobby(match_id)
-        return lobby
-    
-    async def reset_players(self, lobby): #lobby
-        query = {
-            'channel_id': lobby['channel_id']
+            'match_id': lobby['match_id']
         }
         update = {
             '$push':{
@@ -122,9 +121,9 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def undo_last_result(self, channel_id): #lobby
+    async def undo_last_result(self, match_id):
         query = {
-            'channel_id': channel_id
+            'match_id': match_id
         }
         lobby = await self.lobby_collection.find_one(query)
         if not lobby or not lobby.get('results'):
@@ -175,13 +174,13 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def report_match(self, match_id, winner_id): #lobby
+    async def report_match(self, match_id, winner_id):
         query = {
             'match_id': match_id
         }
         update = {
             '$push': {
-                'results': winner_id
+                'results': int(winner_id)
             }
         }
         result = await self.lobby_collection.update_one(query, update)
@@ -196,11 +195,9 @@ class LobbyMethodsMixin:
         remaining_players = lobby['players']
         update = {
             '$set': {
-                'players': [],
-                'state': 'finished',
                 'finished_at': datetime.now()
             },
-            '$push': {
+            '$addToSet': {
                 'results': {
                     '$each': remaining_players
                 }
@@ -210,7 +207,7 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def get_lobby_time(self, prereq_match_ids): #lobby
+    async def get_lobby_time(self, prereq_match_ids):
         print(prereq_match_ids)
         if len(prereq_match_ids) < 1:
             return datetime.now()
@@ -247,11 +244,18 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
+    async def get_lobby_by_channel(self, channel_id):
+        query = {
+            'channel_id': channel_id
+        }
+        lobby = await self.lobby_collection.find_one(query)
+        return lobby
+    
     async def get_active_lobbies(self, tournament_id): 
         query = {
             'tournament': ObjectId(tournament_id),
             'state': {
-                '$ne': 'finished'
+                '$ne': 'closed'
             }
         }
         active_lobbies = await self.lobby_collection.find(query).to_list(None)

@@ -2,6 +2,10 @@ from .challonge_handler import ChallongeHandler
 from datetime import datetime
 
 from ui.match_call import MatchCallView
+from ui.checkin import CheckinView
+from ui.stage_bans import BanStagesButton
+from ui.match_report import MatchReportButton
+
 from .match_lobby import MatchLobby
 
 import discord
@@ -11,8 +15,8 @@ class TournamentManager:
         self.bot = bot
         self.tournament = tournament
         self.ch = ChallongeHandler()
-        self.lobbies = []
         self.guild = self.bot.guild
+        self.lobbies = {}
         
     async def initialize_event(self):
         tournament = await self.get_tournament()
@@ -30,6 +34,33 @@ class TournamentManager:
             tournament_id = challonge_tournament['id']
             await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
             
+        active_lobbies = await self.bot.dh.get_active_lobbies(self.tournament['_id'])
+        for lobby in active_lobbies:
+            match_lobby = await MatchLobby.create(
+                tournament_id=tournament['_id'],
+                match_id=lobby['match_id'],
+                lobby_name=lobby['lobby_name'],
+                prereq_matches=lobby['prereq_matches'],
+                players=lobby['players'],
+                stages=lobby['stages'],
+                num_winners=lobby['num_winners'],
+                tournament_manager=self,
+                datahandler=self.bot.dh,
+                guild=self.bot.guild,
+            )
+            self.lobbies[lobby['match_id']] = match_lobby
+            if lobby['state'] == 'initialize':
+                pass
+            elif lobby['state'] == 'checkin':
+                self.bot.add_view(CheckinView(match_lobby))
+            elif lobby['state'] == 'stage_bans':
+                self.bot.add_view(BanStagesButton(match_lobby))
+            elif lobby['state'] == 'reporting':
+                self.bot.add_view(MatchReportButton(match_lobby))
+                
+            #add register button
+            #add bot control view
+                
         if tournament['state'] == 'active':
             await self.start_tournament_loop()
             
@@ -71,7 +102,7 @@ class TournamentManager:
         await self.start_tournament_loop()
         
     async def start_tournament_loop(self):
-        await self.call_matches()
+        await self.refresh_match_calls()
         
     async def refresh_match_calls(self):
         tournament_category = self.get_tournament_category()
@@ -131,6 +162,7 @@ class TournamentManager:
             datahandler=self.bot.dh,
             guild=guild,
         )
+        self.lobbies[match_data['match_id']] = match_lobby
         await match_lobby.initialize_match()
         
     async def get_players_from_match(self, match_data):
@@ -178,12 +210,19 @@ class TournamentManager:
         return match_data
     
     async def report_match(self, lobby):
+        lobby_data = await lobby.get_lobby()
         tournament = await self.get_tournament()
-        winner_user_id = str(lobby['results'][0])
+        winner_user_id = str(lobby_data['results'][0])
         winner_id = tournament['entrants'][winner_user_id]
-        await self.ch.report_match(tournament['challonge_data']['url'], lobby['match_id'], winner_id)
+        await self.ch.report_match(tournament['challonge_data']['url'], lobby_data['match_id'], winner_id)
         await self.refresh_match_calls()
+        await self.close_prereqs(lobby)
         
+    async def close_prereqs(self, lobby):
+        lobby = await lobby.get_lobby()
+        for prereq in lobby['prereq_matches']:
+            await self.lobbies[prereq].close_lobby()
+    
     async def reset_match(self, lobby):
         tournament = await self.get_tournament()
         match_reset = await self.ch.reset_match(tournament['challonge_data']['id'], lobby['match_id'])
@@ -192,6 +231,10 @@ class TournamentManager:
         for lobby in dependent_matches:
             await self.bot.lh.delete_lobby(lobby)
         return match_reset
+    
+    async def reset_report(self, kwargs):
+        lobby = kwargs.get('lobby')
+        await self.lobbies[lobby['match_id']].reset_report()
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
@@ -201,6 +244,6 @@ class TournamentManager:
     def get_tournament_category(self):
         category = discord.utils.get(self.guild.categories, id=self.tournament['category_id'])
         return category
-    
+
     def get_short_timestamp(self, timestamp):
         return timestamp.strftime("%I:%M%p").lstrip("0")

@@ -50,6 +50,8 @@ class MatchLobby:
             await self.setup_lobby()
         lobby = await self.get_lobby()
         self.remaining_players = [player for player in self.players if player not in lobby['results']]
+        
+        print('init', self.players, self.remaining_players)
             
         return self
 
@@ -126,9 +128,11 @@ class MatchLobby:
         remaining_stages = [stage for stage in self.stages if stage not in banned_stages]
         picked_stage = random.choice(remaining_stages)
         await self.dh.pick_lobby_stage(self.match_id, picked_stage)
-        await self.start_reporting(picked_stage)
+        await self.start_reporting()
     
-    async def start_reporting(self, picked_stage):
+    async def start_reporting(self):
+        lobby = await self.get_lobby()
+        picked_stage = lobby['picked_stage']
         await self.dh.update_lobby_state(self.match_id, 'reporting')
         stage = await self.dh.get_stage(code=picked_stage)
         message_content = (
@@ -136,6 +140,7 @@ class MatchLobby:
             f"Sort out among yourselves who will host the lobby. Make sure you are playing in party mode with the tournament ruleset.\n\n"
             f"When the match is over, report the winner of the match with the dropdown menu below."
         )
+        print(self.remaining_players, self.players, self.match_id)
         view = MatchReportButton(self)
         embed = discord.Embed(
             title = 'Match Ready!',
@@ -148,18 +153,23 @@ class MatchLobby:
     async def end_reporting(self, winner_id):
         lobby = await self.dh.report_match(self.match_id, winner_id)
         if self.num_winners == len(lobby['results']):
-            await self.close_lobby()
+            await self.dh.update_lobby_state(self.match_id, 'finished')
+            await self.dh.end_match(self.match_id)
+            await self.tournament_manager.report_match(self)
         else:
             await self.start_match()
             
     async def close_lobby(self):
-        await self.dh.update_lobby_state(self.match_id, 'finished')
-        await self.dh.end_match(self.match_id)
-        lobby = await self.get_lobby()
-        await self.tournament_manager.report_match(lobby)
-    
+        await self.dh.update_lobby_state(self.match_id, 'closed')
+        await self.channel.delete()
+        
     async def reset_lobby(self):
         pass
+    
+    async def reset_report(self):
+        await self.dh.reset_lobby(self.match_id, 'report')
+        self.remaining_players = self.players
+        await self.start_reporting()
         
     async def get_lobby(self):
         lobby = await self.dh.get_lobby(self.match_id)

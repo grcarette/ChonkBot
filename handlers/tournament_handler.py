@@ -52,33 +52,9 @@ class TournamentHandler():
             await self.initialize_event(event)
             
     async def initialize_event(self, event):
-        active_lobbies = await self.bot.dh.get_active_lobbies(event['_id'])
         tournament_manager = TournamentManager(self.bot, event) 
         await tournament_manager.initialize_event()
-        for lobby in active_lobbies:
-            match_lobby = await MatchLobby.create(
-                tournament_id=event['_id'],
-                match_id=lobby['match_id'],
-                lobby_name=lobby['lobby_name'],
-                prereq_matches=lobby['prereq_matches'],
-                players=lobby['players'],
-                stages=lobby['stages'],
-                num_winners=lobby['num_winners'],
-                tournament_manager=tournament_manager,
-                datahandler=self.bot.dh,
-                guild=self.bot.guild,
-            )
-            if lobby['state'] == 'initialize':
-                pass
-            elif lobby['state'] == 'checkin':
-                self.bot.add_view(CheckinView(match_lobby))
-            elif lobby['state'] == 'stage_bans':
-                self.bot.add_view(BanStagesButton(match_lobby))
-            elif lobby['state'] == 'reporting':
-                self.bot.add_view(MatchReportButton(match_lobby))
-
-        #add register button
-        #add bot control view
+        self.tournaments[event['_id']] = tournament_manager
 
     async def set_up_tournament(self, tournament):
         guild = self.bot.guilds[0]
@@ -311,17 +287,17 @@ class TournamentHandler():
     async def update_matches(self, tournament):
         await self.refresh_match_calls(tournament['category_id'])
         
-    async def confirm_reset_lobby(self, user_id, lobby, state):
-        dependent_matches = await self.bot.dh.get_dependent_matches(lobby['match_id'])
-        num_dependent = len(dependent_matches)
+    async def confirm_reset_lobby(self, user_id, channel_id, state):
         guild = self.bot.guilds[0]
-        channel = discord.utils.get(guild.channels, id=lobby['channel_id'])
+        channel = discord.utils.get(guild.channels, id=channel_id)
+        lobby = await self.bot.dh.get_lobby_by_channel(channel_id)
+        tm = self.tournaments[lobby['tournament']]
         embed = discord.Embed(
-            title=f"**CAUTION:**\nAre you absolutely sure you want to reset this lobby? This will also reset {num_dependent} dependent matches",
+            title=f"**CAUTION:**\nAre you absolutely sure you want to reset this lobby?",
             color=discord.Color.red()
         )
         
-        view = ConfirmationView(self.reset_lobby, user_id, lobby=lobby, state=state)
+        view = ConfirmationView(tm.reset_report, user_id, lobby=lobby)
         await channel.send(embed=embed, view=view)
         
     async def reset_lobby(self, kwargs):
