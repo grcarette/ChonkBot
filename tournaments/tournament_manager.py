@@ -220,8 +220,10 @@ class TournamentManager:
         
     async def close_prereqs(self, lobby):
         lobby = await lobby.get_lobby()
-        for prereq in lobby['prereq_matches']:
-            await self.lobbies[prereq].close_lobby()
+        for match_id in lobby['prereq_matches']:
+            lobby = await self.bot.dh.get_lobby(match_id)
+            if not lobby['state'] == 'closed':
+                await self.lobbies[match_id].close_lobby()
     
     async def reset_match(self, lobby):
         tournament = await self.get_tournament()
@@ -235,6 +237,7 @@ class TournamentManager:
     async def reset_report(self, kwargs):
         lobby = kwargs.get('lobby')
         await self.lobbies[lobby['match_id']].reset_report()
+        await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
