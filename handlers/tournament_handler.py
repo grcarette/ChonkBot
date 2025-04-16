@@ -3,7 +3,7 @@ from discord.ext import commands
 
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
 from utils.errors import PlayerNotFoundError
-from utils.channel_permissions import DEFAULT_STAGE_NUMBER, CHANNEL_PERMISSIONS, NONDEFAULT_CHANNELS
+from utils.channel_utils import DEFAULT_STAGE_NUMBER, CHANNEL_PERMISSIONS, NONDEFAULT_CHANNELS, create_channel
 
 from ui.bot_control import BotControlView
 from ui.register_control import RegisterControlView
@@ -62,7 +62,7 @@ class TournamentHandler():
         
         for channel in CHANNEL_PERMISSIONS:
             if channel not in NONDEFAULT_CHANNELS:
-                channel_dict[f'{channel}'] = await self.create_channel(
+                channel_dict[f'{channel}'] = await create_channel(
                     guild=guild, 
                     tournament_category=tournament_category, 
                     hide_channel=True, 
@@ -147,54 +147,6 @@ class TournamentHandler():
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         await self.tournaments[tournament['_id']].delete_tournament()
             
-    async def create_channel(self, guild, tournament_category, hide_channel, channel_name, channel_overwrites):
-        overwrites = {}
-        view_channel = False
-        if channel_overwrites == 'read_only':
-            if not hide_channel:
-                view_channel = True
-            overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=view_channel,
-                send_messages=False,
-                manage_messages=False,
-                embed_links=False,
-                attach_files=False,
-                read_message_history=True,
-                add_reactions=True,
-                use_external_emojis=True
-            )
-        elif channel_overwrites == "open":
-            if not hide_channel:
-                view_channel = True
-            overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=view_channel,
-                send_messages=True,
-                manage_messages=False,
-                embed_links=True,
-                attach_files=True,
-                read_message_history=True,
-                add_reactions=True,
-                use_external_emojis=True
-            )
-        elif channel_overwrites == 'private':
-            overwrites[guild.default_role] = discord.PermissionOverwrite(
-                view_channel=view_channel,
-                send_messages=False,
-                manage_messages=False,
-                embed_links=False,
-                attach_files=False,
-                read_message_history=False,
-                add_reactions=False,
-                use_external_emojis=False
-            )
-        
-        new_channel = await guild.create_text_channel(
-            f'{channel_name}',
-            category=tournament_category,
-            overwrites=overwrites
-        )
-        return new_channel
- 
     def get_tournament_category(self, category_id):
         guild = self.bot.guilds[0]
         category = discord.utils.get(guild.categories, id=category_id)

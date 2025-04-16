@@ -4,7 +4,7 @@ import time
 
 TOURNAMENT_CONFIGURATION = {
     NUMBER_EMOJIS[1]: ['format', 'Single Elimination'],
-    NUMBER_EMOJIS[2]: ['format', 'Double Elimination'],
+    NUMBER_EMOJIS[2]: ['format', 'double elimination'],
     NUMBER_EMOJIS[3]: ['format', 'Swiss'],
     NUMBER_EMOJIS[4]: ['format', 'FFA Filter'],
     INDICATOR_EMOJIS['blue_check']: ['check-in', True],

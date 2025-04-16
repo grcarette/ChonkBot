@@ -33,4 +33,16 @@ INDICATOR_EMOJIS = {
     'star': '⭐',
     'down_arrow': '⬇️',
     'up_arrow': '⬆️',
+    'thumbs_up': '👍',
+    'thumbs_down': '👎',
+    'rotating_arrows': '🔄',
+    'link': '🔗',
+}
+
+RESULT_EMOJIS = {
+    'trophy': '🏆',
+    '1st': '🥇',
+    '2nd': '🥈',
+    '3rd': '🥉',
+    'medal': '🏅',
 }

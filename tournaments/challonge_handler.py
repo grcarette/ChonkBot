@@ -67,6 +67,18 @@ class ChallongeHandler:
             challonge.matches.reopen(tournament_id, int(match_id))
         return True
     
+    async def check_tournament_status(self, tournament_id):
+        tournament = challonge.tournaments.show(tournament_id)
+        return tournament['state']
+    
+    async def finalize_tournament(self, tournament_id):
+        challonge.tournaments.finalize(tournament_id)
+        
+    async def get_final_results(self, tournament_id):
+        participants = challonge.participants.index(tournament_id)
+        participants_sorted = sorted(participants, key=lambda p: p['final_rank'] or 999)
+        return participants_sorted
+    
     async def reset_tournament(self, tournament_id):
         challonge.tournaments.reset(tournament_id)
         

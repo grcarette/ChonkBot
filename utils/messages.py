@@ -58,3 +58,7 @@ async def get_stage_ban_message(stages_text, user):
     footer = f'\n\n{user.mention} Please select one stage you **do not** wish to play on' 
     message = header + stages_text + footer
     return message
+
+def get_mentions(users):
+    mentions = [f"<@{user.id if hasattr(user, 'id') else user}>" for user in users]
+    return mentions

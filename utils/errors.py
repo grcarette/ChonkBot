@@ -15,6 +15,10 @@ class UserNotFoundError(Exception):
     """Raised when a user is not found"""
     pass
 
+class LevelNotFoundError(Exception):
+    """Raised when a level is not found"""
+    pass
+
 class NoStagesFoundError(Exception):
     """Raised when a user has blocked all stages"""
     pass

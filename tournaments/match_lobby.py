@@ -161,7 +161,9 @@ class MatchLobby:
             
     async def close_lobby(self):
         await self.dh.update_lobby_state(self.match_id, 'closed')
-        await self.channel.delete()
+        if self.channel != None:
+            await self.channel.delete()
+            self.channel = None
     
     async def reset_report(self):
         await self.dh.reset_lobby(self.match_id, 'report')

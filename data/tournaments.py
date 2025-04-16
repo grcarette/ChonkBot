@@ -107,6 +107,7 @@ class TournamentMethodsMixin:
         query = {
             '$or': [
                 {'state': 'initialized'},
+                {'state': 'checkin'},
                 {'state': 'active'}
             ]
         }
@@ -222,3 +223,15 @@ class TournamentMethodsMixin:
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
+    
+    async def end_tournament(self, tournament_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': {
+                'state': 'Finished'
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        
