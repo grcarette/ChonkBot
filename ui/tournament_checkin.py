@@ -22,7 +22,7 @@ class TournamentCheckinView(discord.ui.View):
         user_id = interaction.user.id
         if user_id in self.checked_in:
             self.checked_in.remove(user_id)
-        await self.tm.unregister_player(self.tournament['name'], user_id)
+        await self.tm.unregister_player(user_id)
         message_content = (
             'You have successfully unregistered.\n'
             'If you change your mind, you may still register through the register channel.'

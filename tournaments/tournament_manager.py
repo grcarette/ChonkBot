@@ -2,7 +2,7 @@ from .challonge_handler import ChallongeHandler
 from datetime import datetime
 
 from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
-from utils.emojis import RESULT_EMOJIS
+from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
 from utils.discord_preset_colors import PRESET_COLORS
 from utils.get_bracket_link import get_bracket_link
 
@@ -14,7 +14,7 @@ from ui.register_control import RegisterControlView
 from ui.bot_control import BotControlView
 from ui.tournament_checkin import TournamentCheckinView
 from ui.end_tournament import EndTournamentView
-from ui.bracket_link import BracketLinkView
+from ui.link_view import LinkView
 
 from .match_lobby import MatchLobby
 
@@ -405,8 +405,10 @@ class TournamentManager:
             description=message_content,
             color=random.choice(PRESET_COLORS)
         )
+        label = f"{INDICATOR_EMOJIS['link']} Bracket"
         bracket_link = await get_bracket_link(self.tournament['challonge_data']['url'])
-        view = BracketLinkView(bracket_link)
+        
+        view = LinkView(label, bracket_link)
 
         await channel.send(embed=embed, view=view)
             

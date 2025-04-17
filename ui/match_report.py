@@ -1,12 +1,13 @@
 import discord
 
 class MatchReportView(discord.ui.View):
-    def __init__(self, lobby, parent):
+    def __init__(self, lobby, parent, original_message):
         super().__init__()
         self.lobby = lobby
         self.winner = None
         self.parent = parent
         self.players = {}
+        self.original_message = original_message
         
     async def setup(self):
         for user_id in self.lobby.remaining_players:
@@ -41,7 +42,7 @@ class MatchReportView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         self.stop()
         
-        await self.parent.add_report(user, self.winner)
+        await self.parent.add_report(user, self.winner, self.original_message)
         
 class MatchReportButton(discord.ui.View):
     def __init__(self, lobby, timeout=None):
@@ -56,8 +57,9 @@ class MatchReportButton(discord.ui.View):
         
     async def report_match(self, interaction: discord.Interaction):
         user = interaction.user
+        message = interaction.message
         if any(role.name == self.lobby.override_role for role in user.roles) or user.id in self.lobby.remaining_players:
-            view = MatchReportView(self.lobby, self)
+            view = MatchReportView(self.lobby, self, message)
             await view.setup()
             await interaction.response.send_message(view=view, ephemeral=True)
         else:
@@ -66,17 +68,19 @@ class MatchReportButton(discord.ui.View):
             )
             await interaction.response.send_message(message_content, ephemeral=True)
         
-    async def add_report(self, user, report):
+    async def add_report(self, user, report, original_message):
         self.reports.append(int(report))
         self.user_reports.append(int(user.id))
         
         if any(role.name == self.lobby.override_role for role in user.roles):
             await self.lobby.end_reporting(report)
+            await original_message.delete()
         elif set(self.user_reports) == set(self.lobby.remaining_players):
             if len(set(self.reports)) > 1:
                 await self.redo_report()
             else:
                 await self.lobby.end_reporting(int(self.reports[0]))
+                await original_message.delete()
                 
     async def redo_report(self):
         channel = self.lobby.channel
