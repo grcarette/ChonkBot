@@ -31,7 +31,7 @@ class MatchLobby:
         
         self.tournament_id = tournament_id #_id
         self.match_id = match_id
-        self.lobby_name = lobby_name #winners round 1 p1vp2, losers round 2 p1vp2, R4 p1vp2
+        self.lobby_name = lobby_name 
         self.players = players
         self.prereq_matches = prereq_matches
         self.stages = stages
@@ -50,8 +50,7 @@ class MatchLobby:
             await self.setup_lobby()
         lobby = await self.get_lobby()
         self.remaining_players = [player for player in self.players if player not in lobby['results']]
-        
-        print('init', self.players, self.remaining_players)
+    
             
         return self
 
@@ -140,7 +139,6 @@ class MatchLobby:
             f"Sort out among yourselves who will host the lobby. Make sure you are playing in party mode with the tournament ruleset.\n\n"
             f"When the match is over, report the winner of the match with the dropdown menu below."
         )
-        print(self.remaining_players, self.players, self.match_id)
         view = MatchReportButton(self)
         embed = discord.Embed(
             title = 'Match Ready!',
@@ -156,9 +154,35 @@ class MatchLobby:
             await self.dh.update_lobby_state(self.match_id, 'finished')
             await self.dh.end_match(self.match_id)
             await self.tournament_manager.report_match(self)
+            await self.send_player_instructions()
         else:
             await self.start_match()
             
+    async def send_player_instructions(self):
+        lobby = await self.get_lobby()
+        winner_mention = f"<@{lobby['results'][0]}>"
+        loser_mention = f"<@{lobby['results'][1]}>"
+        
+        winner_message = (
+            f"Congratulations {winner_mention}!\n"
+            "You will be pinged when your next match is ready. You might need to wait to play to allow the losers bracket to catch up.\n\n"
+        )
+        if self.lobby_name[0] == 'w':
+            loser_message = (
+                f"{loser_mention} You've lost this set, but you are not out of the tournament yet.\n"
+                "You will be pinged when it's time to play your next set."
+            )
+        elif self.lobby_name[0] == 'l':
+            loser_message = (
+                f"{loser_mention} Unfortunately you've been eliminated from the tournament. Thank you for playing!"
+            )
+        player_instructions = discord.Embed(
+            title='Lobby Closed',
+            description=winner_message + loser_message,
+            color=discord.Color.blue()
+        )
+        await self.channel.send(embed=player_instructions)
+        
     async def close_lobby(self):
         await self.dh.update_lobby_state(self.match_id, 'closed')
         if self.channel != None:

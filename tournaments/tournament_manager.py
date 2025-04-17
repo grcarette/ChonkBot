@@ -350,10 +350,10 @@ class TournamentManager:
         await checkin_channel.send(content=message_content, embed=embed, view=view)
         
     async def end_tournament(self, kwargs):
-        # await self.bot.dh.end_tournament(self.tournament['_id'])
+        await self.bot.dh.end_tournament(self.tournament['_id'])
         await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
-        # for lobby in self.lobbies:
-        #     await self.lobbies[lobby].close_lobby()
+        for lobby in self.lobbies:
+            await self.lobbies[lobby].close_lobby()
             
         await self.post_final_results()
             
@@ -418,3 +418,8 @@ class TournamentManager:
         await tournament_role.delete()
         await tournament_to_role.delete()
         await tournament_category.delete()
+        
+
+        
+        
+        
