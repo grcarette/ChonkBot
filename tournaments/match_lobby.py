@@ -7,6 +7,7 @@ from ui.stage_bans import BanStagesButton
 from ui.match_report import MatchReportButton
 
 from utils.messages import get_mentions
+from utils.emojis import INDICATOR_EMOJIS
 
 class MatchLobby:
     def __init__(self, *args, **kwargs):
@@ -109,6 +110,7 @@ class MatchLobby:
         return lobby
     
     async def end_checkin(self):
+        await self.channel.edit(name=f"{INDICATOR_EMOJIS['green_check'] + self.lobby_name}")
         await self.start_stage_bans()
         
     async def start_stage_bans(self):
