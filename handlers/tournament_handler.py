@@ -59,16 +59,19 @@ class TournamentHandler():
         await self.bot.dh.add_category_to_tournament(tournament['name'], tournament_category.id)
         
         channel_dict = {}
+        channels = [channel for channel in CHANNEL_PERMISSIONS if channel not in NONDEFAULT_CHANNELS]
         
-        for channel in CHANNEL_PERMISSIONS:
-            if channel not in NONDEFAULT_CHANNELS:
-                channel_dict[f'{channel}'] = await create_channel(
-                    guild=guild, 
-                    tournament_category=tournament_category, 
-                    hide_channel=True, 
-                    channel_name=f'{channel}', 
-                    channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}']
-                )
+        if tournament['config']['approved_registration'] == True:
+            channels.append('registration-approval')
+            
+        for channel in channels:
+            channel_dict[f'{channel}'] = await create_channel(
+                guild=guild, 
+                tournament_category=tournament_category, 
+                hide_channel=True, 
+                channel_name=f'{channel}', 
+                channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}']
+            )
         
         await self.post_stages(tournament['name'], channel_dict['stagelist'])
         tournament = await self.bot.dh.get_tournament(name=tournament['name'])

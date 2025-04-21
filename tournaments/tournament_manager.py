@@ -107,6 +107,9 @@ class TournamentManager:
         
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
         await self.ch.unregister_player(challonge_id, player_id)
+        
+    async def create_registration_approval(self, user_id):
+        pass
             
     async def start_tournament(self, kwargs):
         tournament = await self.get_tournament()
