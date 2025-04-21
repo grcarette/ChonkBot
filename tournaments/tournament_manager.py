@@ -15,6 +15,7 @@ from ui.bot_control import BotControlView
 from ui.tournament_checkin import TournamentCheckinView
 from ui.end_tournament import EndTournamentView
 from ui.link_view import LinkView
+from ui.registration_approval import RegistrationApprovalView
 
 from .match_lobby import MatchLobby
 
@@ -109,7 +110,17 @@ class TournamentManager:
         await self.ch.unregister_player(challonge_id, player_id)
         
     async def create_registration_approval(self, user_id):
-        pass
+        if self.tournament['config']['approved_registration'] == True:
+            user = discord.utils.get(self.bot.guild.members, id=user_id)
+            approval_channel = await self.get_channel('registration-approval')
+            embed = discord.Embed(
+                title=user.name,
+                color=random.choice(PRESET_COLORS)
+            )
+            view = RegistrationApprovalView(self, user_id)
+            await approval_channel.send(embed=embed, view=view)
+        else:
+            await self.register_player(user_id)
             
     async def start_tournament(self, kwargs):
         tournament = await self.get_tournament()

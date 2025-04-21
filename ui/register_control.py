@@ -26,7 +26,7 @@ class RegisterControlView(discord.ui.View):
             )
             await interaction.response.send_message(message_content, ephemeral=True)
         else:
-            await self.tm.register_player(user_id)
+            await self.tm.create_registration_approval(user_id)
             message_content = (
                 f"You are now registered for {tournament['name']}\n"
                 f"If you wish to unregister, press the button again."
