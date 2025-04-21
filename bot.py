@@ -3,10 +3,9 @@ from discord.ext import commands, tasks
 import os
 from dotenv import load_dotenv
 
-from data.data_handler import DataHandler
+from data import DataHandler
 from handlers.tournament_handler import TournamentHandler
 from handlers.message_handler import MessageHandler
-from handlers.challonge_handler import ChallongeHandler
 from handlers.lobby_handler import LobbyHandler
 from handlers.reaction_handler import ReactionHandler
 
@@ -20,7 +19,6 @@ class ChonkBot(commands.Bot):
         self.dh = DataHandler()
         self.th = TournamentHandler(self)
         self.mh = MessageHandler(self)
-        self.ch = ChallongeHandler()
         self.lh = LobbyHandler(self)
         self.rh = ReactionHandler(self)
         
@@ -32,11 +30,11 @@ class ChonkBot(commands.Bot):
         for command in self.commands:
             print(f"Command loaded: {command.name}")
             
-        self.add_view(RegisterControlView(self))
-        self.add_view(BotControlView(self))
-        
-        self.clean_reaction_flags.start()
-         
+    async def on_ready(self):
+        self.guild = self.guilds[0]
+        await self.th.initialize_active_events()
+        print("Bot initialized")
+
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):
@@ -46,13 +44,7 @@ class ChonkBot(commands.Bot):
                 except Exception as e:
                     print(f"Failed to load cog {filename}: {e}")
                     
-    @tasks.loop(minutes=2)
-    async def clean_reaction_flags(self):
-        await self.dh.clean_reaction_flags()
-        
-    @clean_reaction_flags.before_loop
-    async def before_clean_reaction_flags(self):
-        await self.wait_until_ready()
+
 
 if __name__=="__main__":
     load_dotenv()
