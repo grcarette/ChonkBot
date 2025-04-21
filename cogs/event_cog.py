@@ -9,6 +9,7 @@ from ui.create_tournament import TournamentSettingsView
 from ui.confirmation import ConfirmationView
 
 from tournaments.match_lobby import MatchLobby
+from tournaments.results_poster import post_results
 
 class EventCog(commands.Cog):
     def __init__(self, bot):
@@ -49,11 +50,14 @@ class EventCog(commands.Cog):
         user_id = ctx.message.author.id
         channel = ctx.channel
         category_id = ctx.channel.category.id
+        
+        tournament = await self.bot.dh.get_tournament_by_channel(channel)
+        tm = self.bot.th.tournaments[tournament['_id']]
         embed = discord.Embed(
             title="Are you sure you want to delete this tournament?",
             color=discord.Color.red()
         )
-        view = ConfirmationView(self.bot.th.remove_tournament, user_id, category_id=category_id)
+        view = ConfirmationView(tm.delete_tournament, user_id, category_id=category_id)
         await channel.send(embed=embed, view=view)
         
     @commands.has_role("Moderator")
@@ -62,12 +66,6 @@ class EventCog(commands.Cog):
         category_id = ctx.channel.category.id
         kwargs={'category_id': category_id}
         await self.bot.th.start_tournament(kwargs)
-        
-    @commands.has_role("Moderator")
-    @commands.command(name='disqualify_player', aliases = ['dq'])
-    async def disqualify_player(self, ctx, member: discord.Member):
-        channel = ctx.channel
-        await self.bot.th.disqualify_player(channel, member)
         
     @commands.has_role("Moderator")
     @commands.command(name='test_lobby', aliases = ['tl'])
@@ -103,6 +101,14 @@ class EventCog(commands.Cog):
             channel = discord.utils.get(self.bot.guild.channels, id=lobby['channel_id'])
             await channel.delete()
             await self.bot.dh.remove_lobby(lobby['match_id'])
+            
+    @commands.has_role("Moderator")
+    @commands.command(name='post_challonge_results', aliases = ['pcr'])
+    async def post_challonge_results(self, ctx, challonge_id, challonge_url, *, tournament_name):
+        await post_results(self.bot, challonge_url, challonge_id, tournament_name)
+        
+
+        
             
             
         

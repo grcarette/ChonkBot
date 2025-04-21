@@ -1,0 +1,5 @@
+venv/
+.env
+lvldata.txt
+lvldata - Copy.txt
+tmpdh.py

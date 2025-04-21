@@ -9,10 +9,8 @@ class TournamentMethodsMixin:
         if tournament_exists:
             raise TournamentExistsError(f"Error: Tournament name '{tournament['name']}' already exists.")
         config_data = {
-            'check-in': tournament['check-in'],
             'approved_registration': tournament['approved_registration'],
             'randomized_stagelist': tournament['randomized_stagelist'],
-            'stage_bans': tournament['stage_bans']
         }
         tournament = {
             'name': tournament['name'],
@@ -230,7 +228,7 @@ class TournamentMethodsMixin:
         }
         update = {
             '$set': {
-                'state': 'Finished'
+                'state': 'finished'
             }
         }
         result = await self.tournament_collection.update_one(query, update)

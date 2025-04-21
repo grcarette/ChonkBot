@@ -13,13 +13,15 @@ CHANNEL_PERMISSIONS = {
     'bot-control': 'private',
     'check-in': 'read_only',
     'match-calling': 'private',
-    'active-matches': 'private'
+    'active-matches': 'private',
+    'registration-approval': 'private',
 }
 
 NONDEFAULT_CHANNELS = [
     'check-in',
     'match-calling',
     'active-matches',
+    'registration-approval'
 ]
 
 async def create_channel(guild, tournament_category, hide_channel, channel_name, channel_overwrites):
