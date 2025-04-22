@@ -76,27 +76,6 @@ class TournamentHandler():
         tournament = await self.bot.dh.get_tournament(name=tournament['name'])
 
         tournament_manager = await self.initialize_event(tournament)
-        await self.add_register_control(tournament_manager)
-        await self.add_bot_control(tournament_manager)
-                
-    async def add_register_control(self, tournament_manager):
-        tournament = tournament_manager.tournament
-        channel = await self.get_tournament_channel(tournament_manager, 'register')
-        view = RegisterControlView(tournament_manager)
-        embed = discord.Embed(
-            title=f"Register for {tournament['name']}",
-            color=discord.Color.green()
-        )
-        await channel.send(embed=embed, view=view)
-        
-    async def add_bot_control(self, tournament_manager):
-        channel = await self.get_tournament_channel(tournament_manager, 'bot-control')
-        view= BotControlView(tournament_manager)
-        embed = discord.Embed(
-            title="Tournament Controls",
-            color=discord.Color.green()
-        )
-        await channel.send(embed=embed, view=view)
         
     async def get_tournament_channel(self, tournament_manager, name):
         tournament_category = tournament_manager.get_tournament_category()
