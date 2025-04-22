@@ -18,6 +18,7 @@ CHANNEL_PERMISSIONS = {
 }
 
 NONDEFAULT_CHANNELS = [
+    'register',
     'check-in',
     'match-calling',
     'active-matches',

@@ -97,7 +97,6 @@ class TournamentManager:
             self.bot.add_view(self.bot_control)
         await self.bot_control.update_tournament_state(tournament['state'])
         
-        
     async def progress_tournament(self):
         tournament = await self.get_tournament()
         state = tournament['state']
@@ -106,7 +105,7 @@ class TournamentManager:
             await self.add_bot_control()
         elif state == 'setup':
             next_state = 'registration'
-            await self.toggle_registration(True)
+            await self.open_registration()
         elif state == 'registration':
             next_state = 'checkin'
             await self.start_checkin()
@@ -128,6 +127,17 @@ class TournamentManager:
         embed = await self.bot_control.generate_embed()
         await channel.send(embed=embed, view=self.bot_control)
             
+    async def publish_tournament(self):
+        guild = self.bot.guilds[0]
+        category = self.get_tournament_category()
+        for channel in category.channels:
+            permissions = CHANNEL_PERMISSIONS[channel.name]
+            if permissions != 'private':
+                overwrite = channel.overwrites_for(guild.default_role)
+                overwrite.view_channel = not overwrite.view_channel
+                await channel.set_permissions(guild.default_role, overwrite=overwrite)
+        await self.progress_tournament()
+                
     async def open_registration(self):
         guild = self.bot.guild
         tournament_category = self.get_tournament_category()
@@ -155,7 +165,7 @@ class TournamentManager:
         await self.toggle_registration_visibility()
         
     async def toggle_registration_visibility(self):
-        channel = await self.get_channel('registration')
+        channel = await self.get_channel('register')
         
         overwrite = channel.overwrites_for(self.guild.default_role)
         overwrite.view_channel = not overwrite.view_channel
@@ -172,7 +182,7 @@ class TournamentManager:
             checkin_channel = await create_channel(
                 guild=guild,
                 tournament_category=tournament_category,
-                hide_channel=True,
+                hide_channel=False,
                 channel_name='check-in',
                 channel_overwrites=CHANNEL_PERMISSIONS['check-in'] 
             )
@@ -459,16 +469,6 @@ class TournamentManager:
     def get_short_timestamp(self, timestamp):
         return timestamp.strftime("%I:%M%p").lstrip("0")
     
-    async def toggle_reveal_channels(self):
-        guild = self.bot.guilds[0]
-        category = self.get_tournament_category()
-        for channel in category.channels:
-            permissions = CHANNEL_PERMISSIONS[channel.name]
-            if permissions != 'private':
-                overwrite = channel.overwrites_for(guild.default_role)
-                overwrite.view_channel = not overwrite.view_channel
-                await channel.set_permissions(guild.default_role, overwrite=overwrite)
-                
     async def get_channel(self, name):
         tournament_category = self.get_tournament_category()
         channel = discord.utils.get(tournament_category.channels, name=name)
