@@ -24,6 +24,7 @@ class TournamentSettingsView(discord.ui.View):
         self.tournament_format = None
         self.to_approved_registration = False
         self.randomized_stagelist = False
+        self.display_entrants = False
         
         self.config_button = None
         self.submit_button = None
@@ -86,6 +87,12 @@ class TournamentSettingsView(discord.ui.View):
         self.randomized_stagelist = not self.randomized_stagelist
         button.label = f"Randomized Stagelist {self.toggle_label(self.randomized_stagelist)}"
         await interaction.response.edit_message(view=self)
+        
+    @discord.ui.button(label=f"Display Entrants {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.secondary, row=2)
+    async def toggle_display_entrants(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.display_entrants = not self.display_entrants
+        button.label = f"Display Entrants {self.toggle_label(self.display_entrants)}"
+        await interaction.response.edit_message(view=self)
 
     @discord.ui.button(label=f"Submit", style=discord.ButtonStyle.success, disabled=True, row=3)
     async def submit_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -98,8 +105,11 @@ class TournamentSettingsView(discord.ui.View):
             'format': self.tournament_format,
             'approved_registration': self.to_approved_registration,
             'randomized_stagelist': self.randomized_stagelist,
+            'display_entrants': self.display_entrants,
         }
         await self.bot.th.set_up_tournament(tournament_data)
         self.stop()
+        
+
         
 

@@ -11,6 +11,7 @@ class TournamentMethodsMixin:
         config_data = {
             'approved_registration': tournament['approved_registration'],
             'randomized_stagelist': tournament['randomized_stagelist'],
+            'display_entrants': tournament['display_entrants'],
         }
         tournament = {
             'name': tournament['name'],

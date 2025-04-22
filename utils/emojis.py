@@ -37,6 +37,7 @@ INDICATOR_EMOJIS = {
     'thumbs_down': '👎',
     'rotating_arrows': '🔄',
     'link': '🔗',
+    'notepad': '🗒️',
 }
 
 RESULT_EMOJIS = {
