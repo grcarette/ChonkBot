@@ -18,7 +18,7 @@ class TournamentMethodsMixin:
             'date': tournament['date'],
             'organizer': tournament['organizer'],
             'format': tournament['format'],
-            'state': 'initialized',
+            'state': 'setup',
             'config': config_data,
             'stagelist': [],
             'entrants': {},
@@ -105,7 +105,8 @@ class TournamentMethodsMixin:
     async def get_active_events(self):
         query = {
             '$or': [
-                {'state': 'initialized'},
+                {'state': 'setup'},
+                {'state': 'registration'},
                 {'state': 'checkin'},
                 {'state': 'active'}
             ]

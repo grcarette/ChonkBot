@@ -63,7 +63,7 @@ class TournamentManager:
                 guild=self.bot.guild,
             )
             self.lobbies[lobby['match_id']] = match_lobby
-            if lobby['state'] == 'initialize':
+            if lobby['state'] == 'initialized':
                 pass
             elif lobby['state'] == 'checkin':
                 self.bot.add_view(CheckinView(match_lobby))
@@ -72,17 +72,35 @@ class TournamentManager:
             elif lobby['state'] == 'reporting':
                 self.bot.add_view(MatchReportButton(match_lobby))
                 
+        self.bot_control = BotControlView(self)
+        await self.bot_control.update_tournament_state(tournament['state'])
+        self.bot.add_view(self.bot_control)
+
         self.bot.add_view(RegisterControlView(self))
-        self.bot.add_view(BotControlView(self))
         
-        if self.tournament['state'] == 'checkin':
+        if tournament['state'] == 'setup':
+            pass
+        elif tournament['state'] == 'registration':
+            pass
+        elif tournament['state'] == 'checkin':
             self.bot.add_view(TournamentCheckinView(self))
-        elif self.tournament['state'] == 'finished':
+        elif tournament['state'] == 'active':
+            pass
+        elif tournament['state'] == 'finished':
             self.bot.add_view(EndTournamentView(self))
                 
         elif tournament['state'] == 'active':
             await self.start_tournament_loop()
             
+    async def toggle_registration(self, is_open):
+        channel = await self.get_channel('register')
+        overwrite = channel.overwrites_for(self.guild.default_role)
+        if is_open:
+            overwrite.view_channel = True
+        else:
+            overwrite.view_channel = False
+        await channel.set_permissions(self.guild.default_role, overwrite=overwrite)
+        
     async def register_player(self, user_id):
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
@@ -132,7 +150,6 @@ class TournamentManager:
                 f"You are now registered for {self.tournament['name']}"
             )
         await interaction.response.send_message(message_content, ephemeral=True)
-            
             
     async def start_tournament(self, kwargs):
         tournament = await self.get_tournament()

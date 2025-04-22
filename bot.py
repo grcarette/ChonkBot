@@ -12,6 +12,8 @@ from handlers.reaction_handler import ReactionHandler
 from ui.register_control import RegisterControlView
 from ui.bot_control import BotControlView
 
+BOT_ID = 943999083792711741
+
 class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix, intents=intents)
@@ -23,6 +25,7 @@ class ChonkBot(commands.Bot):
         self.rh = ReactionHandler(self)
         
         self.guild = None
+        self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))
            
     async def setup_hook(self):

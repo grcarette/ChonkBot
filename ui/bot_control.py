@@ -20,13 +20,30 @@ class BotControlView(discord.ui.View):
         super().__init__(timeout=None)
         self.tm = tournament_manager
         self.channels_hidden = True
+        self.message = None
         
         name = self.tm.tournament['name']
-        self.reveal_button = discord.ui.Button(label=f"Reveal Category {INDICATOR_EMOJIS['eye']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-reveal")
-        self.checkin_button = discord.ui.Button(label=f"Start Check-in {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_checkin")
-        self.start_button = discord.ui.Button(label=f"Start Tournament {INDICATOR_EMOJIS['game_controller']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_tournament")
-        self.reset_button = discord.ui.Button(label=f"Reset Tournament {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-reset")
-        self.add_link_button = discord.ui.Button(label=f"Add Link{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-link")
+        self.reveal_button = discord.ui.Button(
+            label=f"Reveal Category {INDICATOR_EMOJIS['eye']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-reveal"
+            )
+        self.checkin_button = discord.ui.Button(
+            label=f"Start Check-in {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_checkin"
+            )
+        self.start_button = discord.ui.Button(
+            label=f"Start Tournament {INDICATOR_EMOJIS['game_controller']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_tournament"
+            )
+        self.reset_button = discord.ui.Button(
+            label=f"Reset Tournament {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-reset"
+            )
+        self.add_link_button = discord.ui.Button(
+            label=f"Add Link{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-link"
+            )
+        self.open_reg_button = discord.ui.Button(
+            label=f"Open Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-open_reg"
+            )
+        self.close_reg_button = discord.ui.Button(
+            label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg", disabled=True
+            )
         
         
         self.reveal_button.callback = self.toggle_reveal_category
@@ -34,12 +51,16 @@ class BotControlView(discord.ui.View):
         self.start_button.callback = self.start_tournament
         self.reset_button.callback = self.reset_tournament
         self.add_link_button.callback = self.input_link
+        self.open_reg_button.callback = self.open_registration
+        self.close_reg_button.callback = self.close_registration
         
         self.add_item(self.reveal_button)
         self.add_item(self.checkin_button)
         self.add_item(self.start_button)
         self.add_item(self.reset_button)
         self.add_item(self.add_link_button)
+        self.add_item(self.open_reg_button)
+        self.add_item(self.close_reg_button)
         
     async def toggle_reveal_category(self, interaction: discord.Interaction):
         button = self.reveal_button
@@ -54,6 +75,18 @@ class BotControlView(discord.ui.View):
         else: 
             button.label=f"Hide Category {INDICATOR_EMOJIS['lock']}"  
         await interaction.response.edit_message(view=self)
+        
+    async def open_registration(self, interaction: discord.Interaction):
+        self.open_reg_button.disabled=True
+        self.close_reg_button.disabled=False
+        await interaction.response.edit_message(view=self)
+        await self.tm.toggle_registration(True)
+    
+    async def close_registration(self, interaction: discord.Interaction):
+        self.close_reg_button.disabled=True
+        self.open_reg_button.disabled=False
+        await interaction.response.edit_message(view=self)
+        await self.tm.toggle_registration(False)
         
     async def start_checkin(self, interaction: discord.Interaction):
         await self.tm.start_checkin()
@@ -93,6 +126,47 @@ class BotControlView(discord.ui.View):
         await channel.send(view=link_view)
         message_content = "Link added successfully"
         await interaction.response.send_message(message_content, ephemeral=True)
+        
+    async def update_tournament_state(self, state):
+        if self.message == None:
+            self.message = await self.get_control_message()
+        self.clear_items()
+        print('yee')
+        if state == 'setup':
+            print('here!')
+            self.add_item(self.add_link_button)
+            # self.add_item(self.add_stage_button)
+            self.add_item(self.reveal_button)
+        elif state == 'registration':
+            self.add_item(self.open_reg_button)
+            self.add_item(self.close_reg_button)
+            self.add_item(self.add_link_button)
+            # self.add_item(self.edit_stagelist_button)
+            self.add_item(self.checkin_button)
+        elif state == 'checkin':
+            # self.add_item(self.close_checkin_button)
+            self.add_item(self.start_button)
+            self.add_item(self.add_link_button)
+        elif state == 'active':
+            self.add_item(self.reset_button)
+            self.add_item(self.add_link_button)
+        elif state == 'finished':
+            self.add_item(self.add_link_button)
+            
+        await self.message.edit(view=self)
+            
+    async def get_control_message(self):
+        channel = await self.tm.get_channel('bot-control')
+        bot_id = self.tm.bot.id
+        
+        async for message in channel.history(limit=None, oldest_first=True):
+            if message.author.id == bot_id:
+                return message
+            
+        return None
+        
+        
+    
         
 
         
