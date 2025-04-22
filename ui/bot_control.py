@@ -21,6 +21,7 @@ class BotControlView(discord.ui.View):
         self.tm = tournament_manager
         self.channels_hidden = True
         self.message = None
+        self.stage = 'setup'
         
         name = self.tm.tournament['name']
         self.reveal_button = discord.ui.Button(
@@ -131,9 +132,8 @@ class BotControlView(discord.ui.View):
         if self.message == None:
             self.message = await self.get_control_message()
         self.clear_items()
-        print('yee')
+        self.stage = state
         if state == 'setup':
-            print('here!')
             self.add_item(self.add_link_button)
             # self.add_item(self.add_stage_button)
             self.add_item(self.reveal_button)
@@ -153,7 +153,8 @@ class BotControlView(discord.ui.View):
         elif state == 'finished':
             self.add_item(self.add_link_button)
             
-        await self.message.edit(view=self)
+        embed = await self.generate_embed()
+        await self.message.edit(view=self, embed=embed)
             
     async def get_control_message(self):
         channel = await self.tm.get_channel('bot-control')
@@ -164,6 +165,14 @@ class BotControlView(discord.ui.View):
                 return message
             
         return None
+    
+    async def generate_embed(self):
+        embed = discord.Embed(
+            title="Tournament Controls",
+            description=f"Stage: {self.stage}",
+            color=discord.Color.green()
+        )
+        return embed
         
         
     
