@@ -111,7 +111,7 @@ class TournamentManager:
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
         await self.ch.unregister_player(challonge_id, player_id)
         
-    async def create_registration_approval(self, user_id):
+    async def create_registration_approval(self, user_id, interaction):
         if self.tournament['config']['approved_registration'] == True:
             user = discord.utils.get(self.bot.guild.members, id=user_id)
             approval_channel = await self.get_channel('registration-approval')
@@ -121,8 +121,18 @@ class TournamentManager:
             )
             view = RegistrationApprovalView(self, user_id)
             await approval_channel.send(embed=embed, view=view)
+            
+            message_content = (
+                f"Your registration for {self.tournament['name']} is awaiting TO approval"
+            )
         else:
             await self.register_player(user_id)
+            
+            message_content = (
+                f"You are now registered for {self.tournament['name']}"
+            )
+        await interaction.response.send_message(message_content, ephemeral=True)
+            
             
     async def start_tournament(self, kwargs):
         tournament = await self.get_tournament()

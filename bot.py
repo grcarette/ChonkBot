@@ -44,8 +44,6 @@ class ChonkBot(commands.Bot):
                 except Exception as e:
                     print(f"Failed to load cog {filename}: {e}")
                     
-
-
 if __name__=="__main__":
     load_dotenv()
     intents = discord.Intents.default()
