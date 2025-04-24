@@ -16,6 +16,8 @@ class TournamentConfigHandler:
             await self.set_name(kwargs.pop('name'))
         if 'assistant' in kwargs:
             await self.add_assistant(kwargs.pop('assistant'))
+        if 'date' in kwargs:
+            await self.set_date(kwargs.pop('date'))
         
     async def set_name(self, name):
         tournament_role, tournament_to_role = await self.get_tournament_roles()
@@ -45,10 +47,9 @@ class TournamentConfigHandler:
         await self.dh.add_assistant(self.tournament['_id'], user.id)
         await self.refresh_displays()
     
-    async def set_time(self, time):
-        await self.dh.edit_tournament_config(self.tournament['_id'], date=time)
-        #refresh info display
-        pass
+    async def set_date(self, date):
+        await self.dh.edit_tournament_config(self.tournament['_id'], date=date)
+        await self.refresh_displays()
     
     async def set_format(self, format):
         #set format in db

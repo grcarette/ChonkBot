@@ -1,7 +1,9 @@
 import discord
 
 from utils.emojis import INDICATOR_EMOJIS
-from .config_components import TournamentNameModal, TournamentTimeModal, TournamentFormatSelect, TournamentColorModal
+from .config_components import TournamentNameModal, TournamentTimeModal, TournamentFormatSelect
+from .color_view import ColorPickerView
+from .time_view import TimePickerView
 
 class TournamentConfigView(discord.ui.View):
     def __init__(self, config_control):
@@ -35,8 +37,8 @@ class TournamentConfigView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
     async def input_tournament_time(self, interaction: discord.Interaction):
-        modal = TournamentTimeModal(self.set_tournament_time)
-        await interaction.response.send_modal(modal)
+        view = TimePickerView(self.cc)
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def set_tournament_name(self, interaction, name):
         await self.tc.edit_tournament_config(name=name)
@@ -46,11 +48,8 @@ class TournamentConfigView(discord.ui.View):
         await self.tc.edit_tournament_config(timestamp=timestamp)
         
     async def input_tournament_color(self, interaction: discord.Interaction):
-        modal = TournamentColorModal(self.set_tournament_color)
-        await interaction.response.send_modal(modal)
-        
-    async def set_tournament_color(self, color):
-        await self.tc.edit_tournament_config(color=color)
+        view = ColorPickerView(self.cc)
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def set_tournament_format(self, format):
         await self.tc.edit_tournament_config(format=format)
