@@ -1,4 +1,5 @@
 import discord
+import os
 from utils.emojis import INDICATOR_EMOJIS
 from utils.messages import get_mentions
 
@@ -88,14 +89,17 @@ class BanStagesButton(discord.ui.View):
         for stage in banned_stages:
             self.banned_stages.add(stage)
         self.finished_users.append(user.id)
-        embed = self.generate_embed()
-        await self.message.edit(embed=embed, view=self)
+        embed, file = await self.generate_embed()
+        await self.message.edit(embed=embed, view=self, attachments=[file])
         if set(self.finished_users) == set(self.lobby.remaining_players):
             self.stop()
             await self.message.delete()
             await self.lobby.end_stage_bans(self.banned_stages)
     
-    def generate_embed(self):
+    async def generate_embed(self):
+        tournament = await self.lobby.tournament_manager.get_tournament()
+        file_name = f"{tournament['name']}_banner.jpg"
+        image_path = await self.get_banner_path(tournament, file_name)
         remaining_ids = [pid for pid in self.lobby.remaining_players if pid not in self.finished_users]
         mentions = get_mentions(remaining_ids)
 
@@ -114,7 +118,10 @@ class BanStagesButton(discord.ui.View):
             description=checkin_message,
             color=discord.Color.blue()
         )
-        return embed
+        with open(image_path, 'rb') as image_file:
+            self.file = discord.File(image_file, filename=file_name)
+            embed.set_image(url=f"attachment://{file_name}")
+        return embed, self.file
     
     def calculate_num_stage_bans(self):
         num_stages = len(self.lobby.stages)
@@ -122,6 +129,12 @@ class BanStagesButton(discord.ui.View):
         num_stage_bans = (num_stages - (num_stages % num_players)) / num_players
         
         return num_stage_bans
+    
+    async def get_banner_path(self, tournament, file_name):
+        banner_base_path = "assets/banners"
+        path = os.path.join(banner_base_path, file_name)
+        return path
+        
             
         
         

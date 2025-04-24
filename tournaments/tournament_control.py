@@ -4,8 +4,11 @@ from ui.bot_control import BotControlView
 from ui.config_control.config_control import ConfigControlView
 from ui.confirmation import ConfirmationView
 
+from handlers.ban_graphic_generator import StageBannerGenerator
+
 from .tournament_info_display import TournamentInfoDisplay
 from .tournament_config_handler import TournamentConfigHandler
+
 
 class TournamentControl:
     def __init__(self, tournament_manager):
@@ -78,4 +81,14 @@ class TournamentControl:
         channel = await self.tm.get_channel('stagelist')
         await channel.purge(limit=None)
         await self.tid.post_stages()
+        
+    async def generate_banner(self):
+        tournament = await self.tm.get_tournament()
+        sbg = StageBannerGenerator()
+        stage_list_data = []
+        for map_code in tournament['stagelist']:
+            stage = await self.dh.get_stage(code=map_code)
+            stage_list_data.append(stage)
+        filepath = sbg.generate_banner(stage_list_data, tournament)
+        return filepath
         

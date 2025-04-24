@@ -28,7 +28,7 @@ class EndTournamentView(discord.ui.View):
             title="Are you sure you want to end the tournament?",
             color=discord.Color.red()
         )
-        view = ConfirmationView(self.tm.progress_tournament(), user_id)
+        view = ConfirmationView(self.tm.progress_tournament, user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
 

@@ -121,9 +121,9 @@ class MatchLobby:
         if num_stage_bans == 0:
             await self.end_stage_bans(banned_stages=[])
         else:    
-            embed = view.generate_embed()
+            embed, file = await view.generate_embed()
             mentions = get_mentions(self.remaining_players)
-            await self.channel.send(' '.join(mentions), embed=embed, view=view)
+            await self.channel.send(' '.join(mentions), embed=embed, file=file, view=view)
             
     async def end_stage_bans(self, banned_stages):
         remaining_stages = [stage for stage in self.stages if stage not in banned_stages]
@@ -205,5 +205,8 @@ class MatchLobby:
     async def get_lobby(self):
         lobby = await self.dh.get_lobby(self.match_id)
         return lobby
+    
+
+        
     
     

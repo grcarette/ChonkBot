@@ -209,6 +209,7 @@ class TournamentManager:
         await checkin_channel.send(content=message_content, embed=embed, view=view)
         
     async def start_tournament(self):
+        self.banner_filepath = await self.tc.generate_banner()
         tournament = await self.get_tournament()
         removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
         for player_id in removed_players:
@@ -281,7 +282,7 @@ class TournamentManager:
             approval_channel = await self.get_channel('registration-approval')
             embed = discord.Embed(
                 title=user.name,
-                color=random.choice(PRESET_COLORS)
+                color=get_random_color()
             )
             view = RegistrationApprovalView(self, user_id)
             await approval_channel.send(embed=embed, view=view)

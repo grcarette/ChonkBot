@@ -99,8 +99,6 @@ class BotControlView(discord.ui.View):
         view = ConfirmationView(self.tm.reset_tournament, user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
-
-        
     async def update_tournament_state(self, state):
         if self.message == None:
             self.message = await self.get_control_message()
@@ -113,10 +111,8 @@ class BotControlView(discord.ui.View):
             self.checkin_button.disabled=False
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
-            # self.add_item(self.edit_stagelist_button)
             self.add_item(self.checkin_button)
         elif state == 'checkin':
-            # self.add_item(self.close_checkin_button)
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.start_button)
