@@ -1,6 +1,6 @@
 import discord
 from utils.emojis import INDICATOR_EMOJIS
-from .config_components import AddStageModal
+from .config_components import AddStageModal, RandomStageModal
 
 import functools
 
@@ -34,11 +34,11 @@ class EditStagelistView(discord.ui.View):
             delete_button.callback = functools.partial(delete_callback, map_code=map_code, pressed_button=delete_button)
             self.add_item(delete_button)
                 
-        add_stage_button = discord.ui.Button(label=f"Add Link {INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.success)
+        add_stage_button = discord.ui.Button(label=f"Add Stage {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.success)
         add_random_stages_button = discord.ui.Button(label=f"Add Random Stages {INDICATOR_EMOJIS['dice']}", style=discord.ButtonStyle.danger)
         
         add_stage_button.callback = self.input_stages
-        add_random_stages_button.callback = self.add_random_stages
+        add_random_stages_button.callback = self.input_stage_count
         
         self.add_item(add_stage_button)
         self.add_item(add_random_stages_button)
@@ -58,4 +58,11 @@ class EditStagelistView(discord.ui.View):
         else:
             await interaction.response.defer()
             await self.tc.add_stages(stages)
+            
+    async def input_stage_count(self, interaction: discord.Interaction):
+        modal = RandomStageModal(self.add_random_stages)
+        await interaction.response.send_modal(modal)
         
+    async def add_random_stages(self, interaction: discord.Interaction, stage_count):
+        await interaction.response.defer()
+        await self.tc.add_random_stages(int(stage_count))

@@ -110,7 +110,7 @@ class BotControlView(discord.ui.View):
             self.publish_button.disabled=False
             self.add_item(self.publish_button)
         elif state == 'registration':
-            self.checkin_button.disabled=True
+            self.checkin_button.disabled=False
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             # self.add_item(self.edit_stagelist_button)

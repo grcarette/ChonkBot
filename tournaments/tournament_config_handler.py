@@ -61,7 +61,6 @@ class TournamentConfigHandler:
     async def refresh_displays(self):
         await self.tc.refresh_displays()
 
-
     async def add_stages(self, stages):
         await self.dh.add_stages_to_tournament(self.tournament['_id'], stages)
         await self.tc.refresh_stagelist()
@@ -75,6 +74,12 @@ class TournamentConfigHandler:
                 return stage_code, False
             valid_stages.append(valid_code)
         return valid_stages, True
+    
+    async def add_random_stages(self, stage_count):
+        tournament = await self.tc.tm.get_tournament()
+        stages = await self.dh.get_random_stages(stage_count - len(tournament['stagelist']))
+        stage_codes = [stage['code'] for stage in stages]
+        await self.add_stages(stage_codes)
         
     async def get_tournament_roles(self):
         tournament = await self.tc.tm.get_tournament()

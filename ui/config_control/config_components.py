@@ -32,6 +32,16 @@ class TournamentColorModal(discord.ui.Modal, title="Set Tournament Color"):
         await interaction.response.defer()
         await self.callback(self.tournament_color.value)
         
+class RandomStageModal(discord.ui.Modal, title="Add Random Stages"):
+    stage_count = discord.ui.TextInput(label="Stage Count", placeholder="How many stages would you like in your stagelist?")
+    
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.callback(interaction, self.stage_count.value)
+        
 class AddStageModal(discord.ui.Modal, title="Add Stage(s)"):
     stage_list = discord.ui.TextInput(label="Stages", placeholder="Enter stage codes separated by ','")
     
