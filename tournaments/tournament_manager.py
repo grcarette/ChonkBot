@@ -96,11 +96,7 @@ class TournamentManager:
             self.bot_control = BotControlView(self)
             self.bot.add_view(self.bot_control)
         await self.bot_control.update_tournament_state(tournament['state'])
-        
-    async def set_tournament_state(self, kwargs=None):
-        next_state = kwargs.get('state')
-        tournament = await self.get_tournament
-        
+      
     async def progress_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         state = tournament['state']
@@ -211,8 +207,10 @@ class TournamentManager:
             await self.unregister_player(tournament['_id'], int(player_id))
         checkin_channel = await self.get_channel('check-in')
         register_channel = await self.get_channel('register')
-        await checkin_channel.delete()
-        await register_channel.delete()
+        if checkin_channel:
+            await checkin_channel.delete()
+        if register_channel:
+            await register_channel.delete()
             
         await self.ch.start_tournament(tournament['challonge_data']['id'])
         
@@ -459,8 +457,8 @@ class TournamentManager:
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
         await self.ch.reset_tournament(tournament['challonge_data']['id'])
-        await self.dh.update_tournament_state(self.tournament['_id'],'checkin')
-        await self.progress_tournament(state='checkin')
+        await self.bot.dh.update_tournament_state(self.tournament['_id'],'checkin')
+        await self.progress_tournament()
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
@@ -545,9 +543,12 @@ class TournamentManager:
         tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
         tournament_to_role = discord.utils.get(guild.roles, name=f"{tournament['name']} TO")
         
-        await tournament_role.delete()
-        await tournament_to_role.delete()
-        await tournament_category.delete()
+        if tournament_role:
+            await tournament_role.delete()
+        if tournament_to_role:
+            await tournament_to_role.delete()
+        if tournament_category:
+            await tournament_category.delete()
         
         
 
