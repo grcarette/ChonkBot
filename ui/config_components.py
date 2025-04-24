@@ -50,3 +50,23 @@ class AddLinkModal(discord.ui.Modal, title="Add Link"):
         
     async def on_submit(self, interaction: discord.Interaction):
         await self.callback(interaction, self.link_name.value, self.link_url.value)
+        
+class TournamentFormatSelect(discord.ui.Select):
+    def __init__(self, config_view):
+        self.cv = config_view
+        super().__init__(
+            placeholder="Format",
+            options=[
+                discord.SelectOption(label="single elimination", value="single elimination"),
+                discord.SelectOption(label="double elimination", value="double elimination"),
+                discord.SelectOption(label="swiss", value="swiss"),
+                discord.SelectOption(label="FFA Filter", value="FFA Filter"),
+            ],
+            row=1
+        )
+        
+    async def callback(self, interaction: discord.Interaction):
+        selected_format = self.values[0]
+        await self.cv.set_tournament_format(selected_format)
+        await interaction.response.defer()
+        

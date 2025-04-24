@@ -45,6 +45,6 @@ class TournamentControl:
     async def get_required_actions(self):
         pass
     
-    async def edit_tournament_config(self, kwargs):
+    async def edit_tournament_config(self, **kwargs):
         pass
         
