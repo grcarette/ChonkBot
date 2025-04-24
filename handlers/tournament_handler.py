@@ -118,7 +118,8 @@ class TournamentHandler():
     async def add_stages_tournament(self, tournament):       
         if tournament['config']['randomized_stagelist'] == True:
             stages = await self.bot.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
-            await self.bot.dh.add_stages_to_tournament(tournament['name'], stages)
+            stage_codes = [stage['code'] for stage in stages]
+            await self.bot.dh.add_stages_to_tournament(tournament['_id'], stage_codes)
 
     async def remove_tournament(self, kwargs):
         category_id = kwargs.get('category_id')

@@ -5,6 +5,7 @@ from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
 from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
 from utils.discord_preset_colors import PRESET_COLORS
 from utils.get_bracket_link import get_bracket_link
+from utils.validate_stagecode import validate_stagecode
 
 from ui.match_call import MatchCallView
 from ui.checkin import CheckinView
@@ -127,6 +128,18 @@ class TournamentManager:
         self.bot_control = BotControlView(self)
         embed = await self.bot_control.generate_embed()
         await channel.send(embed=embed, view=self.bot_control)
+        
+    async def add_stages(self, stages):
+        valid_stages = []
+        stages = stages.split(',')
+        for stage_code in stages:
+            valid_code = validate_stagecode(stage_code)
+            if not valid_code:
+                return stage_code
+            valid_stages.append(valid_code)
+
+        await self.bot.dh.add_stages_to_tournament(self.tournament['_id'], valid_stages)
+        return True
             
     async def publish_tournament(self):
         guild = self.bot.guilds[0]

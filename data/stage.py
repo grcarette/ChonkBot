@@ -6,12 +6,9 @@ class StageMethodsMixin:
     pass
 
     async def get_stage(self, **kwargs):
-        map = await self.party_map_collection.find_one(kwargs)
-        if map:
-            return map
-        else:
-            key, value = next(iter(kwargs.items()))
-            raise TournamentNotFoundError(key, value, 'get_stage')
+        stage = await self.party_map_collection.find_one(kwargs)
+        return stage
+
     
     async def get_random_stages(self, number, user=False, type='party'):
         if user:

@@ -62,10 +62,9 @@ class TournamentMethodsMixin:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
-    async def add_stages_to_tournament(self, tournament_name, stages):
-        stage_codes = [stage['code'] for stage in stages]
+    async def add_stages_to_tournament(self, tournament_id, stage_codes):
         query = {
-            'name': tournament_name,
+            '_id': ObjectId(tournament_id),
         }
         update = {
             '$push': {
@@ -224,14 +223,5 @@ class TournamentMethodsMixin:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
-    async def end_tournament(self, tournament_id):
-        query = {
-            '_id': ObjectId(tournament_id)
-        }
-        update = {
-            '$set': {
-                'state': 'finished'
-            }
-        }
-        result = await self.tournament_collection.update_one(query, update)
+
         
