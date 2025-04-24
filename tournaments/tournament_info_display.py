@@ -1,5 +1,6 @@
 import discord
 from utils.discord_preset_colors import get_random_color
+from utils.color_utils import discord_color_from_hex
 
 from ui.config_control.info_display import InfoDisplayView
 from ui.link_view import LinkView
@@ -35,7 +36,7 @@ class TournamentInfoDisplay:
     async def generate_embed(self):
         tournament = await self.tm.get_tournament()
         if 'color' in tournament['config']:
-            color = discord.Color.from_str(tournament['color'])
+            color = discord_color_from_hex(tournament['config']['color'])
         else:
             color = get_random_color()
         description = (

@@ -14,3 +14,6 @@ def brighten_hex_color(hex_color: str):
     b = min(int(b * BRIGHTEN_FACTOR), 255)
 
     return discord.Colour.from_rgb(r, g, b)
+
+def discord_color_from_hex(hex_color: str) -> discord.Color:
+    return discord.Color(int(hex_color.lstrip('#'), HEX_BASE))

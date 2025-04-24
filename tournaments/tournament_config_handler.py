@@ -1,6 +1,6 @@
 import discord
 
-from utils.brighten_color import brighten_hex_color
+from utils.color_utils import brighten_hex_color, discord_color_from_hex
 
 class TournamentConfigHandler:
     def __init__(self, tournament_control):
@@ -17,8 +17,7 @@ class TournamentConfigHandler:
         pass
     
     async def set_color(self, color):
-        hex_base = 16
-        base_color = discord.Color(int(color.lstrip('#'), hex_base))
+        base_color = discord_color_from_hex(color)
         brighter_color = brighten_hex_color(color)
         
         tournament = await self.tc.tm.get_tournament()
