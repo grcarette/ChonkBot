@@ -2,8 +2,8 @@ import discord
 
 from utils.emojis import INDICATOR_EMOJIS
 from .config_components import AddStageModal, AddTOSelectMenu, AddLinkModal, TournamentNameModal, TournamentTimeModal
-from .link_view import LinkView
 from .configure_tournament import TournamentConfigView
+from ..link_view import LinkView
 
 class ConfigControlView(discord.ui.View):
     def __init__(self, tournament_control, timeout=None):
@@ -58,9 +58,7 @@ class ConfigControlView(discord.ui.View):
         await interaction.response.send_modal(modal)
         
     async def add_link(self, interaction: discord.Interaction, link_label, link_url):
-        channel = await self.tm.get_channel('event-info')
-        link_view = LinkView(link_label, link_url)
-        await channel.send(view=link_view)
+        await self.tc.add_link_to_display(link_label, link_url)
         message_content = "Link added successfully"
         await interaction.response.send_message(message_content, ephemeral=True)
         

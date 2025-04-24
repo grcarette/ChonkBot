@@ -1,8 +1,10 @@
 import discord
 
 from ui.bot_control import BotControlView
-from ui.config_control import ConfigControlView
+from ui.config_control.config_control import ConfigControlView
 from ui.confirmation import ConfirmationView
+
+from .tournament_info_display import TournamentInfoDisplay
 
 class TournamentControl:
     def __init__(self, tournament_manager):
@@ -11,6 +13,9 @@ class TournamentControl:
         self.tournament = self.tm.tournament
         
     async def initialize_controls(self):
+        self.tid = TournamentInfoDisplay(self)
+        await self.tid.initialize_display()
+        
         tournament = await self.tm.get_tournament()
         state = await self.tm.get_state()
         if state == 'initialize':
@@ -46,7 +51,13 @@ class TournamentControl:
         pass
     
     async def edit_tournament_config(self, **kwargs):
-        await self.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+        await self.tm.edit_tournament_config(**kwargs)
         await self.cc.update_control()
+        #if name changes:
+        #-update tournament category
+        #-update tournament manager tournament
+        
+    async def add_link_to_display(self, link_label, link_url):
+        await self.tid.add_link(link_label, link_url)
     
         

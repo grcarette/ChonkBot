@@ -1,4 +1,5 @@
 import discord
+import random
 
 PRESET_COLORS = [
     discord.Color.blue(),
@@ -14,3 +15,6 @@ PRESET_COLORS = [
     discord.Color.dark_purple(),
     discord.Color.dark_blue(),
 ]
+
+def get_random_color():
+    return random.choice(PRESET_COLORS)

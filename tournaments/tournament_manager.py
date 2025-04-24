@@ -21,6 +21,8 @@ from ui.registration_approval import RegistrationApprovalView
 from .match_lobby import MatchLobby
 from .tournament_control import TournamentControl
 from .bracket_handler import BracketHandler
+from .tournament_config_handler import TournamentConfigHandler
+from.tournament_info_display import TournamentInfoDisplay
 
 import discord
 import random
@@ -40,6 +42,8 @@ class TournamentManager:
     async def initialize_event(self):
         self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
+        
+        self.tch = TournamentConfigHandler(self)
         tournament = await self.get_tournament()
         if 'challonge_data' in tournament:
             self.ch = ChallongeHandler(tournament['challonge_data']['url'])
@@ -566,6 +570,18 @@ class TournamentManager:
     
     async def add_view(self, view):
         self.bot.add_view(view)
+        
+    async def edit_tournament_config(self, **kwargs):
+        for key, value in kwargs.items():
+            if key == 'name':
+                pass
+            elif key == 'date':
+                pass
+            elif key == 'stagelist':
+                pass
+                
+            await self.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+        
         
         
 
