@@ -46,10 +46,11 @@ class AddTOSelectMenu(discord.ui.UserSelect):
     def __init__(self, config_control):
         super().__init__()
         self.cc = config_control
+        self.tc = self.cc.tc
         
     async def callback(self, interaction: discord.Interaction):
         selected_user = self.values[0]
-        await self.cc.tm.add_assistant(selected_user)
+        await self.tc.edit_tournament_config(assistant=selected_user)
         await interaction.response.send_message(f"You selected user {selected_user.mention}", ephemeral=True)
         
 class AddLinkModal(discord.ui.Modal, title="Add Link"):

@@ -14,6 +14,8 @@ class TournamentConfigHandler:
             await self.set_color(kwargs.pop('color'))
         if 'name' in kwargs: 
             await self.set_name(kwargs.pop('name'))
+        if 'assistant' in kwargs:
+            await self.add_assistant(kwargs.pop('assistant'))
         
     async def set_name(self, name):
         tournament_role, tournament_to_role = await self.get_tournament_roles()
@@ -35,6 +37,12 @@ class TournamentConfigHandler:
             await tournament_to_role.edit(color=brighter_color)
         
         await self.dh.set_tournament_color(self.tournament['_id'], color)
+        await self.refresh_displays()
+        
+    async def add_assistant(self, user):
+        tournament_role, tournament_to_role = await self.get_tournament_roles()
+        await user.add_roles(tournament_to_role)
+        await self.dh.add_assistant(self.tournament['_id'], user.id)
         await self.refresh_displays()
     
     async def set_time(self, time):

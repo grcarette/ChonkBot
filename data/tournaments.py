@@ -16,7 +16,7 @@ class TournamentMethodsMixin:
         tournament = {
             'name': tournament['name'],
             'date': tournament['date'],
-            'organizer': tournament['organizer'],
+            'organizer': [tournament['organizer']],
             'format': tournament['format'],
             'state': 'initialize',
             'config': config_data,
@@ -243,5 +243,13 @@ class TournamentMethodsMixin:
         }
         result = await self.tournament_collection.update_one(query, update)
     
-
-        
+    async def add_assistant(self, tournament_id, user_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$push': {
+                'organizers': user_id
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)

@@ -39,10 +39,16 @@ class TournamentInfoDisplay:
             color = discord_color_from_hex(tournament['config']['color'])
         else:
             color = get_random_color()
+        
+        organizer_list = []
+        for user_id in tournament['organizers']:
+            user = discord.utils.get(self.tm.guild.members, id=user_id)
+            organizer_list.append(user.mention)
+        organizer_list = "\n-".join(organizer_list)
         description = (
             f"**Date: **{tournament['date']}\n"
             f"**Format: **{tournament['format']}\n"
-            f"**Organized By: **{tournament['organizer']}\n"
+            f"**TO's:**\n-{organizer_list}\n"
         )
         embed = discord.Embed(
             title=f"{tournament['name']}",

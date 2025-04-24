@@ -45,6 +45,10 @@ class TournamentHandler():
         organizer_role = await guild.create_role(name=f"{tournament['name']} TO")
         tournament_role = await guild.create_role(name=f"{tournament['name']}")
         
+        for user_id in tournament['organizers']:
+            tournament_organizer = discord.utils.get(guild.members, id=user_id)
+            tournament_organizer.add_roles(organizer_role)
+        
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False)
         }

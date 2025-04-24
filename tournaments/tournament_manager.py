@@ -135,10 +135,6 @@ class TournamentManager:
 
         await self.bot.dh.add_stages_to_tournament(self.tournament['_id'], valid_stages)
         return True
-    
-    async def add_assistant(self, user):
-        tournament_to_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
-        await user.add_roles(tournament_to_role)
             
     async def publish_tournament(self):
         guild = self.bot.guilds[0]
