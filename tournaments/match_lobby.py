@@ -197,7 +197,8 @@ class MatchLobby:
         await self.start_reporting()
         
     async def delete_lobby(self):
-        await self.channel.delete()
+        if self.channel != None:
+            await self.channel.delete()
         await self.dh.delete_lobby(self.match_id)
         
     async def get_lobby(self):

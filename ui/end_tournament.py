@@ -15,7 +15,7 @@ class EndTournamentView(discord.ui.View):
 
     async def end_tournament(self, interaction: discord.Interaction):
         name = self.tm.tournament['name']
-        await self.tm.end_tournament()
+        await self.tm.progress_tournament()
         self.finalize_tournament_button = discord.ui.Button(label='Finalize Tournament', style=discord.ButtonStyle.success, custom_id=f"{name}-finalize_tournament")
         self.finalize_tournament_button.callback = self.finalize_tournament
         self.add_item(self.finalize_tournament_button)
@@ -28,7 +28,7 @@ class EndTournamentView(discord.ui.View):
             title="Are you sure you want to end the tournament?",
             color=discord.Color.red()
         )
-        view = ConfirmationView(self.tm.finalize_tournament, user_id)
+        view = ConfirmationView(self.tm.progress_tournament(), user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
 

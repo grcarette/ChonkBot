@@ -20,8 +20,6 @@ from tournaments.tournament_manager import TournamentManager
 from .bracket_handler import BracketHandler
 from tournaments.challonge_handler import ChallongeHandler
 
-
-
 class TournamentHandler():
     def __init__(self, bot):
         self.bot = bot

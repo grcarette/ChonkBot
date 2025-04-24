@@ -97,7 +97,11 @@ class TournamentManager:
             self.bot.add_view(self.bot_control)
         await self.bot_control.update_tournament_state(tournament['state'])
         
-    async def progress_tournament(self):
+    async def set_tournament_state(self, kwargs=None):
+        next_state = kwargs.get('state')
+        tournament = await self.get_tournament
+        
+    async def progress_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         state = tournament['state']
         if state == 'initialize':
@@ -105,6 +109,7 @@ class TournamentManager:
             await self.add_bot_control()
         elif state == 'setup':
             next_state = 'registration'
+            await self.publish_tournament()
             await self.open_registration()
         elif state == 'registration':
             next_state = 'checkin'
@@ -136,7 +141,6 @@ class TournamentManager:
                 overwrite = channel.overwrites_for(guild.default_role)
                 overwrite.view_channel = not overwrite.view_channel
                 await channel.set_permissions(guild.default_role, overwrite=overwrite)
-        await self.progress_tournament()
                 
     async def open_registration(self):
         guild = self.bot.guild
@@ -200,7 +204,7 @@ class TournamentManager:
 
         await checkin_channel.send(content=message_content, embed=embed, view=view)
         
-    async def start_tournament(self, kwargs):
+    async def start_tournament(self):
         tournament = await self.get_tournament()
         removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
         for player_id in removed_players:
@@ -229,7 +233,6 @@ class TournamentManager:
         await self.refresh_match_calls()
         
     async def end_tournament(self):
-        await self.bot.dh.end_tournament(self.tournament['_id'])
         await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
@@ -456,6 +459,8 @@ class TournamentManager:
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
         await self.ch.reset_tournament(tournament['challonge_data']['id'])
+        await self.dh.update_tournament_state(self.tournament['_id'],'checkin')
+        await self.progress_tournament(state='checkin')
         
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])

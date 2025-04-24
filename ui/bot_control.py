@@ -59,8 +59,13 @@ class BotControlView(discord.ui.View):
         if interaction.user.id != tournament['organizer']:
             await interaction.response.send_message("Only the TO is authorized to do this.", ephemeral=True)
         else:
-            await interaction.response.defer()
-            await self.tm.publish_tournament()
+            user_id = interaction.user.id
+            embed = discord.Embed(
+                title="Are you sure you want to publish the tournament?",
+                color=discord.Color.yellow()
+            )
+            view = ConfirmationView(self.tm.progress_tournament, user_id, state='registration')
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
             
     async def open_registration(self, interaction: discord.Interaction):
         self.open_reg_button.disabled=True
@@ -75,11 +80,13 @@ class BotControlView(discord.ui.View):
         await self.tm.close_registration()
         
     async def start_checkin(self, interaction: discord.Interaction):
-        await self.tm.start_checkin()
-        message_content = (
-            'Starting checkin...'
+        user_id = interaction.user.id
+        embed = discord.Embed(
+            title="Are you sure you want to start checkin?",
+            color=discord.Color.yellow()
         )
-        await interaction.response.send_message(content=message_content, ephemeral=True)
+        view = ConfirmationView(self.tm.progress_tournament, user_id, state='checkin')
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
     async def start_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
@@ -89,7 +96,7 @@ class BotControlView(discord.ui.View):
             title="Are you sure you want to start the tournament?",
             color=discord.Color.yellow()
         )
-        view = ConfirmationView(self.tm.start_tournament, user_id)
+        view = ConfirmationView(self.tm.progress_tournament, user_id, state='active')
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
     async def reset_tournament(self, interaction: discord.Interaction):
