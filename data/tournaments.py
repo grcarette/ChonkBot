@@ -16,7 +16,7 @@ class TournamentMethodsMixin:
         tournament = {
             'name': tournament['name'],
             'date': tournament['date'],
-            'organizer': [tournament['organizer']],
+            'organizers': [tournament['organizer']],
             'format': tournament['format'],
             'state': 'initialize',
             'config': config_data,

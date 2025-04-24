@@ -18,6 +18,8 @@ class TournamentConfigHandler:
             await self.add_assistant(kwargs.pop('assistant'))
         if 'date' in kwargs:
             await self.set_date(kwargs.pop('date'))
+        if 'format' in kwargs:
+            await self.set_format(kwargs.pop('format'))
         
     async def set_name(self, name):
         tournament_role, tournament_to_role = await self.get_tournament_roles()
@@ -52,9 +54,8 @@ class TournamentConfigHandler:
         await self.refresh_displays()
     
     async def set_format(self, format):
-        #set format in db
-        #refresh info display
-        pass
+        await self.dh.edit_tournament_config(self.tournament['_id'], format=format)
+        await self.refresh_displays()
     
     async def refresh_displays(self):
         await self.tc.refresh_displays()

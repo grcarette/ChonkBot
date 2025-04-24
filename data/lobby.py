@@ -4,7 +4,7 @@ from bson import ObjectId, SON
 class LobbyMethodsMixin:
     pass
 
-    async def create_lobby(self, tournament, match_id, lobby_name, prereq_matches, players, stages, num_winners, pool=None): #lobby
+    async def create_lobby(self, tournament, match_id, lobby_name, prereq_matches, players, stages, num_winners, pool=None):
         query = {
             'tournament': tournament['name']
         }
@@ -36,14 +36,14 @@ class LobbyMethodsMixin:
         result = await self.lobby_collection.delete_one(query)
         return result
     
-    async def get_dependent_matches(self, match_id): #lobby
+    async def get_dependent_matches(self, match_id):
         query = {
             'prereq_match_ids': int(match_id)
         }
         lobbies = await self.lobby_collection.find(query).to_list(length=None)
         return lobbies
     
-    async def get_prereq_matches(self, initial_matches): #lobby
+    async def get_prereq_matches(self, initial_matches):
         prereq_matches = set(initial_matches)
         to_process = initial_matches
         
@@ -72,7 +72,7 @@ class LobbyMethodsMixin:
         lobby = await self.get_lobby(match_id)
         return lobby
     
-    async def reset_lobby(self, match_id, state=None): #lobby
+    async def reset_lobby(self, match_id, state=None):
         query = { 
             'match_id': match_id
         }
@@ -141,14 +141,14 @@ class LobbyMethodsMixin:
         result = await self.lobby_collection.update_one(query, update)
         return result
     
-    async def find_match(self, match_id): #lobby
+    async def find_match(self, match_id):
         query = {
             'match_id': match_id
         }
         match_exists = await self.lobby_collection.find_one(query)
         return match_exists
     
-    async def ban_stage(self, channel_id, banned_stage): #lobby
+    async def ban_stage(self, channel_id, banned_stage):
         query = {
             'channel_id': channel_id
         }
@@ -161,7 +161,7 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def pick_lobby_stage(self, match_id, picked_stage): #lobby
+    async def pick_lobby_stage(self, match_id, picked_stage):
         query = {
             'match_id': match_id
         }
@@ -187,7 +187,7 @@ class LobbyMethodsMixin:
         lobby = await self.lobby_collection.find_one(query)
         return lobby
     
-    async def end_match(self, match_id): #lobby
+    async def end_match(self, match_id):
         query = {
             'match_id': match_id
         }
@@ -274,7 +274,7 @@ class LobbyMethodsMixin:
         result = await self.lobby_collection.update_one(query, update)
         return result
     
-    async def update_lobby_state(self, match_id, state): #lobby
+    async def update_lobby_state(self, match_id, state):
         query = {
             'match_id': match_id
         }

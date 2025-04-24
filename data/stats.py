@@ -53,7 +53,7 @@ class StatsMethodsMixin:
                 
         return bracket_demon, rival
     
-    async def get_player_stats(self, player_name): #stats
+    async def get_player_stats(self, player_name):
         player = await self.lookup_player(player_name, use_alias=True)
         if not player:
             return False
@@ -123,7 +123,7 @@ class StatsMethodsMixin:
         }
         return player_stats
     
-    async def find_winrate_data(self, player_id, start_date, end_date): #stats
+    async def find_winrate_data(self, player_id, start_date, end_date): 
         pipeline = [
             {
                 "$match": {

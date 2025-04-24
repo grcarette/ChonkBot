@@ -123,7 +123,7 @@ class StageMethodsMixin:
         else:
             return upvotes, downvotes
         
-    async def add_message_to_level(self, code, message_id): #stage
+    async def add_message_to_level(self, code, message_id):
         query = {
             'code': code
         }

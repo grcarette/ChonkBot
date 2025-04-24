@@ -1,7 +1,7 @@
 import discord
 
 from utils.emojis import INDICATOR_EMOJIS
-from .config_components import TournamentNameModal, TournamentTimeModal, TournamentFormatSelect
+from .config_components import TournamentNameModal, TournamentFormatSelect
 from .color_view import ColorPickerView
 from .time_view import TimePickerView
 
@@ -21,7 +21,7 @@ class TournamentConfigView(discord.ui.View):
         self.set_color_button = discord.ui.Button(
             label=f"Set Color {INDICATOR_EMOJIS['paint']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-configure_color"
         )
-        self.format_select = TournamentFormatSelect(self)
+        self.format_select = TournamentFormatSelect(self.cc)
         
         self.set_name_button.callback = self.input_tournament_name
         self.set_time_button.callback = self.input_tournament_time

@@ -65,8 +65,9 @@ class AddLinkModal(discord.ui.Modal, title="Add Link"):
         await self.callback(interaction, self.link_name.value, self.link_url.value)
         
 class TournamentFormatSelect(discord.ui.Select):
-    def __init__(self, config_view):
-        self.cv = config_view
+    def __init__(self, config_control):
+        self.cc = config_control
+        self.tc = self.cc.tc
         super().__init__(
             placeholder="Format",
             options=[
@@ -80,6 +81,6 @@ class TournamentFormatSelect(discord.ui.Select):
         
     async def callback(self, interaction: discord.Interaction):
         selected_format = self.values[0]
-        await self.cv.set_tournament_format(selected_format)
+        await self.tc.edit_tournament_config(format=selected_format)
         await interaction.response.defer()
         

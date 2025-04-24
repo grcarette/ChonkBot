@@ -46,7 +46,7 @@ class BotControlView(discord.ui.View):
                 
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()
-        if interaction.user.id != tournament['organizer']:
+        if interaction.user.id not in tournament['organizers']:
             await interaction.response.send_message("Only the TO is authorized to do this.", ephemeral=True)
         else:
             user_id = interaction.user.id
