@@ -192,10 +192,43 @@ class BotControlView(discord.ui.View):
             
         return None
     
+    async def get_required_actions(self):
+        required_actions = []
+        tournament = await self.tm.get_tournament()
+        if self.stage == "setup":
+            if len(tournament['stagelist']) > 0:
+                pending_stages = await self.get_pending_stages(tournament)
+                if len(pending_stages) > 0:
+                    action = (
+                        "Submit stages to database:\n" + "\n".join(f"-'{code}'" for code in pending_stages)
+                    )
+                    required_actions.append(action)
+            else:
+                required_actions.append("Add stages to stagelist")
+        else:
+            required_actions.append('-Nothing')
+        
+        required_actions_string = "\n\n".join(required_actions)
+        return required_actions_string
+        
+    async def get_pending_stages(self, tournament):
+        pending_stages = []
+        for stage_code in tournament['stagelist']:
+            stage_exists = await self.tm.bot.dh.get_stage(code=stage_code)
+            if not stage_exists:
+                pending_stages.append(stage_code)
+        return pending_stages
+                
     async def generate_embed(self):
+        required_actions = await self.get_required_actions()
+        description = (
+            f"Stage: {self.stage}\n"
+            "To do:\n"
+            f"{required_actions}"
+        )
         embed = discord.Embed(
             title="Tournament Controls",
-            description=f"Stage: {self.stage}",
+            description=description,
             color=discord.Color.green()
         )
         return embed
