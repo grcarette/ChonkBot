@@ -63,22 +63,6 @@ class ConfigControlView(discord.ui.View):
         view = EditStagelistView(self.tc)
         await view.setup()
         await interaction.response.send_message(view=view, ephemeral=True)
-        
-    async def input_stages(self, interaction: discord.Interaction):
-        modal = AddStageModal(self.add_stages)
-        await interaction.response.send_modal(modal)
-            
-    async def add_stages(self, interaction, stage_list):
-        stages, result = await self.tc.check_stages(stage_list)
-        if result != True:
-            message_content = (
-                f"Error: `{result}` is not a valid stage code\n"
-                "Make sure you are sending valid stage codes separated by a comma"
-            )
-            await interaction.response.send_message(message_content, ephemeral=True)
-        else:
-            await interaction.response.defer()
-            await self.tc.add_stages(stages)
 
     async def generate_embed(self):
         description = await self.get_control_panel_info()

@@ -85,6 +85,17 @@ class TournamentMethodsMixin:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
+    async def remove_stage_from_tournament(self, tournament_id, map_code):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$pull': {
+                'stagelist': map_code
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+    
     async def add_challonge_to_tournament(self, tournament_name, url, tournament_id):
         query = {
             'name': tournament_name
