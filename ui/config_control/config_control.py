@@ -4,6 +4,7 @@ from utils.emojis import INDICATOR_EMOJIS
 from .config_components import AddStageModal, AddTOSelectMenu, AddLinkModal, TournamentNameModal, TournamentTimeModal
 from .configure_tournament import TournamentConfigView
 from .edit_links import EditLinksView
+from .edit_stagelist import EditStagelistView
 
 class ConfigControlView(discord.ui.View):
     def __init__(self, tournament_control, timeout=None):
@@ -23,14 +24,14 @@ class ConfigControlView(discord.ui.View):
         self.edit_links_button = discord.ui.Button(
             label=f"Edit Links{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-link"
             )
-        self.add_stage_button = discord.ui.Button(
-            label=f"Add Stage(s) {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_stages"
+        self.edit_stages_button = discord.ui.Button(
+            label=f"Edit Stagelist {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-edit_stages"
             )
 
         self.configure_tournament_button.callback = self.configure_tournament
         self.add_assistant_button.callback = self.add_assistant
         self.edit_links_button.callback = self.edit_links
-        self.add_stage_button.callback = self.input_stages
+        self.edit_stages_button.callback = self.edit_stages
 
     async def update_control(self):
         if self.message == None:
@@ -39,7 +40,7 @@ class ConfigControlView(discord.ui.View):
         self.add_item(self.configure_tournament_button)
         self.add_item(self.add_assistant_button)
         self.add_item(self.edit_links_button)
-        self.add_item(self.add_stage_button)
+        self.add_item(self.edit_stages_button)
         
         embed = await self.generate_embed()
         await self.message.edit(view=self, embed=embed)
@@ -58,21 +59,27 @@ class ConfigControlView(discord.ui.View):
         view = EditLinksView(tournament_info_display)
         await interaction.response.send_message(view=view, ephemeral=True)
         
+    async def edit_stages(self, interaction: discord.Interaction):
+        view = EditStagelistView(self.tc)
+        await view.setup()
+        await interaction.response.send_message(view=view, ephemeral=True)
+        
     async def input_stages(self, interaction: discord.Interaction):
         modal = AddStageModal(self.add_stages)
         await interaction.response.send_modal(modal)
             
     async def add_stages(self, interaction, stage_list):
-        result = await self.tm.add_stages(stage_list)
+        stages, result = await self.tc.check_stages(stage_list)
         if result != True:
             message_content = (
                 f"Error: `{result}` is not a valid stage code\n"
                 "Make sure you are sending valid stage codes separated by a comma"
             )
-            await interaction.response.send_message(message_content)
+            await interaction.response.send_message(message_content, ephemeral=True)
         else:
-            await interaction.response.send_message("Success!", ephemeral=True)
-        
+            await interaction.response.defer()
+            await self.tc.add_stages(stages)
+
     async def generate_embed(self):
         description = await self.get_control_panel_info()
         embed = discord.Embed(

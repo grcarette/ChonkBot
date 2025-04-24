@@ -47,6 +47,13 @@ class TournamentControl:
         await channel.send(embed=embed, view=config_control)
         return config_control
     
+    async def check_stages(self, stagelist):
+        stages, result = await self.tournament_config_handler.check_stages(stagelist)
+        return stages, result
+        
+    async def add_stages(self, stagelist):
+        await self.tournament_config_handler.add_stages(stagelist)
+    
     async def update_tournament_state(self, state):
         await self.bc.update_tournament_state(state)
         
@@ -64,4 +71,8 @@ class TournamentControl:
         await self.bc.update_control()
         await self.tid.update_display()
     
+    async def refresh_stagelist(self):
+        channel = await self.tm.get_channel('stagelist')
+        await channel.purge(limit=None)
+        await self.tid.post_stages()
         

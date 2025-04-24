@@ -76,7 +76,7 @@ class TournamentMethodsMixin:
             '_id': ObjectId(tournament_id),
         }
         update = {
-            '$push': {
+            '$addToSet': {
                 'stagelist': {
                     '$each': stage_codes
                 }

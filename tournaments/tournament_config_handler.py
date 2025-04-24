@@ -1,6 +1,7 @@
 import discord
 
 from utils.color_utils import brighten_hex_color, discord_color_from_hex
+from utils.validate_stagecode import validate_stagecode
 
 class TournamentConfigHandler:
     def __init__(self, tournament_control):
@@ -59,6 +60,21 @@ class TournamentConfigHandler:
     
     async def refresh_displays(self):
         await self.tc.refresh_displays()
+
+
+    async def add_stages(self, stages):
+        await self.dh.add_stages_to_tournament(self.tournament['_id'], stages)
+        await self.tc.refresh_stagelist()
+        
+    async def check_stages(self, stages):
+        valid_stages = []
+        stages = stages.split(',')
+        for stage_code in stages:
+            valid_code = validate_stagecode(stage_code)
+            if not valid_code:
+                return stage_code, False
+            valid_stages.append(valid_code)
+        return valid_stages, True
         
     async def get_tournament_roles(self):
         tournament = await self.tc.tm.get_tournament()

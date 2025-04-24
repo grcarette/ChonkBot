@@ -1,16 +1,24 @@
 import discord
+import re
+import aiohttp
+from io import BytesIO
+
 from utils.discord_preset_colors import get_random_color
 from utils.color_utils import discord_color_from_hex
 
 from ui.config_control.info_display import InfoDisplayView
 from ui.link_view import LinkView
 
+from handlers.image_handler import ImageHandler
+
 class TournamentInfoDisplay:
     def __init__(self, tournament_control):
         self.tc = tournament_control
         self.tm = self.tc.tm
+        self.dh = self.tm.bot.dh
         self.message = None
         self.info_display_view = None
+        self.image_handler = ImageHandler()
     
     async def initialize_display(self):
         self.info_display_view = InfoDisplayView(self)
@@ -74,3 +82,30 @@ class TournamentInfoDisplay:
                     return message
             
         return None
+    
+    async def post_stages(self):
+        tournament = await self.tm.get_tournament()
+        channel = await self.tm.get_channel('stagelist')
+        
+        for stage_code in tournament['stagelist']:
+            stage = await self.dh.get_stage(code=stage_code)
+            
+            if stage:
+                description = (
+                    f"Creator: {stage['creator']}\n"
+                    f"Code: {stage['code']}\n"
+                )
+                embed = discord.Embed(
+                    title=f"{stage['name']}",
+                    description=description,
+                    color=get_random_color()
+                )
+                
+                image_path = self.image_handler.retrieve_image(stage['code'], stage['imgur'])
+                attachment_filename = f"{stage['code']}.jpg"
+                with open(image_path, 'rb') as image_file:
+                    file = discord.File(image_file, filename=attachment_filename)
+                    embed.set_image(url=f"attachment://{attachment_filename}")
+                
+                    await channel.send(embed=embed, file=file)
+                
