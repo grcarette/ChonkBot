@@ -12,18 +12,25 @@ class TournamentInfoDisplay:
         self.info_display_view = None
     
     async def initialize_display(self):
-        self.view = InfoDisplayView(self)
+        self.info_display_view = InfoDisplayView(self)
         self.message = await self.get_display_message()
         if self.message == None:
             channel = await self.tm.get_channel('event-info')
             embed = await self.generate_embed()
-            await channel.send(view=self.view, embed=embed)
-        else:
-            await self.update_display()
+            self.message = await channel.send(view=self.info_display_view, embed=embed)
+        for component in self.message.components:
+            for item in component.children:
+                print(item)
+                if isinstance(item, discord.Button):
+                    print('yee')
+                    if item.style == discord.ButtonStyle.link:
+                        print('yeahhh')
+                        await self.add_link(item.label, item.url)
+        await self.update_display()
     
     async def update_display(self):
         embed = await self.generate_embed()
-        await self.message.edit(view=self.view, embed=embed)
+        await self.message.edit(view=self.info_display_view, embed=embed)
     
     async def generate_embed(self):
         tournament = await self.tm.get_tournament()
@@ -42,7 +49,7 @@ class TournamentInfoDisplay:
     
     async def add_link(self, link_label, link_url):
         channel = await self.tm.get_channel('event-info')
-        await self.view.add_link(link_label, link_url)
+        await self.info_display_view.add_link(link_label, link_url)
         await self.update_display()
     
     async def get_display_message(self):

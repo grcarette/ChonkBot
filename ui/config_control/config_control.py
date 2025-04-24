@@ -3,7 +3,7 @@ import discord
 from utils.emojis import INDICATOR_EMOJIS
 from .config_components import AddStageModal, AddTOSelectMenu, AddLinkModal, TournamentNameModal, TournamentTimeModal
 from .configure_tournament import TournamentConfigView
-from ..link_view import LinkView
+from .edit_links import EditLinksView
 
 class ConfigControlView(discord.ui.View):
     def __init__(self, tournament_control, timeout=None):
@@ -20,8 +20,8 @@ class ConfigControlView(discord.ui.View):
         self.add_assistant_button = discord.ui.Button(
             label=f"Add Assistant TO {INDICATOR_EMOJIS['clipboard']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_assistant"
             )
-        self.add_link_button = discord.ui.Button(
-            label=f"Add Link{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-link"
+        self.edit_links_button = discord.ui.Button(
+            label=f"Edit Links{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-link"
             )
         self.add_stage_button = discord.ui.Button(
             label=f"Add Stage(s) {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_stages"
@@ -29,7 +29,7 @@ class ConfigControlView(discord.ui.View):
 
         self.configure_tournament_button.callback = self.configure_tournament
         self.add_assistant_button.callback = self.add_assistant
-        self.add_link_button.callback = self.input_link
+        self.edit_links_button.callback = self.edit_links
         self.add_stage_button.callback = self.input_stages
 
     async def update_control(self):
@@ -38,7 +38,7 @@ class ConfigControlView(discord.ui.View):
         self.clear_items()
         self.add_item(self.configure_tournament_button)
         self.add_item(self.add_assistant_button)
-        self.add_item(self.add_link_button)
+        self.add_item(self.edit_links_button)
         self.add_item(self.add_stage_button)
         
         embed = await self.generate_embed()
@@ -53,14 +53,10 @@ class ConfigControlView(discord.ui.View):
         view.add_item(AddTOSelectMenu(self))
         await interaction.response.send_message(view=view, ephemeral=True)
         
-    async def input_link(self, interaction: discord.Interaction):
-        modal = AddLinkModal(self.add_link)
-        await interaction.response.send_modal(modal)
-        
-    async def add_link(self, interaction: discord.Interaction, link_label, link_url):
-        await self.tc.add_link_to_display(link_label, link_url)
-        message_content = "Link added successfully"
-        await interaction.response.send_message(message_content, ephemeral=True)
+    async def edit_links(self, interaction: discord.Interaction):
+        tournament_info_display = self.tc.tid
+        view = EditLinksView(tournament_info_display)
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def input_stages(self, interaction: discord.Interaction):
         modal = AddStageModal(self.add_stages)
