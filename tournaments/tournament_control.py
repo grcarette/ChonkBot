@@ -54,8 +54,7 @@ class TournamentControl:
         pass
     
     async def edit_tournament_config(self, **kwargs):
-        if 'color' in kwargs:
-            await self.tournament_config_handler.set_color(kwargs.pop('color'))
+        await self.tournament_config_handler.edit_tournament_config(**kwargs)
 
     async def add_link_to_display(self, link_label, link_url):
         await self.tid.add_link(link_label, link_url)

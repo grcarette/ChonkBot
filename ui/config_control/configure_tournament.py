@@ -38,8 +38,9 @@ class TournamentConfigView(discord.ui.View):
         modal = TournamentTimeModal(self.set_tournament_time)
         await interaction.response.send_modal(modal)
         
-    async def set_tournament_name(self, name):
+    async def set_tournament_name(self, interaction, name):
         await self.tc.edit_tournament_config(name=name)
+        await interaction.response.send_message("Name updated. Please update the category name manually as discord will rate limit category editing", ephemeral=True)
     
     async def set_tournament_time(self, timestamp):
         await self.tc.edit_tournament_config(timestamp=timestamp)

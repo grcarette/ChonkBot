@@ -145,6 +145,7 @@ class BotControlView(discord.ui.View):
         return None
     
     async def update_required_actions(self):
+        self.required_actions = []
         tournament = await self.tm.get_tournament()
         if self.stage == "setup":
             if len(tournament['stagelist']) > 0:
