@@ -46,5 +46,7 @@ class TournamentControl:
         pass
     
     async def edit_tournament_config(self, **kwargs):
-        pass
+        await self.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+        await self.cc.update_control()
+    
         

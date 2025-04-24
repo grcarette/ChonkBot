@@ -89,7 +89,32 @@ class ConfigControlView(discord.ui.View):
         return embed
     
     async def get_control_panel_info(self):
-        return "TBD"
+        tournament = await self.tm.get_tournament()
+        if 'name' in tournament:
+            tournament_name = tournament['name']
+        else:
+            tournament_name = 'N/A'
+        if 'date' in tournament:
+            tournament_date = tournament['date']
+        else:
+            tournament_date = 'TBD'
+        if 'format' in tournament:
+            tournament_format = tournament['format']
+        else:
+            tournament_format = 'N/A'
+        if len(tournament['stagelist']) > 0:
+            tournament_stagelist = "\n-".join(tournament['stagelist'])
+        else:
+            tournament_stagelist = "N/A"
+
+        message_content = (
+            f"**Name:** {tournament_name}\n"
+            f"**Date:** {tournament_date}\n"
+            f"**Format:** {tournament_format}\n"
+            f"**State:** {tournament['state']}\n"
+            f"**Stagelist:**\n-{tournament_stagelist}\n"
+        )
+        return message_content
     
     async def get_control_message(self):
         channel = await self.tm.get_channel('bot-control')
@@ -102,4 +127,5 @@ class ConfigControlView(discord.ui.View):
                     return message
             
         return None
+    
     

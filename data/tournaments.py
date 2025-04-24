@@ -28,6 +28,15 @@ class TournamentMethodsMixin:
         tournament = await self.get_tournament(name=tournament['name'])
         return tournament
     
+    async def edit_tournament_config(self, tournament_id, **kwargs):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': kwargs
+        }
+        result = await self.tournament_collection.update_one(query, update)
+    
     async def delete_tournament(self, tournament_id): 
         query = {
             '_id': ObjectId(tournament_id)
@@ -222,6 +231,7 @@ class TournamentMethodsMixin:
         }
         result = await self.tournament_collection.update_one(query, update)
         return result
+    
     
 
         
