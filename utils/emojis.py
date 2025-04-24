@@ -40,6 +40,9 @@ INDICATOR_EMOJIS = {
     'notepad': '🗒️',
     'tools': '🛠️,',
     'clipboard': '📋',
+    'pencil': '📝',
+    'gear': '⚙️',
+    'clock': '🕓',
 }
 
 RESULT_EMOJIS = {

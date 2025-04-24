@@ -1,48 +1,22 @@
 import discord
 
 from utils.emojis import INDICATOR_EMOJIS
-
+from .config_components import AddStageModal, AddTOSelectMenu, AddLinkModal, TournamentNameModal, TournamentTimeModal
 from .link_view import LinkView
-
-class AddStageModal(discord.ui.Modal, title="Add Stage(s)"):
-    stage_list = discord.ui.TextInput(label="Stages", placeholder="Enter stage codes separated by ','")
-    
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
-        
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.callback(interaction, self.stage_list.value)
-
-class AddTOSelectMenu(discord.ui.UserSelect):
-    def __init__(self, bot_control):
-        super().__init__()
-        self.bc = bot_control
-        
-    async def callback(self, interaction: discord.Interaction):
-        selected_user = self.values[0]
-        await self.bc.tm.add_assistant(selected_user)
-        await interaction.response.send_message(f"You selected user {selected_user.mention}", ephemeral=True)
-        
-class AddLinkModal(discord.ui.Modal, title="Add Link"):
-    link_url = discord.ui.TextInput(label="URL", placeholder="Enter the URL")
-    link_name = discord.ui.TextInput(label="Button Text", placeholder="Enter the name of the link")
-    
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
-        
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.callback(interaction, self.link_name.value, self.link_url.value)
+from .configure_tournament import TournamentConfigView
 
 class ConfigControlView(discord.ui.View):
     def __init__(self, tournament_control, timeout=None):
         super().__init__(timeout=timeout)
         self.tc = tournament_control
         self.tm = self.tc.tm
+        self.message = None
         self.embed_title = "Tournament Configuration"
-        
+
         name = self.tm.tournament['name']
+        self.configure_tournament_button = discord.ui.Button(
+            label=f"Configure Tournament {INDICATOR_EMOJIS['gear']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-configure"
+            )
         self.add_assistant_button = discord.ui.Button(
             label=f"Add Assistant TO {INDICATOR_EMOJIS['clipboard']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_assistant"
             )
@@ -52,14 +26,27 @@ class ConfigControlView(discord.ui.View):
         self.add_stage_button = discord.ui.Button(
             label=f"Add Stage(s) {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_stages"
             )
-        
+
+        self.configure_tournament_button.callback = self.configure_tournament
         self.add_assistant_button.callback = self.add_assistant
         self.add_link_button.callback = self.input_link
         self.add_stage_button.callback = self.input_stages
-        
+
+    async def update_control(self):
+        if self.message == None:
+            self.message = await self.get_control_message()
+        self.clear_items()
+        self.add_item(self.configure_tournament_button)
         self.add_item(self.add_assistant_button)
         self.add_item(self.add_link_button)
         self.add_item(self.add_stage_button)
+        
+        embed = await self.generate_embed()
+        await self.message.edit(view=self, embed=embed)
+        
+    async def configure_tournament(self, interaction: discord.Interaction):
+        view = TournamentConfigView(self)
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def add_assistant(self, interaction: discord.Interaction):
         view = discord.ui.View()
@@ -91,9 +78,6 @@ class ConfigControlView(discord.ui.View):
             await interaction.response.send_message(message_content)
         else:
             await interaction.response.send_message("Success!", ephemeral=True)
-        #go through stages
-        #add each stage to stagelist
-        #if stage isnt in db, add stage to to do list
         
     async def generate_embed(self):
         description = await self.get_control_panel_info()
@@ -106,3 +90,16 @@ class ConfigControlView(discord.ui.View):
     
     async def get_control_panel_info(self):
         return "TBD"
+    
+    async def get_control_message(self):
+        channel = await self.tm.get_channel('bot-control')
+        bot_id = self.tm.bot.id
+        
+        async for message in channel.history(limit=None, oldest_first=True):
+            if message.author.id == bot_id and message.embeds:
+                embed = message.embeds[0]
+                if self.embed_title in embed.title:
+                    return message
+            
+        return None
+    

@@ -5,8 +5,10 @@ from ui.config_control import ConfigControlView
 from ui.confirmation import ConfirmationView
 
 class TournamentControl:
-    def __init__(self, tournament):
-        self.tm = tournament
+    def __init__(self, tournament_manager):
+        self.tm = tournament_manager
+        self.dh = self.tm.bot.dh
+        self.tournament = self.tm.tournament
         
     async def initialize_controls(self):
         tournament = await self.tm.get_tournament()
@@ -17,6 +19,8 @@ class TournamentControl:
         else:
             self.cc = ConfigControlView(self)
             self.bc = BotControlView(self)
+        await self.cc.update_control()
+        
         await self.tm.add_view(self.cc)
         await self.tm.add_view(self.bc)
         await self.bc.update_tournament_state(tournament['state'])
@@ -37,4 +41,10 @@ class TournamentControl:
     
     async def update_tournament_state(self, state):
         await self.bc.update_tournament_state(state)
+        
+    async def get_required_actions(self):
+        pass
+    
+    async def edit_tournament_config(self, kwargs):
+        pass
         
