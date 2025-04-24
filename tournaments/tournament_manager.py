@@ -19,7 +19,7 @@ from ui.link_view import LinkView
 from ui.registration_approval import RegistrationApprovalView
 
 from .match_lobby import MatchLobby
-from .tournament_controls import TournamentControls
+from .tournament_control import TournamentControl
 from .bracket_handler import BracketHandler
 
 import discord
@@ -38,7 +38,7 @@ class TournamentManager:
         self.bot_control = None
         
     async def initialize_event(self):
-        self.tc = TournamentControls(self)
+        self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
         tournament = await self.get_tournament()
         if 'challonge_data' in tournament:

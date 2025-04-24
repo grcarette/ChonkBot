@@ -2,43 +2,12 @@ import discord
 
 from utils.emojis import INDICATOR_EMOJIS
 from .confirmation import ConfirmationView
-from .link_view import LinkView
-
-class AddTOSelectMenu(discord.ui.UserSelect):
-    def __init__(self, bot_control):
-        super().__init__()
-        self.bc = bot_control
-        
-    async def callback(self, interaction: discord.Interaction):
-        selected_user = self.values[0]
-        await self.bc.tm.add_assistant(selected_user)
-        await interaction.response.send_message(f"You selected user {selected_user.mention}", ephemeral=True)
-
-class AddStageModal(discord.ui.Modal, title="Add Stage(s)"):
-    stage_list = discord.ui.TextInput(label="Stages", placeholder="Enter stage codes separated by ','")
-    
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
-        
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.callback(interaction, self.stage_list.value)
-
-class AddLinkModal(discord.ui.Modal, title="Add Link"):
-    link_url = discord.ui.TextInput(label="URL", placeholder="Enter the URL")
-    link_name = discord.ui.TextInput(label="Button Text", placeholder="Enter the name of the link")
-    
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
-        
-    async def on_submit(self, interaction: discord.Interaction):
-        await self.callback(interaction, self.link_name.value, self.link_url.value)
 
 class BotControlView(discord.ui.View):
-    def __init__(self, tournament_manager):
+    def __init__(self, tournament_control):
         super().__init__(timeout=None)
-        self.tm = tournament_manager
+        self.tc = tournament_control
+        self.tm = self.tc.tm
         self.channels_hidden = True
         self.message = None
         self.stage = 'setup'
@@ -58,36 +27,22 @@ class BotControlView(discord.ui.View):
         self.reset_button = discord.ui.Button(
             label=f"Reset Tournament {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-reset"
             )
-        self.add_link_button = discord.ui.Button(
-            label=f"Add Link{INDICATOR_EMOJIS['link']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-link"
-            )
         self.open_reg_button = discord.ui.Button(
             label=f"Open Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-open_reg", disabled=True
             )
         self.close_reg_button = discord.ui.Button(
             label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg", disabled=False
             )
-        self.add_stage_button = discord.ui.Button(
-            label=f"Add Stage(s) {INDICATOR_EMOJIS['tools']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_stages"
-            )
-        self.add_assistant_button = discord.ui.Button(
-            label=f"Add Assistant TO {INDICATOR_EMOJIS['clipboard']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-add_assistant"
-        )
+
 
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
         self.start_button.callback = self.start_tournament
         self.reset_button.callback = self.reset_tournament
-        self.add_link_button.callback = self.input_link
+
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
-        self.add_stage_button.callback = self.input_stages
-        self.add_assistant_button.callback = self.add_assistant
         
-    async def add_assistant(self, interaction: discord.Interaction):
-        view = discord.ui.View()
-        view.add_item(AddTOSelectMenu(self))
-        await interaction.response.send_message(view=view, ephemeral=True)
                 
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()
@@ -144,34 +99,7 @@ class BotControlView(discord.ui.View):
         view = ConfirmationView(self.tm.reset_tournament, user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         
-    async def input_link(self, interaction: discord.Interaction):
-        modal = AddLinkModal(self.add_link)
-        await interaction.response.send_modal(modal)
-        
-    async def add_link(self, interaction: discord.Interaction, link_label, link_url):
-        channel = await self.tm.get_channel('event-info')
-        link_view = LinkView(link_label, link_url)
-        await channel.send(view=link_view)
-        message_content = "Link added successfully"
-        await interaction.response.send_message(message_content, ephemeral=True)
-        
-    async def input_stages(self, interaction: discord.Interaction):
-        modal = AddStageModal(self.add_stages)
-        await interaction.response.send_modal(modal)
-            
-    async def add_stages(self, interaction, stage_list):
-        result = await self.tm.add_stages(stage_list)
-        if result != True:
-            message_content = (
-                f"Error: `{result}` is not a valid stage code\n"
-                "Make sure you are sending valid stage codes separated by a comma"
-            )
-            await interaction.response.send_message(message_content)
-        else:
-            await interaction.response.send_message("Success!", ephemeral=True)
-        #go through stages
-        #add each stage to stagelist
-        #if stage isnt in db, add stage to to do list
+
         
     async def update_tournament_state(self, state):
         if self.message == None:
@@ -180,15 +108,11 @@ class BotControlView(discord.ui.View):
         self.stage = state
         if state == 'setup':
             self.publish_button.disabled=True
-            self.add_item(self.add_link_button)
-            self.add_item(self.add_stage_button)
             self.add_item(self.publish_button)
-            self.add_item(self.add_assistant_button)
         elif state == 'registration':
             self.checkin_button.disabled=True
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
-            self.add_item(self.add_link_button)
             # self.add_item(self.edit_stagelist_button)
             self.add_item(self.checkin_button)
         elif state == 'checkin':
@@ -196,12 +120,10 @@ class BotControlView(discord.ui.View):
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.start_button)
-            self.add_item(self.add_link_button)
         elif state == 'active':
             self.add_item(self.reset_button)
-            self.add_item(self.add_link_button)
         elif state == 'finished':
-            self.add_item(self.add_link_button)
+            pass
         
         await self.update_control()
 
