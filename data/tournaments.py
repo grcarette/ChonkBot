@@ -232,6 +232,16 @@ class TournamentMethodsMixin:
         result = await self.tournament_collection.update_one(query, update)
         return result
     
+    async def set_tournament_color(self, tournament_id, color):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': {
+                'config.color': color
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
     
 
         

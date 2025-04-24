@@ -5,6 +5,7 @@ from ui.config_control.config_control import ConfigControlView
 from ui.confirmation import ConfirmationView
 
 from .tournament_info_display import TournamentInfoDisplay
+from .tournament_config_handler import TournamentConfigHandler
 
 class TournamentControl:
     def __init__(self, tournament_manager):
@@ -15,6 +16,8 @@ class TournamentControl:
     async def initialize_controls(self):
         self.tid = TournamentInfoDisplay(self)
         await self.tid.initialize_display()
+        
+        self.tournament_config_handler = TournamentConfigHandler(self)
         
         tournament = await self.tm.get_tournament()
         state = await self.tm.get_state()
@@ -51,13 +54,15 @@ class TournamentControl:
         pass
     
     async def edit_tournament_config(self, **kwargs):
-        await self.tm.edit_tournament_config(**kwargs)
-        await self.cc.update_control()
-        #if name changes:
-        #-update tournament category
-        #-update tournament manager tournament
-        
+        if 'color' in kwargs:
+            await self.tournament_config_handler.set_color(kwargs.pop('color'))
+
     async def add_link_to_display(self, link_label, link_url):
         await self.tid.add_link(link_label, link_url)
+        
+    async def refresh_displays(self):
+        await self.cc.update_control()
+        await self.bc.update_control()
+        await self.tid.update_display()
     
         

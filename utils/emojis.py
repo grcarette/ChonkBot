@@ -43,6 +43,7 @@ INDICATOR_EMOJIS = {
     'pencil': '📝',
     'gear': '⚙️',
     'clock': '🕓',
+    'paint': '🎨',
 }
 
 RESULT_EMOJIS = {

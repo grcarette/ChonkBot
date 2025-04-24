@@ -22,6 +22,17 @@ class TournamentTimeModal(discord.ui.Modal, title="Set Tournament Timestamp"):
         await interaction.response.defer()
         await self.callback(self.tournament_timestamp.value)
         
+class TournamentColorModal(discord.ui.Modal, title="Set Tournament Color"):
+    tournament_color = discord.ui.TextInput(label="Tournament Color", placeholder="Enter the hexcode for the tournament color")
+    
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        await self.callback(self.tournament_color.value)
+        
 class AddStageModal(discord.ui.Modal, title="Add Stage(s)"):
     stage_list = discord.ui.TextInput(label="Stages", placeholder="Enter stage codes separated by ','")
     

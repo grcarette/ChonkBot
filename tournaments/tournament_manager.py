@@ -3,7 +3,7 @@ from datetime import datetime
 
 from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
 from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
-from utils.discord_preset_colors import PRESET_COLORS
+from utils.discord_preset_colors import get_random_color
 from utils.get_bracket_link import get_bracket_link
 from utils.validate_stagecode import validate_stagecode
 
@@ -21,7 +21,6 @@ from ui.registration_approval import RegistrationApprovalView
 from .match_lobby import MatchLobby
 from .tournament_control import TournamentControl
 from .bracket_handler import BracketHandler
-from .tournament_config_handler import TournamentConfigHandler
 from.tournament_info_display import TournamentInfoDisplay
 
 import discord
@@ -43,7 +42,6 @@ class TournamentManager:
         self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
         
-        self.tch = TournamentConfigHandler(self)
         tournament = await self.get_tournament()
         if 'challonge_data' in tournament:
             self.ch = ChallongeHandler(tournament['challonge_data']['url'])
@@ -523,11 +521,17 @@ class TournamentManager:
             results += f"{rank}: {player['name']} {emoji}\n"
             
         message_content = overall_winner + results
+        
+        tournament = await self.get_tournament()
+        if 'color' in tournament['config']:
+            color = discord.Color.from_str(tournament['config']['color'])
+        else:
+            color = get_random_color()
 
         embed = discord.Embed(
             title=f"{self.tournament['name']}",
             description=message_content,
-            color=random.choice(PRESET_COLORS)
+            color=color
         )
         label = f"{INDICATOR_EMOJIS['link']} Bracket"
         bracket_link = await get_bracket_link(self.tournament['challonge_data']['url'])
@@ -580,7 +584,7 @@ class TournamentManager:
             elif key == 'stagelist':
                 pass
                 
-            await self.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+            await self.bot.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
         
         
         

@@ -34,7 +34,10 @@ class TournamentInfoDisplay:
     
     async def generate_embed(self):
         tournament = await self.tm.get_tournament()
-        color = get_random_color()
+        if 'color' in tournament['config']:
+            color = discord.Color.from_str(tournament['color'])
+        else:
+            color = get_random_color()
         description = (
             f"**Date: **{tournament['date']}\n"
             f"**Format: **{tournament['format']}\n"
