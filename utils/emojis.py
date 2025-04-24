@@ -38,7 +38,8 @@ INDICATOR_EMOJIS = {
     'rotating_arrows': '🔄',
     'link': '🔗',
     'notepad': '🗒️',
-    'tools': '🛠️,'
+    'tools': '🛠️,',
+    'clipboard': '📋',
 }
 
 RESULT_EMOJIS = {

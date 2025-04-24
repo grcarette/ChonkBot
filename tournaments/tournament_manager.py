@@ -19,6 +19,8 @@ from ui.link_view import LinkView
 from ui.registration_approval import RegistrationApprovalView
 
 from .match_lobby import MatchLobby
+from .tournament_controls import TournamentControls
+from .bracket_handler import BracketHandler
 
 import discord
 import random
@@ -36,6 +38,8 @@ class TournamentManager:
         self.bot_control = None
         
     async def initialize_event(self):
+        self.tc = TournamentControls(self)
+        await self.tc.initialize_controls()
         tournament = await self.get_tournament()
         if 'challonge_data' in tournament:
             self.ch = ChallongeHandler(tournament['challonge_data']['url'])
@@ -93,17 +97,12 @@ class TournamentManager:
             await self.start_tournament_loop()
         
         tournament = await self.get_tournament()
-        if self.bot_control == None:
-            self.bot_control = BotControlView(self)
-            self.bot.add_view(self.bot_control)
-        await self.bot_control.update_tournament_state(tournament['state'])
       
     async def progress_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         state = tournament['state']
         if state == 'initialize':
             next_state = 'setup'
-            await self.add_bot_control()
         elif state == 'setup':
             next_state = 'registration'
             await self.publish_tournament()
@@ -120,14 +119,8 @@ class TournamentManager:
         elif state == 'finished':
             next_state = 'finalized'
             await self.finalize_tournament()
-        await self.bot_control.update_tournament_state(next_state)
+        await self.tc.update_tournament_state(next_state)
         await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
-        
-    async def add_bot_control(self):
-        channel = await self.get_channel('bot-control')
-        self.bot_control = BotControlView(self)
-        embed = await self.bot_control.generate_embed()
-        await channel.send(embed=embed, view=self.bot_control)
         
     async def add_stages(self, stages):
         valid_stages = []
@@ -140,6 +133,10 @@ class TournamentManager:
 
         await self.bot.dh.add_stages_to_tournament(self.tournament['_id'], valid_stages)
         return True
+    
+    async def add_assistant(self, user):
+        tournament_to_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
+        await user.add_roles(tournament_to_role)
             
     async def publish_tournament(self):
         guild = self.bot.guilds[0]
@@ -562,6 +559,13 @@ class TournamentManager:
             await tournament_to_role.delete()
         if tournament_category:
             await tournament_category.delete()
+            
+    async def get_state(self):
+        tournament = await self.get_tournament()
+        return tournament['state']
+    
+    async def add_view(self, view):
+        self.bot.add_view(view)
         
         
 

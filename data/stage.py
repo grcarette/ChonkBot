@@ -9,7 +9,6 @@ class StageMethodsMixin:
         stage = await self.party_map_collection.find_one(kwargs)
         return stage
 
-    
     async def get_random_stages(self, number, user=False, type='party'):
         if user:
             user_info = await self.user_collection.find_one({'user_id': user.id})
