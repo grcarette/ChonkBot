@@ -11,6 +11,8 @@ from ui.confirmation import ConfirmationView
 from tournaments.match_lobby import MatchLobby
 from tournaments.results_poster import post_results
 
+TSC_SCORE_POST_ID = 1349341851928367164
+
 class EventCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -96,7 +98,6 @@ class EventCog(commands.Cog):
     @commands.command(name='delete_lobbies', aliases = ['dl'])
     async def delete_lobbies(self, ctx):
         lobbies = await self.bot.dh.get_active_lobbies('67fac457a8ae7cd75e075ab2')
-        print(lobbies)
         for lobby in lobbies:
             channel = discord.utils.get(self.bot.guild.channels, id=lobby['channel_id'])
             await channel.delete()
@@ -107,11 +108,58 @@ class EventCog(commands.Cog):
     async def post_challonge_results(self, ctx, challonge_id, challonge_url, *, tournament_name):
         await post_results(self.bot, challonge_url, challonge_id, tournament_name)
         
-
+    @commands.command(name="post_time", aliases=["Time", "time"])
+    async def post_time(self, ctx, time: float):
+        user_id = ctx.message.author.id
+        embed=discord.Embed(
+            title="Score Submission",
+            description=f"You are submitting a time of {time}. Is this correct?",
+            color=discord.Color.blue()
+        )
+        view = ConfirmationView(self.bot.tsch.post_time, user_id, time=time, player_id=user_id)
+        await ctx.channel.send(embed=embed, view=view)
         
-            
-            
+    @commands.command(name="register_tsc")
+    async def register_tsc(self, ctx):
+        mentions = ctx.message.mentions
         
-         
+        if len(mentions) != 2:
+            await ctx.send("Your team can only contain 2 members!")
+            return
+        
+        user_ids = [user.id for user in mentions]
+        result = await self.bot.tsch.register_team(user_ids)
+        if result:
+            mentions = " ".join(f"<@{user_id}>" for user_id in result['members'])
+            message_content = (
+                f'You have successfully registered for TSC {mentions}'
+            )
+            await ctx.send(message_content)
+        else:
+            message_content = (
+                "There was an issue registering you. Are you already part of another team? Contact Bojack if you're unsure"
+            )
+            await ctx.send(message_content)
+        
+    @commands.command(name="unregister_tsc")
+    async def unregister_tsc(self, ctx):
+        user_id = ctx.message.author.id
+        result = await self.bot.tsch.unregister_team(user_id)
+        if result:
+            message_content = (
+                'You have successfully unregistered from TSC'
+            )
+            await ctx.send(message_content)
+        else:
+            message_content = (
+                "There was an issue unregistering you. Are you sure you were registered to begin with? Contact Bojack if you're unsure"
+            )
+            await ctx.send(message_content)
+            
+    @commands.has_role('Moderator')
+    @commands.command(name='next_round')
+    async def next_round(self, ctx):
+        await self.bot.tsch.start_next_round()
+        
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

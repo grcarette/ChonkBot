@@ -4,8 +4,6 @@ from datetime import datetime, timezone, timedelta
 from utils.errors import *
 
 class StatsMethodsMixin:
-    pass
-    
     async def find_special_opponents(self, player_id):
         query = {
             '$or': [

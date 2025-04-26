@@ -80,7 +80,6 @@ class TournamentInfoDisplay:
                 embed = message.embeds[0]
                 if tournament['name'] in embed.title:
                     return message
-            
         return None
     
     async def post_stages(self):

@@ -8,6 +8,7 @@ from handlers.tournament_handler import TournamentHandler
 from handlers.message_handler import MessageHandler
 from handlers.lobby_handler import LobbyHandler
 from handlers.reaction_handler import ReactionHandler
+from handlers.tsc_handler import TSCHandler
 
 from ui.register_control import RegisterControlView
 from ui.bot_control import BotControlView
@@ -23,6 +24,7 @@ class ChonkBot(commands.Bot):
         self.mh = MessageHandler(self)
         self.lh = LobbyHandler(self)
         self.rh = ReactionHandler(self)
+        self.tsch = TSCHandler(self)
         
         self.guild = None
         self.id = BOT_ID

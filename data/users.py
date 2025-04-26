@@ -37,7 +37,8 @@ class UserMethodsMixin:
         if not user_exists:
             user_data = {
                 'user_id': user.id,
-                'name': user.name,
+                'username': user.name,
+                'name': user.display_name,
                 'mention': user.mention,
                 'favorite_maps': [],
                 'blocked_maps': []

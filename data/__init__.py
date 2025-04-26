@@ -5,6 +5,7 @@ from .stats import StatsMethodsMixin
 from .lobby import LobbyMethodsMixin
 from .stage import StageMethodsMixin
 from .stats_data import StatsDataMethodsMixin
+from .tsc import TSCDataMethodsMixin
 
 
 from utils.errors import *
@@ -17,7 +18,6 @@ import motor.motor_asyncio
 import asyncio
 import math
 
-
 class DataHandler(
     DataHandlerBase, 
     UserMethodsMixin, 
@@ -26,6 +26,7 @@ class DataHandler(
     LobbyMethodsMixin, 
     StageMethodsMixin,
     StatsDataMethodsMixin,
+    TSCDataMethodsMixin,
     ):
     def __init__(self):
         super().__init__()    
@@ -40,6 +41,8 @@ class DataHandler(
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
         self.ratings_collection = self.db['level_ratings']
+        self.tsc_collection = self.db['tsc']
+        self.time_collection = self.db['tsc_times']
         
         self.tdb = client['UCHTournamentData']
         self.match_collection = self.tdb['matches']

@@ -213,7 +213,7 @@ class TournamentManager:
         tournament = await self.get_tournament()
         removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
         for player_id in removed_players:
-            await self.unregister_player(tournament['_id'], int(player_id))
+            await self.unregister_player(int(player_id))
         checkin_channel = await self.get_channel('check-in')
         register_channel = await self.get_channel('register')
         if checkin_channel:
