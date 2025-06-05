@@ -62,7 +62,7 @@ class AddTOSelectMenu(discord.ui.UserSelect):
         selected_user = self.values[0]
         await self.tc.edit_tournament_config(assistant=selected_user)
         await interaction.response.send_message(f"You selected user {selected_user.mention}", ephemeral=True)
-        
+
 class AddLinkModal(discord.ui.Modal, title="Add Link"):
     link_url = discord.ui.TextInput(label="URL", placeholder="Enter the URL")
     link_name = discord.ui.TextInput(label="Button Text", placeholder="Enter the name of the link")

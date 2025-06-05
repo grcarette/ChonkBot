@@ -40,6 +40,7 @@ class MatchLobby:
         self.tournament_manager = tournament_manager
         self.dh = datahandler
         self.guild = guild
+        self.channel = None
         
         self.tournament = await self.dh.get_tournament_by_id(self.tournament_id)
         self.override_role = f"{self.tournament['name']} TO"
@@ -50,7 +51,7 @@ class MatchLobby:
         else:
             await self.setup_lobby()
         lobby = await self.get_lobby()
-        self.remaining_players = [player for player in self.players if player not in lobby['results']]
+        self.remaining_players = set([player for player in self.players if player not in lobby['results']])
     
             
         return self
@@ -91,9 +92,10 @@ class MatchLobby:
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             organizer_role: discord.PermissionOverwrite(read_messages=True)
         }
-        for player in self.players:
-            member = discord.utils.get(self.guild.members, id=player)
-            overwrites[member] = discord.PermissionOverwrite(read_messages=True)
+        if self.tournament_manager.bot.debug == False:
+            for player in self.players:
+                member = discord.utils.get(self.guild.members, id=player)
+                overwrites[member] = discord.PermissionOverwrite(read_messages=True)
             
         self.channel = await self.guild.create_text_channel(name=self.lobby_name, overwrites=overwrites, category=None)
         await self.dh.add_channel_to_lobby(self.match_id, self.channel, )
@@ -150,18 +152,28 @@ class MatchLobby:
         mentions = get_mentions(self.remaining_players)
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
     
-    async def end_reporting(self, winner_id):
-        lobby = await self.dh.report_match(self.match_id, winner_id)
+    async def end_reporting(self, winner_id, is_dq=False):
+        await self.report_match(winner_id, is_dq)
+        lobby = await self.get_lobby()
         if self.num_winners == len(lobby['results']):
             await self.dh.update_lobby_state(self.match_id, 'finished')
             await self.dh.end_match(self.match_id)
-            await self.tournament_manager.report_match(self)
+            await self.tournament_manager.report_match(self, is_dq)
             await self.send_player_instructions()
+            if is_dq:
+                await self.close_lobby()
         else:
             await self.start_match()
-            
+
+    async def report_match(self, winner_id, is_dq=False):
+        lobby = await self.dh.report_match(self.match_id, winner_id)
+        if is_dq:
+            await self.dh.report_dq(self.match_id)
+
     async def send_player_instructions(self):
         lobby = await self.get_lobby()
+        if self.channel == None:
+            return
         winner_mention = f"<@{lobby['results'][0]}>"
         loser_mention = f"<@{lobby['results'][1]}>"
         
@@ -205,6 +217,14 @@ class MatchLobby:
     async def get_lobby(self):
         lobby = await self.dh.get_lobby(self.match_id)
         return lobby
+
+    async def check_to_role(self, user_id):
+        organizer_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
+        user = discord.utils.get(self.guild.members, id=user_id)
+        if organizer_role in user.roles:
+            return True
+        else:
+            return False
     
 
         

@@ -50,7 +50,6 @@ class LobbyMethodsMixin:
         while to_process:
             current_match_id = to_process.pop()
             match_data = await self.find_match(current_match_id)
-            print(match_data)
             
             if 'prereq_match_ids' in match_data:
                 new_prereqs = set(match_data['prereq_match_ids'])
@@ -186,6 +185,17 @@ class LobbyMethodsMixin:
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
+
+    async def report_dq(self, match_id):
+        query = {
+            'match_id': match_id
+        }
+        update = {
+            '$set': {
+                'is_dq': True
+            }
+        }
+        result = await self.lobby_collection.update_one(query, update)
     
     async def end_match(self, match_id):
         query = {
@@ -208,7 +218,6 @@ class LobbyMethodsMixin:
         return lobby
     
     async def get_lobby_time(self, prereq_match_ids):
-        print(prereq_match_ids)
         if len(prereq_match_ids) < 1:
             return datetime.now()
         
@@ -226,7 +235,7 @@ class LobbyMethodsMixin:
             {
                 "$limit": 1
             }
-]
+        ]
         most_recent_match = await self.lobby_collection.aggregate(pipeline).to_list(None)
         return most_recent_match[0]['finished_at']
     
@@ -286,3 +295,18 @@ class LobbyMethodsMixin:
         }
         result = await self.lobby_collection.update_one(query, update)
         return result
+
+    async def clear_lobbies(self, tournament_id):
+        query = {
+            'tournament': ObjectId(tournament_id)
+        }
+        await self.lobby_collection.delete_many(query)
+
+    async def find_player_match(self, tournament_id, user_id):
+        query = {
+            'tournament': ObjectId(tournament_id),
+            'state': {'$nin': ['closed', 'finished']},
+            'players': {'$in': [user_id]}
+        }
+        active_match = await self.lobby_collection.find_one(query)
+        return active_match

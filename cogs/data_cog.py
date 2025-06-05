@@ -288,7 +288,6 @@ class DataCog(commands.Cog):
         message = await self.bot.mh.send_level_message(new_level, channel)
 
     async def send_closest_player(self, player_name, channel):
-        print('here')
         try: 
             closest_player_name = await self.bot.dh.find_closest_player_name(player_name)
             message_content = (

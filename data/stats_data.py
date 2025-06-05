@@ -119,10 +119,8 @@ class StatsDataMethodsMixin:
                 best_match = tournament['name']
                 
         if best_match:
-            print(best_match, best_score)
             return best_match
         else:
-            print(best_score)
             raise 
         
     async def check_unique_name(self, name):

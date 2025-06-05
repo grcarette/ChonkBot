@@ -130,11 +130,36 @@ class TournamentHandler():
         guild = self.bot.guilds
         tournament = await self.bot.dh.get_tournament(category_id=category_id)
         await self.tournaments[tournament['_id']].delete_tournament()
-            
+
+    async def register_role(self, category_id):
+        guild = self.bot.guild
+        tournament = await self.bot.dh.get_tournament(category_id=category_id)
+        tournament_id = tournament['_id']
+
+        tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
+        if tournament_role is None:
+            return
+
+        for member in guild.members:
+            if tournament_role in member.roles and not member.bot:
+                player_registered = await self.bot.dh.get_registration_status(tournament_id, member.id)
+                if not player_registered:
+                    await self.tournaments[tournament_id].register_player(member.id)
+            elif str(member.id) in tournament['entrants']:
+                await self.tournaments[tournament_id].unregister_player(member.id)
+
+            if member.id == 883733550334095391:
+                print('morfin')
+                if str(member.id) in tournament['entrants']:
+                    print('reg')
+
+
     def get_tournament_category(self, category_id):
         guild = self.bot.guilds[0]
         category = discord.utils.get(guild.categories, id=category_id)
         return category
+
+
             
         
 

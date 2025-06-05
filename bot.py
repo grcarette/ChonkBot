@@ -26,6 +26,7 @@ class ChonkBot(commands.Bot):
         self.rh = ReactionHandler(self)
         self.tsch = TSCHandler(self)
         
+        self.debug = True
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))

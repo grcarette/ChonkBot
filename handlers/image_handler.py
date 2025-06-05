@@ -2,7 +2,7 @@ import os
 from utils.imgur_processor import ImgurProcessor
 
 class ImageHandler:
-    def __init__(self, image_root="../level_images"):
+    def __init__(self, image_root="level_images"):
         self.image_root = image_root
         self.imgur_processor = ImgurProcessor()
 
@@ -11,7 +11,9 @@ class ImageHandler:
         subfolder = safe_code[0]
         folder_path = os.path.join(self.image_root, subfolder)
         os.makedirs(folder_path, exist_ok=True)
-        return os.path.join(folder_path, f"{safe_code}.{extension}")
+        path = os.path.join(folder_path, f"{safe_code}.{extension}")
+        print(os.path.abspath(path))
+        return path
 
     def retrieve_image(self, map_code, imgur_url):
         file_path = self.get_image_path(map_code)

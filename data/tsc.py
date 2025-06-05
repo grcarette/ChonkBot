@@ -52,18 +52,15 @@ class TSCDataMethodsMixin:
     async def get_current_code(self):
         tsc_doc = await self.tsc_collection.find_one({"tsc": True})
         if not tsc_doc or "current_round" not in tsc_doc or "codes" not in tsc_doc:
-            print('rah')
             return []
 
         current_round = tsc_doc["current_round"]
         codes = tsc_doc["codes"]
         
         if current_round >= len(codes) or current_round < 1:
-            print('h')
             return []
 
         code = codes[current_round - 1] 
-        print(code)
         return code
 
     async def get_best_times_by_team(self):

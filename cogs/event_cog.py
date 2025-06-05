@@ -155,6 +155,12 @@ class EventCog(commands.Cog):
                 "There was an issue unregistering you. Are you sure you were registered to begin with? Contact Bojack if you're unsure"
             )
             await ctx.send(message_content)
+
+    @commands.has_role('Moderator')
+    @commands.command(name='register_role')
+    async def register_role(self, ctx):
+        category_id = ctx.channel.category_id
+        await self.bot.th.register_role(category_id)
             
     @commands.has_role('Moderator')
     @commands.command(name='next_round')

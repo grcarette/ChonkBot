@@ -202,18 +202,30 @@ class TournamentMethodsMixin:
         tournament = await self.tournament_collection.find_one(query)
         return tournament
         
-    async def disqualify_player(self, tournament, user_id):
+    async def disqualify_player(self, tournament_id, user_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        tournament = await self.tournament_collection.find_one(query)
         if str(user_id) not in tournament['entrants']:
-            raise PlayerNotFoundError(user_id, 'disqualify_player')
+            return False
         if tournament['state'] != 'active':
             return False
-        
-        query = {
-            'category_id': tournament['category_id']
-        }
 
         update = {
             '$addToSet': {
+                'dqs': user_id
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+        return True
+
+    async def undisqualify_player(self, tournament_id, user_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$pull': {
                 'dqs': user_id
             }
         }

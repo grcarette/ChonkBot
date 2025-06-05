@@ -91,4 +91,9 @@ class TournamentControl:
             stage_list_data.append(stage)
         filepath = sbg.generate_banner(stage_list_data, tournament)
         return filepath
-        
+
+    async def disqualify_player(self, user_id):
+        return await self.tm.disqualify_player(user_id)    
+
+    async def undisqualify_player(self, user_id):
+        return await self.tm.undisqualify_player(user_id)

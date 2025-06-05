@@ -2,6 +2,8 @@ import discord
 
 from utils.emojis import INDICATOR_EMOJIS
 from .confirmation import ConfirmationView
+from .dq_player_select import DQPlayerSelectMenu, RemoveDQPlayerSelectMenu
+from .toggle_button import ToggleButton
 
 class BotControlView(discord.ui.View):
     def __init__(self, tournament_control):
@@ -33,12 +35,23 @@ class BotControlView(discord.ui.View):
         self.close_reg_button = discord.ui.Button(
             label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg", disabled=False
             )
+        self.disqualify_player_button = discord.ui.Button(
+            label=f"Disqualify Player {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-disqualify_player"
+        )
+        self.remove_disqualify_button = discord.ui.Button(
+            label=f"Un-Disqualify Player {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-remove_disqualify_player"
+        )
+        self.toggle_autocall_button = ToggleButton(
+            label=f"Toggle Automatic Match Calling {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-remove_disqualify_player"
+        )
 
 
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
         self.start_button.callback = self.start_tournament
         self.reset_button.callback = self.reset_tournament
+        self.disqualify_player_button.callback = self.disqualify_player
+        self.remove_disqualify_button.callback = self.remove_disqualify_player
 
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
@@ -98,6 +111,16 @@ class BotControlView(discord.ui.View):
         )
         view = ConfirmationView(self.tm.reset_tournament, user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def disqualify_player(self, interaction: discord.Interaction):
+        view = discord.ui.View()
+        view.add_item(DQPlayerSelectMenu(self))
+        await interaction.response.send_message(view=view, ephemeral=True)
+
+    async def remove_disqualify_player(self, interaction: discord.Interaction):
+        view = discord.ui.View()
+        view.add_item(RemoveDQPlayerSelectMenu(self))
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def update_tournament_state(self, state):
         if self.message == None:
@@ -117,6 +140,8 @@ class BotControlView(discord.ui.View):
             self.add_item(self.close_reg_button)
             self.add_item(self.start_button)
         elif state == 'active':
+            self.add_item(self.disqualify_player_button)
+            self.add_item(self.remove_disqualify_button)
             self.add_item(self.reset_button)
         elif state == 'finished':
             pass

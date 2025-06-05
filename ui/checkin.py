@@ -13,15 +13,18 @@ class CheckinView(discord.ui.View):
         self.add_item(self.checkin_button)
         
     async def check_in(self, interaction: discord.Interaction):
+        override = False
         user_id = interaction.user.id
         message = interaction.message 
         lobby = await self.lobby.get_lobby()
         
-        if user_id not in self.lobby.remaining_players:
+        user_is_to = await self.lobby.check_to_role(user_id)
+        if user_is_to:
+            override = True
+        elif user_id not in self.lobby.remaining_players:
             await interaction.response.send_message("You're not part of this match!", ephemeral=True)
             return
-        
-        if user_id in lobby['checked_in']:
+        elif user_id in lobby['checked_in']:
             await interaction.response.send_message("You've already checked in!", ephemeral=True)
             return
         
@@ -30,7 +33,7 @@ class CheckinView(discord.ui.View):
 
         await interaction.response.edit_message(embed=embed, view=self)
         
-        if len(lobby['checked_in']) == len(self.lobby.remaining_players):
+        if len(lobby['checked_in']) == len(self.lobby.remaining_players) or override == True:
             self.stop()
             await interaction.message.delete()
             await self.lobby.end_checkin()

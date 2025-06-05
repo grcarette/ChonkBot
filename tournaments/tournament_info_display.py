@@ -29,11 +29,8 @@ class TournamentInfoDisplay:
             self.message = await channel.send(view=self.info_display_view, embed=embed)
         for component in self.message.components:
             for item in component.children:
-                print(item)
                 if isinstance(item, discord.Button):
-                    print('yee')
                     if item.style == discord.ButtonStyle.link:
-                        print('yeahhh')
                         await self.add_link(item.label, item.url)
         await self.update_display()
     

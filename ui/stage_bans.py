@@ -71,7 +71,8 @@ class BanStagesButton(discord.ui.View):
         super().__init__(timeout=timeout)
         self.lobby = lobby
         self.num_stage_bans = self.calculate_num_stage_bans()
-        self.banned_stages = set()
+        self.banned_stages = []
+        self.player_bans = {}
         self.finished_users = []
         self.message = None
         
@@ -80,20 +81,29 @@ class BanStagesButton(discord.ui.View):
         self.add_item(self.stage_ban_button)
         
     async def ban_stages(self, interaction: discord.Interaction):
-        view = StageBansView(self)
-        await view.setup()
-        self.message = interaction.message
+        user_id = interaction.user.id
+        user_is_to = await self.lobby.check_to_role(user_id)
+        if user_is_to:
+            self.message = interaction.message
+            await self.message.delete()
+            await self.lobby.end_stage_bans(self.banned_stages)
+        else:
+            view = StageBansView(self)
+            await view.setup()
+            self.message = interaction.message
         await interaction.response.send_message(view=view, ephemeral=True)
         
     async def submit_player_bans(self, user, banned_stages):
-        for stage in banned_stages:
-            self.banned_stages.add(stage)
+        self.player_bans[user] = banned_stages
         self.finished_users.append(user.id)
         embed, file = await self.generate_embed()
         await self.message.edit(embed=embed, view=self, attachments=[file])
         if set(self.finished_users) == set(self.lobby.remaining_players):
             self.stop()
             await self.message.delete()
+            self.banned_stages = set(
+                stage for bans in self.player_bans.values() for stage in bans
+            )
             await self.lobby.end_stage_bans(self.banned_stages)
     
     async def generate_embed(self):
