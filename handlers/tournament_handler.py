@@ -36,7 +36,7 @@ class TournamentHandler():
         self.tournaments[event['_id']] = tournament_manager
         await tournament_manager.initialize_event()
         return tournament_manager
-        
+
     async def set_up_tournament(self, tournament):
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.create_tournament(tournament)

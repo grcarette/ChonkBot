@@ -20,7 +20,6 @@ from ui.registration_approval import RegistrationApprovalView
 
 from .match_lobby import MatchLobby
 from .tournament_control import TournamentControl
-from .bracket_handler import BracketHandler
 from.tournament_info_display import TournamentInfoDisplay
 
 import discord
@@ -39,6 +38,8 @@ class TournamentManager:
         self.match_calls = {}
         self.bot_control = None
         self.tournament_reset = False
+        self.autocall_matches = False
+        self.debug = False
         
     async def initialize_event(self):
         self.tc = TournamentControl(self)
@@ -150,11 +151,12 @@ class TournamentManager:
         guild = self.bot.guilds[0]
         category = self.get_tournament_category()
         for channel in category.channels:
-            permissions = CHANNEL_PERMISSIONS[channel.name]
-            if permissions != 'private':
-                overwrite = channel.overwrites_for(guild.default_role)
-                overwrite.view_channel = not overwrite.view_channel
-                await channel.set_permissions(guild.default_role, overwrite=overwrite)
+            if channel.name in CHANNEL_PERMISSIONS:
+                permissions = CHANNEL_PERMISSIONS[channel.name]
+                if permissions != 'private':
+                    overwrite = channel.overwrites_for(guild.default_role)
+                    overwrite.view_channel = not overwrite.view_channel
+                    await channel.set_permissions(guild.default_role, overwrite=overwrite)
                 
     async def open_registration(self):
         guild = self.bot.guild
@@ -333,6 +335,7 @@ class TournamentManager:
         tournament_category = self.get_tournament_category()
         channel = discord.utils.get(tournament_category.channels, name='match-calling')
         await channel.purge(limit=None)
+        self.match_calls.clear()
     
     async def call_matches(self):
         tournament = await self.get_tournament()
@@ -344,9 +347,16 @@ class TournamentManager:
             match_data = await self.parse_match_data(match)
             match_exists = await self.bot.dh.find_match(match_data['match_id'])
             if not match_exists and not match_data['match_id'] in self.match_calls:
-                await self.add_match_call(match_data)
+                if self.autocall_matches:
+                    await self.call_match(match_data)
+                else:
+                    await self.add_match_call(match_data)
+            else:
+                if match_exists and not match_data['match_id'] in self.match_calls:
+                    if match_exists['state'] == 'held':
+                        await self.add_match_call(match_data, match_held=True)
 
-    async def add_match_call(self, match_data):
+    async def add_match_call(self, match_data, match_held=False):
         category = self.get_tournament_category()
         channel = discord.utils.get(category.channels, name='match-calling')
         tournament = await self.get_tournament()
@@ -367,9 +377,10 @@ class TournamentManager:
             description = f"{waiting_since}",
             color  = color
         )
-        view = MatchCallView(self, match_data)
-        match_call = await channel.send(embed=embed, view=view)
-        self.match_calls[match_data['match_id']] = match_call
+        match_call_view = MatchCallView(self, match_data, match_held)
+        match_call_message = await channel.send(embed=embed, view=match_call_view)
+        await match_call_view.add_message(match_call_message)
+        self.match_calls[match_data['match_id']] = match_call_message
         
     async def get_lobby_name(self, match_data):
         player_1, player_2 = await self.get_players_from_match(match_data)
@@ -381,7 +392,7 @@ class TournamentManager:
         lobby_name = f"{bracket_tag}r{round}-{player_1['name']} vs {player_2['name']}"
         return lobby_name
         
-    async def call_match(self, match_data):
+    async def call_match(self, match_data, hold_match=False):
         guild = self.guild
         tournament = await self.get_tournament()
         player_1, player_2 = await self.get_players_from_match(match_data)
@@ -403,13 +414,19 @@ class TournamentManager:
             guild=guild,
         )
         self.lobbies[match_data['match_id']] = match_lobby
-        await self.match_calls[match_data['match_id']].delete()
+        if match_data['match_id'] in self.match_calls and not hold_match:
+            await self.match_calls[match_data['match_id']].delete()
         if player_1['user_id'] in tournament['dqs']:
             await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
         elif player_2['user_id'] in tournament['dqs']:
             await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
         else:
-            await match_lobby.initialize_match()
+            await match_lobby.initialize_match(hold_match)
+
+    async def start_held_match(self, match_data):
+        await self.lobbies[match_data['match_id']].start_match()
+        if match_data['match_id'] in self.match_calls:
+            await self.match_calls[match_data['match_id']].delete()
         
     async def get_players_from_match(self, match_data):
         player_1_id = match_data['player_1']

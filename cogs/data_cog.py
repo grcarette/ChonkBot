@@ -280,12 +280,6 @@ class DataCog(commands.Cog):
             )
             await channel.send(message_content)
     
-    @commands.has_role('Moderator')    
-    @commands.command(name='add_level')
-    async def add_level(self, ctx, level_name: str, creator: str, code: str, length: str, multiple_paths: str, includes_hazards: str, imgur: str):
-        channel = ctx.channel
-        new_level = await self.bot.dh.add_legal_stage(level_name, creator, code, length, multiple_paths, includes_hazards, imgur)
-        message = await self.bot.mh.send_level_message(new_level, channel)
 
     async def send_closest_player(self, player_name, channel):
         try: 

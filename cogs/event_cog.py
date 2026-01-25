@@ -156,16 +156,17 @@ class EventCog(commands.Cog):
             )
             await ctx.send(message_content)
 
-    @commands.has_role('Moderator')
+    @commands.has_role('Event Organizer')
     @commands.command(name='register_role')
     async def register_role(self, ctx):
         category_id = ctx.channel.category_id
         await self.bot.th.register_role(category_id)
             
-    @commands.has_role('Moderator')
+    @commands.has_role('Event Organizer')
     @commands.command(name='next_round')
     async def next_round(self, ctx):
         await self.bot.tsch.start_next_round()
+
         
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

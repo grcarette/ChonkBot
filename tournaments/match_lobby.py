@@ -8,6 +8,7 @@ from ui.match_report import MatchReportButton
 
 from utils.messages import get_mentions
 from utils.emojis import INDICATOR_EMOJIS
+from utils.discord_preset_colors import get_random_color
 
 class MatchLobby:
     def __init__(self, *args, **kwargs):
@@ -53,7 +54,6 @@ class MatchLobby:
         lobby = await self.get_lobby()
         self.remaining_players = set([player for player in self.players if player not in lobby['results']])
     
-            
         return self
 
     async def setup_lobby(self):
@@ -77,16 +77,26 @@ class MatchLobby:
         self.channel = channel
         await self.channel.send('confirm')
         
-    async def initialize_match(self):
-        await self.create_channel()
-        await self.start_match()
+    async def initialize_match(self, hold_match=False):
+        await self.create_channel(hold_match)
+        if not hold_match:
+            await self.start_match()
+        else:
+            await self.dh.update_lobby_state(self.match_id, 'held')
         
     async def start_match(self):
         lobby = await self.get_lobby()
         self.remaining_players = [player for player in self.players if player not in lobby['results']]
+        await self.purge_bot_messages()
         await self.start_checkin()
+
+    async def purge_bot_messages(self):
+        def is_bot_message(message: discord.Message):
+            return message.author == self.channel.guild.me
+
+        deleted = await self.channel.purge(limit=None, check=is_bot_message)
         
-    async def create_channel(self):
+    async def create_channel(self, hold_match):
         organizer_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
         overwrites = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -96,9 +106,22 @@ class MatchLobby:
             for player in self.players:
                 member = discord.utils.get(self.guild.members, id=player)
                 overwrites[member] = discord.PermissionOverwrite(read_messages=True)
-            
-        self.channel = await self.guild.create_text_channel(name=self.lobby_name, overwrites=overwrites, category=None)
-        await self.dh.add_channel_to_lobby(self.match_id, self.channel, )
+        if hold_match:
+            channel_name = f"{INDICATOR_EMOJIS['hourglass']} {self.lobby_name}"
+        else:
+            channel_name = self.lobby_name
+        self.channel = await self.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=None)
+        await self.dh.add_channel_to_lobby(self.match_id, self.channel)
+
+        message_content = (
+            "Your match is ready, but it is currently being held until further notice. Please be on standby until your match is called."
+        )
+        embed = discord.Embed(
+            title="Match Held",
+            description=message_content,
+            color=get_random_color()
+        )
+        await self.channel.send(embed=embed)
         
     async def start_checkin(self):
         await self.dh.update_lobby_state(self.match_id, 'checkin')
@@ -141,7 +164,7 @@ class MatchLobby:
         message_content = (
             f"You will be playing on **{stage['name']} - {stage['code']}**\n"
             f"Sort out among yourselves who will host the lobby. Make sure you are playing in party mode with the tournament ruleset.\n\n"
-            f"When the match is over, report the winner of the match with the dropdown menu below."
+            f"When the match is over, both players must report the winner of the match with the dropdown menu below."
         )
         view = MatchReportButton(self)
         embed = discord.Embed(

@@ -30,6 +30,13 @@ class StageBannerGenerator:
         self.image_handler = ImageHandler()
 
     def generate_banner(self, stage_data, tournament):
+        max_per_row = 3
+        stage_width = self.banner_width // max_per_row
+
+        num_stages = len(stage_data)
+        num_rows = (num_stages + max_per_row - 1) // max_per_row
+        self.banner_height = self.row_height * num_rows
+
         file_name = f"{tournament['name']}_banner.jpg"
         output_path = os.path.join(self.banner_base_path, file_name)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -42,19 +49,21 @@ class StageBannerGenerator:
         except IOError:
             font = ImageFont.load_default()
 
-        layout = [stage_data[:3], stage_data[3:]]
-        max_per_row = 3
-        stage_width = self.banner_width // max_per_row
-
-        for row_index, row_stages in enumerate(layout):
-            y_offset = row_index * self.row_height
+        for row_index in range(num_rows):
+            row_start = row_index * max_per_row
+            row_end = min(row_start + max_per_row, num_stages)
+            row_stages = stage_data[row_start:row_end]
             stage_count = len(row_stages)
 
-            # Fill side margins for short rows with black
+            y_offset = row_index * self.row_height
+
+            # Fill side margins for short rows
             if stage_count < max_per_row:
                 margin_width = (self.banner_width - (stage_width * stage_count)) // 2
                 draw.rectangle([0, y_offset, margin_width, y_offset + self.row_height], fill="black")
                 draw.rectangle([self.banner_width - margin_width, y_offset, self.banner_width, y_offset + self.row_height], fill="black")
+            else:
+                margin_width = 0
 
             left_margin = (self.banner_width - (stage_width * stage_count)) // 2
 
@@ -68,14 +77,14 @@ class StageBannerGenerator:
 
                 banner.paste(img, (x_offset, y_image_offset))
 
-                # Draw border around the image
+                # Draw border
                 draw.rectangle(
                     [x_offset, y_image_offset, x_offset + stage_width, y_image_offset + self.stage_height],
                     outline=self.border_color,
                     width=self.border_width
                 )
 
-                # Draw text background box (semi-transparent black rectangle)
+                # Text background
                 text_bg_box = [
                     x_offset,
                     y_offset,
@@ -84,7 +93,7 @@ class StageBannerGenerator:
                 ]
                 draw.rectangle(text_bg_box, fill=(0, 0, 0, 128))
 
-                # Draw text centered
+                # Centered text
                 text = stage['name']
                 text_width = draw.textlength(text, font=font)
                 draw.text(
@@ -96,7 +105,7 @@ class StageBannerGenerator:
 
         banner.save(output_path)
         return output_path
-
+        
     def resize_and_crop(self, img, target_size):
         img_ratio = img.width / img.height
         target_ratio = target_size[0] / target_size[1]

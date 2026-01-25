@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
+
 class ImgurProcessor:
     def __init__(self):
-        self.client_id = "YOUR_IMGUR_CLIENT_ID"
+        self.client_id = IMGUR_CLIENT_ID
 
     def get_imgur_image_id(self, url):
         return url.split('-')[-1]

@@ -28,12 +28,17 @@ class CheckinView(discord.ui.View):
             await interaction.response.send_message("You've already checked in!", ephemeral=True)
             return
         
-        lobby = await self.lobby.checkin_player(user_id)
-        embed = await self.generate_embed()
+        if not override:
+            lobby = await self.lobby.checkin_player(user_id)
+            embed = await self.generate_embed()
+        else:
+            for player in self.lobby.remaining_players:
+                lobby = await self.lobby.checkin_player(player)
+            embed = await self.generate_embed()
 
         await interaction.response.edit_message(embed=embed, view=self)
-        
-        if len(lobby['checked_in']) == len(self.lobby.remaining_players) or override == True:
+
+        if len(lobby['checked_in']) == len(self.lobby.remaining_players):
             self.stop()
             await interaction.message.delete()
             await self.lobby.end_checkin()

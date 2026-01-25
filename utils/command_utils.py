@@ -57,14 +57,6 @@ COMMAND_DICT = {
             f'Usage: `!leaderboard <timeframe: all, season, year, custom> <if custom: start date (YYYY-MM-DD),> <if custom: end date (YYYY-MM-DD)>`'),
         'tag': 'player statistics'
     },
-    'add_level': { 
-        'usage': (
-            f'`add_level`\n'
-            f'Description: Adds a level to the level database\n'
-            f'Permissions: Only Bojack\n'
-            f'Usage: `!add_level <level name> <creator> <code> <length> <multiple paths> <includes hazards> <imgur>`'),
-        'tag': 'database'
-    },
     'register_player': { 
         'usage': (
             f'`register`\n'

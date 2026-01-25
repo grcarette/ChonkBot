@@ -44,6 +44,8 @@ INDICATOR_EMOJIS = {
     'gear': '⚙️',
     'clock': '🕓',
     'paint': '🎨',
+    'pause': '⏸️',
+    'hourglass': '⌛',
 }
 
 RESULT_EMOJIS = {
