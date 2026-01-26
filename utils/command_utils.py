@@ -24,30 +24,30 @@ COMMAND_DICT = {
             f'Usage: `!usage <command name>`'),
         'tag': 'info'
     },
-    'get_player_stats': { 
-        'usage': (
-            f'`stats`\n'
-            f'Description: Returns the tournament stats of the specified player\n'
-            f'Permissions: Everyone\n'
-            f'Usage: `!stats <player name>`'),
-        'tag': 'player statistics'
-    },
-    'get_head_to_head': { 
-        'usage': (
-            f'`h2h`\n'
-            f'Description: Returns the head to head data for the specified matchup\n'
-            f'Permissions: Everyone\n'
-            f'Usage: `!h2h <# of sets/"all">` <player1 name>-<player2 name>'),
-        'tag': 'player statistics'
-    },
-    'get_leaderboard': { 
-        'usage': (
-            f'`leaderboard`\n'
-            f'Description: Returns the top 10 win rates of players who have at least 16 sets played during a specified timeframe\n'
-            f'Permissions: Everyone\n'
-            f'Usage: `!leaderboard <timeframe: all, season, year, custom> <if custom: start date (YYYY-MM-DD),> <if custom: end date (YYYY-MM-DD)>`'),
-        'tag': 'player statistics'
-    },
+    # 'get_player_stats': { 
+    #     'usage': (
+    #         f'`stats`\n'
+    #         f'Description: Returns the tournament stats of the specified player\n'
+    #         f'Permissions: Everyone\n'
+    #         f'Usage: `!stats <player name>`'),
+    #     'tag': 'player statistics'
+    # },
+    # 'get_head_to_head': { 
+    #     'usage': (
+    #         f'`h2h`\n'
+    #         f'Description: Returns the head to head data for the specified matchup\n'
+    #         f'Permissions: Everyone\n'
+    #         f'Usage: `!h2h <# of sets/"all">` <player1 name>-<player2 name>'),
+    #     'tag': 'player statistics'
+    # },
+    # 'get_leaderboard': { 
+    #     'usage': (
+    #         f'`leaderboard`\n'
+    #         f'Description: Returns the top 10 win rates of players who have at least 16 sets played during a specified timeframe\n'
+    #         f'Permissions: Everyone\n'
+    #         f'Usage: `!leaderboard <timeframe: all, season, year, custom> <if custom: start date (YYYY-MM-DD),> <if custom: end date (YYYY-MM-DD)>`'),
+    #     'tag': 'player statistics'
+    # },
     'register_player': { 
         'usage': (
             f'`register`\n'
