@@ -37,7 +37,7 @@ class StageBannerGenerator:
         num_rows = (num_stages + max_per_row - 1) // max_per_row
         self.banner_height = self.row_height * num_rows
 
-        file_name = f"{tournament['name']}_banner.jpg"
+        file_name = f"{tournament['category_id']}_banner.jpg"
         output_path = os.path.join(self.banner_base_path, file_name)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 

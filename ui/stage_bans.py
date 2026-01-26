@@ -109,7 +109,7 @@ class BanStagesButton(discord.ui.View):
     
     async def generate_embed(self):
         tournament = await self.lobby.tournament_manager.get_tournament()
-        file_name = f"{tournament['name']}_banner.jpg"
+        file_name = f"{tournament['category_id']}_banner.jpg"
         image_path = await self.get_banner_path(tournament, file_name)
         remaining_ids = [pid for pid in self.lobby.remaining_players if pid not in self.finished_users]
         mentions = get_mentions(remaining_ids)
