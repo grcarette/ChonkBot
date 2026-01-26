@@ -10,10 +10,5 @@ class DataHandlerBase:
         self.tournament_collection = self.db['tournaments']
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
-        
-        self.tdb = client['UCHTournamentData']
-        self.match_collection = self.tdb['matches']
-        self.player_collection = self.tdb['players']
-        self.tournament_data_collection = self.tdb['tournaments']
 
         self.level_api = LevelAPI()

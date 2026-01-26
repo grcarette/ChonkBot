@@ -48,46 +48,46 @@ class UserMethodsMixin:
                 return discord_id
         return None
     
-    async def link_user_to_player(self, user, player_name): 
-        player = await self.lookup_player(player_name)
-        if player:
-            query = {
-                'user_id': user.id
-            }
-            user_exists = await self.user_collection.find_one(query)
-            if not user_exists:
-                await self.register_user(user)
-            update = {
-                '$set':{
-                    'player_id': player['_id']
-                }
-            }
-            result = await self.user_collection.update_one(query, update)
-            return result
-        else:
-            raise PlayerNotFoundError(player_name, 'link_user_to_player')
+    # async def link_user_to_player(self, user, player_name): 
+    #     player = await self.lookup_player(player_name)
+    #     if player:
+    #         query = {
+    #             'user_id': user.id
+    #         }
+    #         user_exists = await self.user_collection.find_one(query)
+    #         if not user_exists:
+    #             await self.register_user(user)
+    #         update = {
+    #             '$set':{
+    #                 'player_id': player['_id']
+    #             }
+    #         }
+    #         result = await self.user_collection.update_one(query, update)
+    #         return result
+    #     else:
+    #         raise PlayerNotFoundError(player_name, 'link_user_to_player')
         
-    async def change_name(self, user_id, name):
-        name_exists = await self.check_unique_name(name)
-        if name_exists:
-            raise NameNotUniqueError(name, 'change_name')
-        user = await self.get_user(user_id=user_id)
-        if 'player_id' in user:
-            query = {
-                '_id': user['player_id']
-            }
-            player = await self.player_collection.find_one(query)
-            update = {
-                '$set': {
-                    'name': name
-                },
-                '$addToSet': {
-                    'aliases': player['name']
-                }
-            }
-            result = await self.player_collection.update_one(query, update)
-            return result
+    # async def change_name(self, user_id, name):
+    #     name_exists = await self.check_unique_name(name)
+    #     if name_exists:
+    #         raise NameNotUniqueError(name, 'change_name')
+    #     user = await self.get_user(user_id=user_id)
+    #     if 'player_id' in user:
+    #         query = {
+    #             '_id': user['player_id']
+    #         }
+    #         player = await self.player_collection.find_one(query)
+    #         update = {
+    #             '$set': {
+    #                 'name': name
+    #             },
+    #             '$addToSet': {
+    #                 'aliases': player['name']
+    #             }
+    #         }
+    #         result = await self.player_collection.update_one(query, update)
+    #         return result
 
-        else:
-            raise PlayerNotRegisteredError
+    #     else:
+    #         raise PlayerNotRegisteredError
         
