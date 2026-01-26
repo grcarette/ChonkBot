@@ -44,7 +44,7 @@ class MatchLobby:
         self.channel = None
         
         self.tournament = await self.dh.get_tournament_by_id(self.tournament_id)
-        self.override_role = f"{self.tournament['name']} TO"
+        self.organizer_role = f"{self.tournament['name']} TO"
         
         lobby_exists = await self.get_lobby()
         if lobby_exists:
