@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from data import DataHandler
 from handlers.tournament_handler import TournamentHandler
 from handlers.reaction_handler import ReactionHandler
-from handlers.tsc_handler import TSCHandler
 
 from ui.register_control import RegisterControlView
 from ui.bot_control import BotControlView
@@ -20,9 +19,8 @@ class ChonkBot(commands.Bot):
         self.dh = DataHandler()
         self.th = TournamentHandler(self)
         self.rh = ReactionHandler(self)
-        self.tsch = TSCHandler(self)
         
-        self.debug = True
+        self.debug = False
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))

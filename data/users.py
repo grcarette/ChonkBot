@@ -3,32 +3,6 @@ from utils.errors import *
 class UserMethodsMixin:
     pass
 
-    async def get_user_map_preference(self, discord_user, map_code):
-        is_favorite = False
-        is_blocked = False
-        rating = None
-        query = {
-            'user_id': discord_user.id
-        }
-        user = await self.user_collection.find_one(query)
-        if not user:
-            await self.register_user(discord_user)
-            user = await self.user_collection.find_one(query)
-            
-        if map_code in user['favorite_maps']:
-            is_favorite = True
-        if map_code in user['blocked_maps']:
-            is_blocked = True
-        
-        rating_query = {
-            'user_id': user['user_id'],
-            'map_code': map_code
-        }
-        user_rating = await self.ratings_collection.find_one(rating_query)
-        if user_rating:
-            rating = user_rating['rating']
-        return is_favorite, is_blocked, rating
-    
     async def register_user(self, user): 
         query = {
             'user_id': user.id
@@ -61,27 +35,6 @@ class UserMethodsMixin:
             if player_id == challonge_id:
                 return discord_id
         return None
-    
-    async def update_map_preference(self, user, map_code, category, reaction_added): 
-        if reaction_added:
-            update_type = "$addToSet"
-        else:
-            update_type = "$pull"
-        if not category == 'favorite_maps' and not category == 'blocked_maps':
-            return
-        query = {
-            'user_id': user.id
-        }
-        user_exists = await self.user_collection.find_one(query)
-        if not user_exists:
-            await self.register_user(user)
-        update = {
-            f'{update_type}': {
-                f'{category}': map_code
-            }
-        }
-        result = await self.user_collection.update_one(query, update)
-        return result
     
     async def link_user_to_player(self, user, player_name): 
         player = await self.lookup_player(player_name)
