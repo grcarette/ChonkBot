@@ -2,6 +2,17 @@ import discord
 
 DEFAULT_STAGE_NUMBER = 5
 
+STAFF_PERMISSIONS = discord.PermissionOverwrite(
+    view_channel=True,
+    send_messages=True,
+    manage_messages=True,
+    embed_links=True,
+    attach_files=True,
+    read_message_history=True,
+    add_reactions=True,
+    use_external_emojis=True
+)
+
 CHANNEL_PERMISSIONS = {
     'event-info': 'read_only',
     'event-updates': 'read_only',
@@ -25,9 +36,11 @@ NONDEFAULT_CHANNELS = [
     'registration-approval'
 ]
 
-async def create_channel(guild, tournament_category, hide_channel, channel_name, channel_overwrites):
+async def create_channel(guild, tournament_category, hide_channel, channel_name, channel_overwrites, organizer_role=None):
     overwrites = {}
     view_channel = False
+    if organizer_role:
+        overwrites[organizer_role] = STAFF_PERMISSIONS
     if channel_overwrites == 'read_only':
         if not hide_channel:
             view_channel = True

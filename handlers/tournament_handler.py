@@ -51,9 +51,19 @@ class TournamentHandler():
             await tournament_organizer.add_roles(organizer_role)
         
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False)
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            organizer_role: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                manage_messages=True,
+                embed_links=True,
+                attach_files=True,
+                read_message_history=True,
+                add_reactions=True,
+                use_external_emojis=True
+            )
         }
-        
+
         tournament_category = await guild.create_category(
             f"{tournament['name']}", 
             overwrites=overwrites
@@ -72,7 +82,8 @@ class TournamentHandler():
                 tournament_category=tournament_category, 
                 hide_channel=True, 
                 channel_name=f'{channel}', 
-                channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}']
+                channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}'],
+                organizer_role=organizer_role
             )
         
         await self.post_stages(tournament['name'], channel_dict['stagelist'])
