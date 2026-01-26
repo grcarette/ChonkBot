@@ -151,7 +151,6 @@ class TournamentHandler():
                 if str(member.id) in tournament['entrants']:
                     print('reg')
 
-
     def get_tournament_category(self, category_id):
         guild = self.bot.guilds[0]
         category = discord.utils.get(guild.categories, id=category_id)

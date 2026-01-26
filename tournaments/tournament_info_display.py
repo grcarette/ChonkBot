@@ -5,6 +5,7 @@ from io import BytesIO
 
 from utils.discord_preset_colors import get_random_color
 from utils.color_utils import discord_color_from_hex
+from utils.get_bracket_link import get_bracket_link
 
 from ui.config_control.info_display import InfoDisplayView
 from ui.link_view import LinkView
@@ -27,6 +28,7 @@ class TournamentInfoDisplay:
             channel = await self.tm.get_channel('event-info')
             embed = await self.generate_embed()
             self.message = await channel.send(view=self.info_display_view, embed=embed)
+            await self.add_link(link_label="Bracket", link_url=await get_bracket_link(self.tm.tournament['challonge_data']['url']))
         for component in self.message.components:
             for item in component.children:
                 if isinstance(item, discord.Button):

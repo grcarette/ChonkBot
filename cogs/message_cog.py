@@ -4,9 +4,6 @@ from utils.reaction_utils import create_reaction_flag
 from utils.command_utils import get_usage_message, COMMAND_DICT
 from utils.errors import NoStagesFoundError
 
-from ui.random_level import RandomLevelView
-from ui.level_submission import SubmitLevelButton
-
 DEFAULT_RANDOM_NUMBER = 1
 MAX_RANDOM_NUMBER = 5
 
@@ -14,13 +11,6 @@ class MessageCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         
-
-    @commands.command(name="helpp")
-    async def helpp(self, ctx):
-        message_content = (
-            
-        )
-                
     @commands.command(name="command_usage", aliases=['usage'])
     async def command_usage(self, ctx, command_name):
         channel = ctx.channel
@@ -61,21 +51,5 @@ class MessageCog(commands.Cog):
 
         await ctx.send(embed=embed)
         
-                
-    @commands.command(name="random_level", aliases=['random'])
-    async def random(self, ctx):
-        channel = ctx.channel
-        view = RandomLevelView(self.bot)
-        await channel.send(view=view)
-        
-    @commands.has_role('Moderator')
-    @commands.command(name="submit_level")
-    async def submit_level(self, ctx):
-        channel = ctx.channel
-        view = SubmitLevelButton(self.bot)
-        await channel.send(view=view)
-    
-                
-
 async def setup(bot):
     await bot.add_cog(MessageCog(bot))

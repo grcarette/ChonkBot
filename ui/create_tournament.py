@@ -45,8 +45,8 @@ class TournamentSettingsView(discord.ui.View):
         options=[
             discord.SelectOption(label="Single Elimination", value="single elimination"),
             discord.SelectOption(label="Double Elimination", value="double elimination"),
-            discord.SelectOption(label="Swiss", value="swiss"),
-            discord.SelectOption(label="FFA Filter", value="FFA Filter"),
+            discord.SelectOption(label="Swiss (not currently supported)", value="swiss"),
+            discord.SelectOption(label="FFA Filter (not currently supported)", value="FFA Filter"),
         ],
         row=1
     )

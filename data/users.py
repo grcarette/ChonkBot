@@ -3,8 +3,8 @@ from utils.errors import *
 class UserMethodsMixin:
     pass
 
-    async def register_user(self, user): 
-        if self.bot.debug:
+    async def register_user(self, user, debug=False): 
+        if debug:
             user_data = {
                 'user_id': user,
                 'username': f"debug_user_{user}",

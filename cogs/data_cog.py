@@ -85,133 +85,133 @@ class DataCog(commands.Cog):
             )
             await channel.send(message_content)
         
-    @commands.command(name='get_player_stats', aliases=['stats', 'get player stats', 'get stats'])
-    async def get_player_stats(self, ctx, *, player_name):
-        if ctx.channel.name != "temporary-bot-testing":
-            return
-        channel = ctx.channel
-        player_stats = await self.bot.dh.get_player_stats(player_name)
+    # @commands.command(name='get_player_stats', aliases=['stats', 'get player stats', 'get stats'])
+    # async def get_player_stats(self, ctx, *, player_name):
+    #     if ctx.channel.name != "temporary-bot-testing":
+    #         return
+    #     channel = ctx.channel
+    #     player_stats = await self.bot.dh.get_player_stats(player_name)
 
-        best_placements = '\n'.join(player_stats['placements'])
-        if player_stats['bracket_demon'] == None:
-            bracket_demon_message = (
-                "\n**Bracket Demon:** `Sample size too small`"
-            )
-        else:
-            bracket_demon_message = (
-                f"\n**Bracket Demon: **" 
-                f"`{player_stats['bracket_demon']['name']}`\n"
-                f"Wins: {player_stats['bracket_demon']['wins']} - "
-                f"Losses: {player_stats['bracket_demon']['losses']}\n"
-            )
-        if player_stats['rival'] == None:
-            rival_message = (
-                "\n**Rival:** `Sample size too small`\n"
-            )
-        else:
-            rival_message = (
-                f"\n**Rival: **" 
-                f"`{player_stats['rival']['name']}`\n"
-                f"Wins: {player_stats['rival']['wins']} - "
-                f"Losses: {player_stats['rival']['losses']}\n"
-            )
-        message_content = (
-            f"## {player_name}"
-            f"\n**Lifetime:**\n"
-            f"Wins: {player_stats['lifetime']['wins']} - "
-            f"Losses: {player_stats['lifetime']['losses']} - "
-            f"Winrate: {player_stats['lifetime']['winrate']}\n"
+    #     best_placements = '\n'.join(player_stats['placements'])
+    #     if player_stats['bracket_demon'] == None:
+    #         bracket_demon_message = (
+    #             "\n**Bracket Demon:** `Sample size too small`"
+    #         )
+    #     else:
+    #         bracket_demon_message = (
+    #             f"\n**Bracket Demon: **" 
+    #             f"`{player_stats['bracket_demon']['name']}`\n"
+    #             f"Wins: {player_stats['bracket_demon']['wins']} - "
+    #             f"Losses: {player_stats['bracket_demon']['losses']}\n"
+    #         )
+    #     if player_stats['rival'] == None:
+    #         rival_message = (
+    #             "\n**Rival:** `Sample size too small`\n"
+    #         )
+    #     else:
+    #         rival_message = (
+    #             f"\n**Rival: **" 
+    #             f"`{player_stats['rival']['name']}`\n"
+    #             f"Wins: {player_stats['rival']['wins']} - "
+    #             f"Losses: {player_stats['rival']['losses']}\n"
+    #         )
+    #     message_content = (
+    #         f"## {player_name}"
+    #         f"\n**Lifetime:**\n"
+    #         f"Wins: {player_stats['lifetime']['wins']} - "
+    #         f"Losses: {player_stats['lifetime']['losses']} - "
+    #         f"Winrate: {player_stats['lifetime']['winrate']}\n"
             
-            f"\n**This Season:**\n"
-            f"Wins: {player_stats['season']['wins']} - "
-            f"Losses: {player_stats['season']['losses']} - "
-            f"Winrate: {player_stats['season']['winrate']}\n"
+    #         f"\n**This Season:**\n"
+    #         f"Wins: {player_stats['season']['wins']} - "
+    #         f"Losses: {player_stats['season']['losses']} - "
+    #         f"Winrate: {player_stats['season']['winrate']}\n"
             
-            f'{bracket_demon_message}'
+    #         f'{bracket_demon_message}'
 
-            f'{rival_message}'
+    #         f'{rival_message}'
             
-            f"\n**Best Placements:**\n"
-            f'{best_placements}\n'
-        )
-        await channel.send(message_content)
+    #         f"\n**Best Placements:**\n"
+    #         f'{best_placements}\n'
+    #     )
+    #     await channel.send(message_content)
 
-    @get_player_stats.error
-    async def get_player_stats_error(self, ctx, error):
-        channel = ctx.channel
-        if isinstance(error, commands.MissingRequiredArgument):
-            message_content = (
-                f'Error: Missing argument `{error.param.name}`\n'
-                f'Usage: `!stats <player_name>`'
-            )
-            await channel.send(message_content)
-        elif isinstance(error.original, PlayerNotFoundError):
-            await self.send_closest_player(error.original.player_name, channel)
-        else:
-            print(error)
+    # @get_player_stats.error
+    # async def get_player_stats_error(self, ctx, error):
+    #     channel = ctx.channel
+    #     if isinstance(error, commands.MissingRequiredArgument):
+    #         message_content = (
+    #             f'Error: Missing argument `{error.param.name}`\n'
+    #             f'Usage: `!stats <player_name>`'
+    #         )
+    #         await channel.send(message_content)
+    #     elif isinstance(error.original, PlayerNotFoundError):
+    #         await self.send_closest_player(error.original.player_name, channel)
+    #     else:
+    #         print(error)
             
-    @commands.command(name='get_head_to_head', aliases=['h2h', 'headtohead', 'geth2h'])
-    async def get_head_to_head(self, ctx, set_limit: str="5", *, players: str):
-        expected_length = 2
-        players = players.split('-')
-        if len(players) != expected_length:
-            raise MissingH2HParams
-        player1 = players[0]
-        player2 = players[1]
-        channel = ctx.channel
+    # @commands.command(name='get_head_to_head', aliases=['h2h', 'headtohead', 'geth2h'])
+    # async def get_head_to_head(self, ctx, set_limit: str="5", *, players: str):
+    #     expected_length = 2
+    #     players = players.split('-')
+    #     if len(players) != expected_length:
+    #         raise MissingH2HParams
+    #     player1 = players[0]
+    #     player2 = players[1]
+    #     channel = ctx.channel
 
-        player1_wins, player2_wins, recent_matches = await self.bot.dh.get_head_to_head(player1, player2, set_limit)
-        message_content = (
-            f'## {player1} {player1_wins}-{player2_wins} {player2}\n'
-            f'{recent_matches}'
-        )
-        message = await channel.send(message_content)
+    #     player1_wins, player2_wins, recent_matches = await self.bot.dh.get_head_to_head(player1, player2, set_limit)
+    #     message_content = (
+    #         f'## {player1} {player1_wins}-{player2_wins} {player2}\n'
+    #         f'{recent_matches}'
+    #     )
+    #     message = await channel.send(message_content)
 
-    @get_head_to_head.error
-    async def get_head_to_head_error(self, ctx, error):
-        channel = ctx.channel
-        if isinstance(error, commands.MissingRequiredArgument):
-            message_content = (
-                f'Error: Missing arguments\n'
-                f'Usage: `!h2h <# of sets/"all"> <player1_name>-<player2_name>`'
-            )
-            await channel.send(message_content)
-        elif isinstance(error.original, MissingH2HParams):
-            message_content = (
-                f'Error: Missing arguments\n'
-                f'Usage: `!h2h <# of sets/"all"> <player1_name>-<player2_name>`'
-            )
-            await channel.send(message_content)
-        elif isinstance(error.original, PlayerNotFoundError):
-            await self.send_closest_player(error.original.player_name, channel)
-        elif isinstance(error.original, ValueError):
-            message_content = (
-                f'Error: Invalid number of sets provided. Please provide a valid integer or "all"'
-            )
-            await channel.send(message_content)
-        else:
-            print(error)
+    # @get_head_to_head.error
+    # async def get_head_to_head_error(self, ctx, error):
+    #     channel = ctx.channel
+    #     if isinstance(error, commands.MissingRequiredArgument):
+    #         message_content = (
+    #             f'Error: Missing arguments\n'
+    #             f'Usage: `!h2h <# of sets/"all"> <player1_name>-<player2_name>`'
+    #         )
+    #         await channel.send(message_content)
+    #     elif isinstance(error.original, MissingH2HParams):
+    #         message_content = (
+    #             f'Error: Missing arguments\n'
+    #             f'Usage: `!h2h <# of sets/"all"> <player1_name>-<player2_name>`'
+    #         )
+    #         await channel.send(message_content)
+    #     elif isinstance(error.original, PlayerNotFoundError):
+    #         await self.send_closest_player(error.original.player_name, channel)
+    #     elif isinstance(error.original, ValueError):
+    #         message_content = (
+    #             f'Error: Invalid number of sets provided. Please provide a valid integer or "all"'
+    #         )
+    #         await channel.send(message_content)
+    #     else:
+    #         print(error)
             
-    @commands.command(name='get_leaderboard', aliases=['leaderboard'])
-    async def get_leaderboard(self, ctx, timeframe: str='False', start_timestamp: str=None, end_timestamp: str=None):
-        if timeframe.lower() == 'custom':
-            if not start_timestamp or not end_timestamp:
-                return
-            try: 
-                start_timestamp = datetime.strptime(start_timestamp, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                end_timestamp = datetime.strptime(end_timestamp, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            except: 
-                return
-        channel = ctx.channel
-        leaderboard = await self.bot.dh.get_leaderboard(timeframe, start_timestamp, end_timestamp)
-        message_content = ''
-        for i, player in enumerate(leaderboard):
-            line_content = (
-                f"**{i+1}: {player['name']}**\n"
-                f"Wins: {player['wins']} Losses: {player['losses']} Winrate: {player['winrate']}\n"
-            )
-            message_content += line_content
-        await channel.send(message_content)
+    # @commands.command(name='get_leaderboard', aliases=['leaderboard'])
+    # async def get_leaderboard(self, ctx, timeframe: str='False', start_timestamp: str=None, end_timestamp: str=None):
+    #     if timeframe.lower() == 'custom':
+    #         if not start_timestamp or not end_timestamp:
+    #             return
+    #         try: 
+    #             start_timestamp = datetime.strptime(start_timestamp, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    #             end_timestamp = datetime.strptime(end_timestamp, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    #         except: 
+    #             return
+    #     channel = ctx.channel
+    #     leaderboard = await self.bot.dh.get_leaderboard(timeframe, start_timestamp, end_timestamp)
+    #     message_content = ''
+    #     for i, player in enumerate(leaderboard):
+    #         line_content = (
+    #             f"**{i+1}: {player['name']}**\n"
+    #             f"Wins: {player['wins']} Losses: {player['losses']} Winrate: {player['winrate']}\n"
+    #         )
+    #         message_content += line_content
+    #     await channel.send(message_content)
             
     @commands.command(name='change_name')
     async def change_name(self, ctx, name: str):

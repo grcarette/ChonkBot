@@ -39,12 +39,10 @@ class TournamentManager:
         self.bot_control = None
         self.tournament_reset = False
         self.autocall_matches = False
-        self.debug = False
-        
+        if self.tournament['name'] == 'test tournament':
+            self.debug = True
+
     async def initialize_event(self):
-        self.tc = TournamentControl(self)
-        await self.tc.initialize_controls()
-        
         tournament = await self.get_tournament()
         if 'challonge_data' in tournament:
             self.ch = ChallongeHandler(tournament['challonge_data']['url'])
@@ -60,6 +58,9 @@ class TournamentManager:
             tournament_id = challonge_tournament['id']
             await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
             
+        self.tc = TournamentControl(self)
+        await self.tc.initialize_controls()
+
         active_lobbies = await self.bot.dh.get_active_lobbies(self.tournament['_id'])
         for lobby in active_lobbies:
             match_lobby = await MatchLobby.create(
@@ -146,7 +147,7 @@ class TournamentManager:
         return True
             
     async def publish_tournament(self):
-        if self.bot.debug == True:
+        if self.debug == True:
             return
         guild = self.bot.guilds[0]
         category = self.get_tournament_category()
@@ -164,7 +165,7 @@ class TournamentManager:
         
         register_channel = await self.get_channel('register')
 
-        if self.bot.debug == True:
+        if self.debug == True:
             hide_channel = True
             default_debug_players = 8
             for i in range(default_debug_players):
@@ -194,7 +195,7 @@ class TournamentManager:
         await self.toggle_registration_visibility()
         
     async def toggle_registration_visibility(self):
-        if self.bot.debug == True:
+        if self.debug == True:
             return
         channel = await self.get_channel('register')
         
@@ -210,7 +211,7 @@ class TournamentManager:
         
         checkin_channel = await self.get_channel('checkin')
 
-        if self.bot.debug == True:
+        if self.debug == True:
             hide_channel = True
         else:
             hide_channel = False
@@ -240,7 +241,7 @@ class TournamentManager:
     async def start_tournament(self):
         self.banner_filepath = await self.tc.generate_banner()
         tournament = await self.get_tournament()
-        if self.bot.debug == True:
+        if self.debug == True:
             removed_players = []
         else:
             removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
@@ -275,23 +276,24 @@ class TournamentManager:
         await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
-        if not self.bot.debug:
+        if not self.debug:
             await self.post_final_results()
             
     async def finalize_tournament(self):
         await self.remove_tournament_from_discord()
+        if self.debug:
+            await self.delete_tournament()
         
     async def register_player(self, user_id):
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
         
-        
-        if not self.bot.debug:
+        if not self.debug:
             await discord_user.add_roles(tournament_role)
             await self.bot.dh.register_user(discord_user)
         else:
-            await self.bot.dh.register_user(user_id)
+            await self.bot.dh.register_user(user_id, debug=True)
         
         user = await self.bot.dh.get_user(user_id=user_id)
         tournament = await self.get_tournament()

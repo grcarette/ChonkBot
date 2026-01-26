@@ -24,15 +24,6 @@ COMMAND_DICT = {
             f'Usage: `!usage <command name>`'),
         'tag': 'info'
     },
-    'random_level': { 
-        'usage': (
-            f'`random`\n'
-            f'Description: Returns a random level with "block" and "favourite" reactions\n'
-            f'Permissions: Everyone\n'
-            f"Usage: `!random <optional: number of random maps (up to 5)>`."
-            f"Additional Usage: React with {INDICATOR_EMOJIS['red_x']} to block a map from showing again. React with {INDICATOR_EMOJIS['star']} to favorite a map"),
-        'tag': 'utility'
-    },
     'get_player_stats': { 
         'usage': (
             f'`stats`\n'
@@ -93,16 +84,8 @@ COMMAND_DICT = {
         'usage': (
             f'`create_tournament`\n'
             f'Description: Creates a tournament, organizes the channels/roles in discord, and stores it in the database\n'
-            f'Permissions: Only Bojack\n'
+            f'Permissions: Event organizers\n'
             f'Usage: `!create_tournament <name>-<date: discord timestamp>`'),
-        'tag': 'event'
-    },
-    'reveal_tournament': { 
-        'usage': (
-            f'`reveal_tournament`\n'
-            f'Description: Sets public tournament channels to be visible\n'
-            f'Permissions: Event Organizer\n'
-            f'Usage: `!reveal_tournament`'),
         'tag': 'event'
     },
     'reset_lobby': { 
@@ -113,14 +96,22 @@ COMMAND_DICT = {
             f'Usage: `!reset_lobby`'),
         'tag': 'event'
     },
-    'create_lobby': { 
+    'test_lobby': { 
         'usage': (
-            f'`create_lobby`\n'
+            f'`test_lobby`\n'
             f'Description: Creates a lobby for debugging purposes\n'
             f'Permissions: Only Bojack\n'
             f'Usage: `!create_lobby`'),
         'tag': 'debug'
     },
+    'test_tournament': { 
+        'usage': (
+            f'`test_tournament`\n'
+            f'Description: Creates a tournament for debugging purposes\n'
+            f'Permissions: Only Bojack\n'
+            f'Usage: `!create_tournament`'),
+        'tag': 'debug'
+    }
 }
 
 def get_usage_message(command):

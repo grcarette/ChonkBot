@@ -16,11 +16,11 @@ class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix, intents=intents)
         
-        self.dh = DataHandler(self)
+        self.dh = DataHandler()
         self.th = TournamentHandler(self)
         self.rh = ReactionHandler(self)
         
-        self.debug = True
+        self.debug = False
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))
@@ -29,6 +29,9 @@ class ChonkBot(commands.Bot):
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")
+        GUILD = discord.Object(id=int(os.getenv('GUILD_ID')))
+        self.tree.copy_global_to(guild=GUILD)
+        await self.tree.sync(guild=GUILD)
             
     async def on_ready(self):
         self.guild = self.guilds[0]
