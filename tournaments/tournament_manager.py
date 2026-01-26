@@ -39,6 +39,7 @@ class TournamentManager:
         self.bot_control = None
         self.tournament_reset = False
         self.autocall_matches = False
+        self.debug = False
         if self.tournament['name'] == 'test tournament':
             self.debug = True
         self.organizer_role = None
