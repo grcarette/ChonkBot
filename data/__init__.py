@@ -30,9 +30,10 @@ class DataHandler(
     ):
     def __init__(self):
         super().__init__()    
-        client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
-        
-        self.db = client['ChonkBot']
+        mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        self.client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
+
+        self.db = self.client['ChonkBot']
         self.reaction_collection = self.db['reaction_flags']
         self.tournament_collection = self.db['tournaments']
         self.register_flag_collection = self.db['register_flags']

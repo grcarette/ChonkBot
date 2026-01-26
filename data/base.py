@@ -8,7 +8,6 @@ class DataHandlerBase:
         self.db = client['ChonkBot']
         self.reaction_collection = self.db['reaction_flags']
         self.tournament_collection = self.db['tournaments']
-        self.register_flag_collection = self.db['register_flags']
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
         

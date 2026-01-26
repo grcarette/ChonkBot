@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"1765f84f925945339e377f20dbd72d64","collectionName":"lobbies","type":"collection"}
