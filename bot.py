@@ -22,7 +22,7 @@ class ChonkBot(commands.Bot):
         self.rh = ReactionHandler(self)
         self.tsch = TSCHandler(self)
         
-        self.debug = False
+        self.debug = True
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))
@@ -36,10 +36,6 @@ class ChonkBot(commands.Bot):
         self.guild = self.guilds[0]
         await self.th.initialize_active_events()
         print("Bot initialized")
-        test = await self.dh.get_random_stages(3)
-        test2 = await self.dh.get_stage('ZN3K-5RUF')
-        print(test, test2)
-        
 
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):

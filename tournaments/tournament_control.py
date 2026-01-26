@@ -89,7 +89,7 @@ class TournamentControl:
         for map_code in tournament['stagelist']:
             stage = await self.dh.get_stage(code=map_code)
             stage_list_data.append(stage)
-        filepath = sbg.generate_banner(stage_list_data, tournament)
+        filepath = await sbg.generate_banner(stage_list_data, tournament)
         return filepath
 
     async def disqualify_player(self, user_id):

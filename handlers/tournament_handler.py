@@ -4,6 +4,7 @@ from discord.ext import commands
 from utils.emojis import NUMBER_EMOJIS, INDICATOR_EMOJIS
 from utils.errors import PlayerNotFoundError
 from utils.channel_utils import DEFAULT_STAGE_NUMBER, CHANNEL_PERMISSIONS, NONDEFAULT_CHANNELS, create_channel
+from utils.embed_utils import create_stage_embed
 
 from ui.bot_control import BotControlView
 from ui.register_control import RegisterControlView
@@ -109,15 +110,12 @@ class TournamentHandler():
  
     async def post_stages(self, tournament_name, channel):
         tournament = await self.bot.dh.get_tournament(name=tournament_name)
+        embed_list = []
         for stage_code in tournament['stagelist']:
             stage = await self.bot.dh.get_stage(code=stage_code)
-            message = (
-                f"# {stage['name']}\n"
-                f"Creator: {stage['creator']}\n"
-                f"Code: {stage['code']}\n"
-                f"{stage['imgur']}"
-            )
-            await channel.send(message)
+            embed = await create_stage_embed(stage)
+            embed_list.append(embed)
+        await channel.send(embeds=embed_list)
         
     async def add_stages_tournament(self, tournament):       
         if tournament['config']['randomized_stagelist'] == True:

@@ -1,5 +1,6 @@
 import httpx
 import os
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -30,3 +31,9 @@ class LevelAPI:
         except httpx.RequestError as e:
             print(f"API Error: {e}")
             return None
+
+if __name__ == "__main__":
+    t = LevelAPI()
+    level = asyncio.run(t.get_random_stages(1))
+    stage = level[0]
+    print(stage['creators'])

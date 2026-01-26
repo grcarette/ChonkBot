@@ -78,30 +78,4 @@ class TournamentInfoDisplay:
                 if tournament['name'] in embed.title:
                     return message
         return None
-    
-    async def post_stages(self):
-        tournament = await self.tm.get_tournament()
-        channel = await self.tm.get_channel('stagelist')
-        
-        for stage_code in tournament['stagelist']:
-            stage = await self.dh.get_stage(code=stage_code)
-            
-            if stage:
-                description = (
-                    f"Creator: {stage['creator']}\n"
-                    f"Code: {stage['code']}\n"
-                )
-                embed = discord.Embed(
-                    title=f"{stage['name']}",
-                    description=description,
-                    color=get_random_color()
-                )
-                
-                image_path = self.image_handler.retrieve_image(stage['code'], stage['imgur'])
-                attachment_filename = f"{stage['code']}.jpg"
-                with open(image_path, 'rb') as image_file:
-                    file = discord.File(image_file, filename=attachment_filename)
-                    embed.set_image(url=f"attachment://{attachment_filename}")
-                
-                    await channel.send(embed=embed, file=file)
                 
