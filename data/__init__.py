@@ -17,6 +17,9 @@ from collections import defaultdict
 import motor.motor_asyncio
 import asyncio
 import math
+import os
+
+from dotenv import load_dotenv
 
 class DataHandler(
     DataHandlerBase, 
@@ -30,6 +33,7 @@ class DataHandler(
     ):
     def __init__(self):
         super().__init__()    
+        load_dotenv()
         mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
         self.client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
 
