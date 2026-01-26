@@ -5,6 +5,8 @@ class TournamentMethodsMixin:
     pass
 
     async def create_tournament(self, tournament):
+        if tournament['name'] == None:
+            return False
         tournament_exists = await self.tournament_collection.find_one({'name': tournament['name']})
         if tournament_exists:
             return False
