@@ -41,6 +41,7 @@ class TournamentManager:
         self.autocall_matches = False
         if self.tournament['name'] == 'test tournament':
             self.debug = True
+        self.organizer_role = None
 
     async def initialize_event(self):
         tournament = await self.get_tournament()
@@ -100,6 +101,7 @@ class TournamentManager:
             self.bot.add_view(EndTournamentView(self))
                 
         tournament = await self.get_tournament()
+        self.organizer_role = discord.utils.get(self.guild.roles, name=f"{tournament['name']} TO")
       
     async def progress_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
@@ -179,7 +181,8 @@ class TournamentManager:
                 tournament_category=tournament_category,
                 hide_channel=hide_channel,
                 channel_name='register',
-                channel_overwrites=CHANNEL_PERMISSIONS['register'] 
+                channel_overwrites=CHANNEL_PERMISSIONS['register'],
+                organizer_role=self.organizer_role
             )
             await register_channel.edit(position=DEFAULT_CHANNEL_POSITION)
             view = RegisterControlView(self)
@@ -222,7 +225,8 @@ class TournamentManager:
                 tournament_category=tournament_category,
                 hide_channel=hide_channel,
                 channel_name='check-in',
-                channel_overwrites=CHANNEL_PERMISSIONS['check-in'] 
+                channel_overwrites=CHANNEL_PERMISSIONS['check-in'],
+                organizer_role=self.organizer_role
             )
             await checkin_channel.edit(position=DEFAULT_CHANNEL_POSITION)
         else:
@@ -264,7 +268,8 @@ class TournamentManager:
                 tournament_category=self.get_tournament_category(),
                 hide_channel=True,
                 channel_name='match-calling',
-                channel_overwrites=CHANNEL_PERMISSIONS[F'match-calling']
+                channel_overwrites=CHANNEL_PERMISSIONS[F'match-calling'],
+                organizer_role=self.organizer_role
             )
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
         await self.start_tournament_loop()

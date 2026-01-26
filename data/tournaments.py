@@ -7,7 +7,7 @@ class TournamentMethodsMixin:
     async def create_tournament(self, tournament):
         tournament_exists = await self.tournament_collection.find_one({'name': tournament['name']})
         if tournament_exists:
-            raise TournamentExistsError(f"Error: Tournament name '{tournament['name']}' already exists.")
+            return False
         config_data = {
             'approved_registration': tournament['approved_registration'],
             'randomized_stagelist': tournament['randomized_stagelist'],
@@ -118,8 +118,7 @@ class TournamentMethodsMixin:
         if tournament:
             return tournament
         else:
-            key, value = next(iter(kwargs.items()))
-            raise TournamentNotFoundError(key, value, 'get_tournament')
+            return None
         
     async def get_active_events(self):
         query = {

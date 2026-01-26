@@ -40,6 +40,9 @@ class EventCog(commands.Cog, name="event"):
             return await interaction.response.send_message("This channel is not in a category.", ephemeral=True)
 
         tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            await interaction.response.send_message("No tournament found for this category.", ephemeral=True)
+            return
         if not interaction.user.id in tournament['organizers']:
             await interaction.response.send_message("You are not an organizer of this tournament.", ephemeral=True)
             return
@@ -101,8 +104,14 @@ class EventCog(commands.Cog, name="event"):
             'randomized_stagelist': True,
             'display_entrants': True,
         }
-        await self.bot.th.set_up_tournament(tournament_data)
-        await interaction.followup.send("Test tournament created.")
+        tournament = await self.bot.dh.get_tournament(name="test tournament")
+        if tournament:
+            await self.bot.dh.delete_tournament(tournament['_id'])
+        response = await self.bot.th.set_up_tournament(tournament_data)
+        if response:
+            await interaction.followup.send("Test tournament created.")
+        else:
+            await interaction.followup.send(f"Error: Failed to create tournament (name may already exist).")
 
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

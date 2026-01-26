@@ -97,10 +97,9 @@ class MatchLobby:
         deleted = await self.channel.purge(limit=None, check=is_bot_message)
         
     async def create_channel(self, hold_match):
-        organizer_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
         overwrites = {
             self.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            organizer_role: discord.PermissionOverwrite(read_messages=True)
+            self.organizer_role: discord.PermissionOverwrite(read_messages=True)
         }
         if self.tournament_manager.bot.debug == False:
             for player in self.players:

@@ -41,6 +41,8 @@ class TournamentHandler():
     async def set_up_tournament(self, tournament):
         guild = self.bot.guilds[0]
         tournament = await self.bot.dh.create_tournament(tournament)
+        if not tournament:
+            return False
         await self.add_stages_tournament(tournament)
         
         organizer_role = await guild.create_role(name=f"{tournament['name']} TO")
@@ -90,6 +92,7 @@ class TournamentHandler():
         tournament = await self.bot.dh.get_tournament(name=tournament['name'])
 
         tournament_manager = await self.initialize_event(tournament)
+        return True
         
     async def get_tournament_channel(self, tournament_manager, name):
         tournament_category = tournament_manager.get_tournament_category()
