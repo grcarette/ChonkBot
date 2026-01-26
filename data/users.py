@@ -4,6 +4,18 @@ class UserMethodsMixin:
     pass
 
     async def register_user(self, user): 
+        if self.bot.debug:
+            user_data = {
+                'user_id': user,
+                'username': f"debug_user_{user}",
+                'name': f"Debug User {user}",
+                'mention': f"<@{user}>",
+                'favorite_maps': [],
+                'blocked_maps': []
+            }
+            result = await self.user_collection.insert_one(user_data)
+            user = await self.user_collection.find_one({'user_id': user})   
+            return user
         query = {
             'user_id': user.id
         }

@@ -16,7 +16,7 @@ class ChonkBot(commands.Bot):
     def __init__(self, command_prefix, intents):
         super().__init__(command_prefix, intents=intents)
         
-        self.dh = DataHandler()
+        self.dh = DataHandler(self)
         self.th = TournamentHandler(self)
         self.rh = ReactionHandler(self)
         
@@ -52,5 +52,5 @@ if __name__=="__main__":
     intents.messages = True
     intents.message_content = True
     intents.guilds = True
-    bot = ChonkBot(command_prefix="!", intents=intents)
+    bot = ChonkBot(command_prefix="/", intents=intents)
     bot.run(os.getenv("DISCORD_TOKEN"))

@@ -166,6 +166,9 @@ class TournamentManager:
 
         if self.bot.debug == True:
             hide_channel = True
+            default_debug_players = 8
+            for i in range(default_debug_players):
+                await self.register_player(i)
         else:
             hide_channel = False
 
@@ -173,7 +176,7 @@ class TournamentManager:
             register_channel = await create_channel(
                 guild=guild,
                 tournament_category=tournament_category,
-                hide_channel=False,
+                hide_channel=hide_channel,
                 channel_name='register',
                 channel_overwrites=CHANNEL_PERMISSIONS['register'] 
             )
@@ -272,7 +275,8 @@ class TournamentManager:
         await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
-        await self.post_final_results()
+        if not self.bot.debug:
+            await self.post_final_results()
             
     async def finalize_tournament(self):
         await self.remove_tournament_from_discord()
@@ -282,8 +286,12 @@ class TournamentManager:
         discord_user = discord.utils.get(guild.members, id=user_id)
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
         
-        await self.bot.dh.register_user(discord_user)
-        await discord_user.add_roles(tournament_role)
+        
+        if not self.bot.debug:
+            await discord_user.add_roles(tournament_role)
+            await self.bot.dh.register_user(discord_user)
+        else:
+            await self.bot.dh.register_user(user_id)
         
         user = await self.bot.dh.get_user(user_id=user_id)
         tournament = await self.get_tournament()

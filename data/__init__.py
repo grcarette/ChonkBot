@@ -28,7 +28,8 @@ class DataHandler(
     StatsDataMethodsMixin,
     TSCDataMethodsMixin,
     ):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot
         super().__init__()    
         client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
         

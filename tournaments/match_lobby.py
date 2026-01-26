@@ -105,7 +105,8 @@ class MatchLobby:
         if self.tournament_manager.bot.debug == False:
             for player in self.players:
                 member = discord.utils.get(self.guild.members, id=player)
-                overwrites[member] = discord.PermissionOverwrite(read_messages=True)
+                if member:
+                    overwrites[member] = discord.PermissionOverwrite(read_messages=True)
         if hold_match:
             channel_name = f"{INDICATOR_EMOJIS['hourglass']} {self.lobby_name}"
         else:
@@ -197,6 +198,7 @@ class MatchLobby:
         lobby = await self.get_lobby()
         if self.channel == None:
             return
+
         winner_mention = f"<@{lobby['results'][0]}>"
         loser_mention = f"<@{lobby['results'][1]}>"
         
