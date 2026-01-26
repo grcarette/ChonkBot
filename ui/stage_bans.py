@@ -87,11 +87,12 @@ class BanStagesButton(discord.ui.View):
             self.message = interaction.message
             await self.message.delete()
             await self.lobby.end_stage_bans(self.banned_stages)
+            await interaction.response.defer()
         else:
             view = StageBansView(self)
             await view.setup()
             self.message = interaction.message
-        await interaction.response.send_message(view=view, ephemeral=True)
+            await interaction.response.send_message(view=view, ephemeral=True)
         
     async def submit_player_bans(self, user, banned_stages):
         self.player_bans[user] = banned_stages

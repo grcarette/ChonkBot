@@ -20,7 +20,7 @@ class ChonkBot(commands.Bot):
         self.th = TournamentHandler(self)
         self.rh = ReactionHandler(self)
         
-        self.debug = False
+        self.debug = True
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))

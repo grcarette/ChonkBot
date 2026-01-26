@@ -655,7 +655,6 @@ class TournamentManager:
 
         return await self.bot.dh.disqualify_player(self.tournament['_id'], user_id)
         
-
     async def undisqualify_player(self, user_id):
         return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
 
