@@ -33,13 +33,16 @@ class EventCog(commands.Cog, name="event"):
         await interaction.response.send_message("Reset confirmation sent.", ephemeral=True)
 
     @app_commands.command(name="delete_tournament", description="Delete current tournament")
-    @app_commands.checks.has_role("Moderator")
+    @app_commands.checks.has_role("Event Organizer")
     async def delete_tournament(self, interaction: discord.Interaction):
         category = interaction.channel.category
         if not category:
             return await interaction.response.send_message("This channel is not in a category.", ephemeral=True)
 
         tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not interaction.user.id in tournament['organizers']:
+            await interaction.response.send_message("You are not an organizer of this tournament.", ephemeral=True)
+            return
         tm = self.bot.th.tournaments[tournament['_id']]
         
         embed = discord.Embed(
