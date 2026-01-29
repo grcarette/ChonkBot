@@ -272,7 +272,7 @@ class TournamentMethodsMixin:
             '_id': ObjectId(tournament_id)
         }
         update = {
-            '$push': {
+            '$addToSet': {
                 'organizers': user_id
             }
         }

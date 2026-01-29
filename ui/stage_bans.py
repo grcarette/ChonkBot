@@ -54,6 +54,7 @@ class StageBansView(discord.ui.View):
         self.add_item(confirm_button)
             
     async def submit_bans(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         user = interaction.user
         banned_stages = []
         for button in self.children:
@@ -63,7 +64,7 @@ class StageBansView(discord.ui.View):
         await self.original_button.submit_player_bans(user, banned_stages)
         for button in self.children:
             button.disabled = True
-        await interaction.response.edit_message(view=self)
+        await interaction.edit_original_response(view=self)
         self.stop()
             
 class BanStagesButton(discord.ui.View):
@@ -97,8 +98,7 @@ class BanStagesButton(discord.ui.View):
     async def submit_player_bans(self, user, banned_stages):
         self.player_bans[user] = banned_stages
         self.finished_users.append(user.id)
-        embed, file = await self.generate_embed()
-        await self.message.edit(embed=embed, view=self, attachments=[file])
+
         if set(self.finished_users) == set(self.lobby.remaining_players):
             self.stop()
             await self.message.delete()
@@ -106,7 +106,10 @@ class BanStagesButton(discord.ui.View):
                 stage for bans in self.player_bans.values() for stage in bans
             )
             await self.lobby.end_stage_bans(self.banned_stages)
-    
+        else:
+            embed, file = await self.generate_embed()
+            await self.message.edit(embed=embed, view=self, attachments=[file])
+
     async def generate_embed(self):
         tournament = await self.lobby.tournament_manager.get_tournament()
         file_name = f"{tournament['category_id']}_banner.jpg"

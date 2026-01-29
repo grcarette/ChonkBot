@@ -14,13 +14,21 @@ class EndTournamentView(discord.ui.View):
         self.add_item(self.end_tournament_button)
 
     async def end_tournament(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
         name = self.tm.tournament['name']
         await self.tm.progress_tournament()
-        self.finalize_tournament_button = discord.ui.Button(label='Finalize Tournament', style=discord.ButtonStyle.success, custom_id=f"{name}-finalize_tournament")
+        self.finalize_tournament_button = discord.ui.Button(
+            label='Finalize Tournament', 
+            style=discord.ButtonStyle.success, 
+            custom_id=f"{name}-finalize_tournament"
+        )
         self.finalize_tournament_button.callback = self.finalize_tournament
+
         self.add_item(self.finalize_tournament_button)
         self.remove_item(self.end_tournament_button)
-        await interaction.response.edit_message(view=self)
+
+        await interaction.edit_original_response(view=self)
         
     async def finalize_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id

@@ -58,7 +58,7 @@ class MatchReportButton(discord.ui.View):
     async def report_match(self, interaction: discord.Interaction):
         user = interaction.user
         message = interaction.message
-        if any(role.name == self.lobby.override_role for role in user.roles) or user.id in self.lobby.remaining_players:
+        if any(role.name == self.lobby.organizer_role for role in user.roles) or user.id in self.lobby.remaining_players:
             view = MatchReportView(self.lobby, self, message)
             await view.setup()
             await interaction.response.send_message(view=view, ephemeral=True)
@@ -72,7 +72,7 @@ class MatchReportButton(discord.ui.View):
         self.reports.append(int(report))
         self.user_reports.append(int(user.id))
         
-        if any(role.name == self.lobby.override_role for role in user.roles):
+        if any(role.name == self.lobby.organizer_role for role in user.roles):
             await self.lobby.end_reporting(report)
             await original_message.delete()
         elif set(self.user_reports) == set(self.lobby.remaining_players):
