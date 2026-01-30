@@ -17,8 +17,19 @@ class StageBannerGenerator:
     ):
         current_file = Path(__file__).resolve()
         self.font_path = str(current_file.parent.parent / font_path)
-        print(self.font_path)
+        print(f"--- FONT CHECK ---")
+        print(f"Looking for: {self.font_path}")
+        print(f"Does it exist? {os.path.exists(self.font_path)}")
 
+        try:
+            font_dir = os.path.dirname(self.font_path)
+            if os.path.exists(font_dir):
+                print(f"Files found in {font_dir}: {os.listdir(font_dir)}")
+            else:
+                print(f"The directory {font_dir} does not exist at all!")
+        except Exception as e:
+            print(f"Error checking directory: {e}")
+            
         self.banner_width = banner_width
         self.stage_height = stage_height
         self.top_padding = top_padding

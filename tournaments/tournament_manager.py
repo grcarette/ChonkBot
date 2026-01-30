@@ -425,7 +425,8 @@ class TournamentManager:
     async def purge_match_calls(self):
         tournament_category = self.get_tournament_category()
         channel = discord.utils.get(tournament_category.channels, name='match-calling')
-        await channel.purge(limit=None)
+        if channel:
+            await channel.purge(limit=None)
         self.match_calls.clear()
     
     async def call_matches(self):
