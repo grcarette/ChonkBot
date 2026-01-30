@@ -14,6 +14,8 @@ class StageBannerGenerator:
         font_size=20,
         text_color="white"
     ):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        bot_root = os.path.dirname(current_dir)
         self.banner_width = banner_width
         self.stage_height = stage_height
         self.top_padding = top_padding
@@ -21,7 +23,7 @@ class StageBannerGenerator:
         self.row_height = self.stage_height + self.text_height + self.top_padding
         self.banner_height = self.row_height * 2
         self.background_color = background_color
-        self.font_path = font_path
+        self.font_path = os.path.join(bot_root, font_path)
         self.font_size = font_size
         self.text_color = text_color
         self.border_color = "black"
