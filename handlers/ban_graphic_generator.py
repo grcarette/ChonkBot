@@ -16,6 +16,9 @@ class StageBannerGenerator:
         text_color="white"
     ):
         current_file = Path(__file__).resolve()
+        self.font_path = str(current_file.parent.parent / font_path)
+        print(self.font_path)
+
         self.banner_width = banner_width
         self.stage_height = stage_height
         self.top_padding = top_padding
@@ -23,7 +26,6 @@ class StageBannerGenerator:
         self.row_height = self.stage_height + self.text_height + self.top_padding
         self.banner_height = self.row_height * 2
         self.background_color = background_color
-        self.font_path = current_file.parent.parent / font_path
         self.font_size = font_size
         self.text_color = text_color
         self.border_color = "black"
@@ -49,6 +51,7 @@ class StageBannerGenerator:
         try:
             font = ImageFont.truetype(self.font_path, self.font_size)
         except IOError:
+            print(f"DEBUG: Font loading failed. Path: {self.font_path} | Error: {e}")
             font = ImageFont.load_default()
 
         for row_index in range(num_rows):
