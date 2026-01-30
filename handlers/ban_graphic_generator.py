@@ -50,7 +50,7 @@ class StageBannerGenerator:
 
         try:
             font = ImageFont.truetype(self.font_path, self.font_size)
-        except IOError:
+        except IOError as e:
             print(f"DEBUG: Font loading failed. Path: {self.font_path} | Error: {e}")
             font = ImageFont.load_default()
 
