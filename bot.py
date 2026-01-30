@@ -24,8 +24,16 @@ class ChonkBot(commands.Bot):
         self.guild = None
         self.id = BOT_ID
         self.admin_id = int(os.getenv('ADMIN_ID'))
-           
+
     async def setup_hook(self):
+        @self.tree.error
+        async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+            print(f"Error in command: {error}")
+
+            if interaction.response.is_done():
+                await interaction.followup.send(f"An internal error occurred: {str(error)}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"An internal error occurred: {str(error)}", ephemeral=True)
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")

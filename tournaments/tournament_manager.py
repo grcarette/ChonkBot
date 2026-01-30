@@ -94,8 +94,7 @@ class TournamentManager:
         elif tournament['state'] == 'registration':
             self.bot.add_view(RegisterControlView(self))
         elif tournament['state'] == 'checkin':
-            self.bot.add_view(RegisterControlView(self))
-            self.bot.add_view(TournamentCheckinView(self))
+            await self.send_checkin_message()
         elif tournament['state'] == 'active':
             await self.start_tournament_loop()
         elif tournament['state'] == 'finished':
@@ -163,40 +162,52 @@ class TournamentManager:
                     await channel.set_permissions(guild.default_role, overwrite=overwrite)
                 
     async def open_registration(self):
-        guild = self.bot.guild
-        tournament_category = self.get_tournament_category()
-        
-        register_channel = await self.get_channel('register')
+        tournament = await self.get_tournament()
+        if tournament['state'] == 'registration':
+            guild = self.bot.guild
+            tournament_category = self.get_tournament_category()
+            
+            register_channel = await self.get_channel('register')
 
-        if self.debug == True:
-            hide_channel = True
-            default_debug_players = 8
-            for i in range(default_debug_players):
-                await self.register_player(i)
-        else:
-            hide_channel = False
+            if self.debug == True:
+                hide_channel = True
+                default_debug_players = 8
+                for i in range(default_debug_players):
+                    await self.register_player(i)
+            else:
+                hide_channel = False
 
-        if not register_channel:
-            register_channel = await create_channel(
-                guild=guild,
-                tournament_category=tournament_category,
-                hide_channel=hide_channel,
-                channel_name='register',
-                channel_overwrites=CHANNEL_PERMISSIONS['register'],
-                organizer_role=self.organizer_role
-            )
-            await register_channel.edit(position=DEFAULT_CHANNEL_POSITION)
-            view = RegisterControlView(self)
-            embed = discord.Embed(
-                title=f"Register for {self.tournament['name']}",
-                color=discord.Color.green()
-            )
-            await register_channel.send(embed=embed, view=view)
-        else:
-            await self.toggle_registration_visibility()
+            if not register_channel:
+                register_channel = await create_channel(
+                    guild=guild,
+                    tournament_category=tournament_category,
+                    hide_channel=hide_channel,
+                    channel_name='register',
+                    channel_overwrites=CHANNEL_PERMISSIONS['register'],
+                    organizer_role=self.organizer_role
+                )
+                await register_channel.edit(position=DEFAULT_CHANNEL_POSITION)
+                view = RegisterControlView(self)
+                embed = discord.Embed(
+                    title=f"Register for {self.tournament['name']}",
+                    color=discord.Color.green()
+                )
+                await register_channel.send(embed=embed, view=view)
+            else:
+                await self.toggle_registration_visibility()
+        elif tournament['state'] == 'checkin':
+            self.checkin_view.register_button.disabled = False
+            await self.checkin_message.edit(view=self.checkin_view)
+        await self.bot.dh.open_registration(tournament['_id'])
             
     async def close_registration(self):
-        await self.toggle_registration_visibility()
+        tournament = await self.get_tournament()
+        if tournament['state'] == 'registration':
+            await self.toggle_registration_visibility()
+        elif tournament['state'] == 'checkin':
+            self.checkin_view.register_button.disabled = True
+            await self.checkin_message.edit(view=self.checkin_view)
+        await self.bot.dh.close_registration(tournament['_id'])
         
     async def toggle_registration_visibility(self):
         if self.debug == True:
@@ -233,15 +244,21 @@ class TournamentManager:
         else:
             await checkin_channel.purge(limit=None)
 
-        tournament_role = discord.utils.get(guild.roles, name=tournament['name'])
+        await self.send_checkin_message()
+
+    async def send_checkin_message(self):
+        tournament = await self.get_tournament()
+        self.checkin_view = TournamentCheckinView(self, tournament)
+        tournament_role = discord.utils.get(self.bot.guild.roles, name=tournament['name'])
+        checkin_channel = await self.get_channel('check-in')
+        await checkin_channel.purge(limit=None)
         
+        embed = await self.checkin_view.generate_embed()
         message_content = (
             f'{tournament_role.mention}'
         )
-        view = TournamentCheckinView(self)
-        embed = await view.generate_embed()
 
-        checkin_message = await checkin_channel.send(content=message_content, embed=embed, view=view)
+        self.checkin_message = await checkin_channel.send(content=message_content, embed=embed, view=self.checkin_view)
 
     async def ping_checkin(self):
         MAXIMUM_PING_CHECKINS = 10
@@ -340,6 +357,10 @@ class TournamentManager:
             await self.delete_tournament()
         
     async def register_player(self, user_id):
+        already_registered = await self.bot.dh.get_registration_status(self.tournament['_id'], user_id)
+        if already_registered:
+            return False
+
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
@@ -355,6 +376,8 @@ class TournamentManager:
         player_id = await self.ch.register_player(tournament['challonge_data']['url'], user['name'])
         
         await self.bot.dh.register_player(tournament['_id'], user_id, player_id)
+
+        return True
         
     async def unregister_player(self, user_id):
         tournament = await self.get_tournament()

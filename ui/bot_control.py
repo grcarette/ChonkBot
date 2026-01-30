@@ -6,7 +6,7 @@ from .dq_player_select import DQPlayerSelectMenu, RemoveDQPlayerSelectMenu
 from .toggle_button import ToggleButton
 
 class BotControlView(discord.ui.View):
-    def __init__(self, tournament_control):
+    def __init__(self, tournament_control, tournament):
         super().__init__(timeout=None)
         self.tc = tournament_control
         self.tm = self.tc.tm
@@ -16,7 +16,7 @@ class BotControlView(discord.ui.View):
         self.required_actions = []
         self.embed_title = "Tournament Controls"
         
-        name = self.tm.tournament['name']
+        name = tournament['name']
         self.publish_button = discord.ui.Button(
             label=f"Publish Tournament {INDICATOR_EMOJIS['eye']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-publish"
             )
@@ -30,10 +30,10 @@ class BotControlView(discord.ui.View):
             label=f"Reset Tournament {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-reset"
             )
         self.open_reg_button = discord.ui.Button(
-            label=f"Open Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-open_reg", disabled=True
+            label=f"Open Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-open_reg"
             )
         self.close_reg_button = discord.ui.Button(
-            label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg", disabled=False
+            label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg"
             )
         self.disqualify_player_button = discord.ui.Button(
             label=f"Disqualify Player {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-disqualify_player"
@@ -58,6 +58,13 @@ class BotControlView(discord.ui.View):
 
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
+
+        if tournament['registration_open']:
+            self.open_reg_button.disabled = True
+            self.close_reg_button.disabled = False
+        else:
+            self.open_reg_button.disabled = False
+            self.close_reg_button.disabled = True
         
     async def toggle_autocall(self, interaction: discord.Interaction, state):
         self.tm.autocall_matches = state

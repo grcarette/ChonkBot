@@ -29,7 +29,7 @@ class TournamentControl:
             self.bc = await self.add_bot_control()
         else:
             self.cc = ConfigControlView(self)
-            self.bc = BotControlView(self)
+            self.bc = BotControlView(self, tournament)
         await self.cc.update_control()
         
         await self.tm.add_view(self.cc)
@@ -38,7 +38,8 @@ class TournamentControl:
         
     async def add_bot_control(self):
         channel = await self.tm.get_channel('bot-control')
-        bot_control = BotControlView(self)
+        tournament = await self.tm.get_tournament()
+        bot_control = BotControlView(self, tournament)
         embed = await bot_control.generate_embed()
         await channel.send(embed=embed, view=bot_control)
         return bot_control

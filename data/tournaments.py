@@ -26,10 +26,33 @@ class TournamentMethodsMixin:
             'entrants': {},
             'dqs': [],
             'checked_in': [],
+            'registration_open': False,
         }
         result = await self.tournament_collection.insert_one(tournament)
         tournament = await self.get_tournament(name=tournament['name'])
         return tournament
+
+    async def close_registration(self, tournament_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': {
+                'registration_open': False
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
+    
+    async def open_registration(self, tournament_id):
+        query = {
+            '_id': ObjectId(tournament_id)
+        }
+        update = {
+            '$set': {
+                'registration_open': True
+            }
+        }
+        result = await self.tournament_collection.update_one(query, update)
     
     async def edit_tournament_config(self, tournament_id, **kwargs):
         query = {
