@@ -241,8 +241,37 @@ class TournamentManager:
         view = TournamentCheckinView(self)
         embed = await view.generate_embed()
 
-        await checkin_channel.send(content=message_content, embed=embed, view=view)
-        
+        checkin_message = await checkin_channel.send(content=message_content, embed=embed, view=view)
+
+    async def ping_checkin(self):
+        MAXIMUM_PING_CHECKINS = 10
+
+        tournament = await self.get_tournament()
+        category = self.get_tournament_category()
+        checkin_channel = discord.utils.get(category.text_channels, name='check-in')
+
+        if not checkin_channel: 
+            return False
+
+        checked_in_list = [str(player) for player in tournament.get('checked_in', [])]
+        entrant_ids = list(tournament['entrants'].keys())
+
+        missing_count = len(entrant_ids) - len(checked_in_list)
+
+        print(checked_in_list, entrant_ids, missing_count)
+
+        if missing_count > MAXIMUM_PING_CHECKINS:
+            return False
+        for player in entrant_ids:
+            if not player in checked_in_list:
+                user = discord.utils.get(self.guild.members, id=int(player))
+                if user:
+                    await user.send(
+                        f"**Reminder: Please check in for `{tournament['name']}`**!\n"
+                        f"Go to {checkin_channel.mention} to check in."
+                    )
+        return True
+            
     async def start_tournament(self):
         self.banner_filepath = await self.tc.generate_banner()
         tournament = await self.get_tournament()
@@ -273,8 +302,28 @@ class TournamentManager:
                 organizer_role=self.organizer_role
             )
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
+        await self.send_instruction_message()
         await self.start_tournament_loop()
+
+    async def send_instruction_message(self):
+        event_updates_channel = await self.get_channel('event-updates')
+
+        tournament_role = discord.utils.get(self.guild.roles, name=self.tournament['name'])
         
+        message_content = (
+            f'{tournament_role.mention}'
+        )
+
+        embed = discord.Embed(
+            title=f"{self.tournament['name']} has started!",
+            description=(
+                "Look at the bracket in #event-info to see when you will be playing.\n"
+                "When your match is called, a private channel will be made for you and your opponent at the top of this server.\n"
+            ),
+            color=discord.Color.green()
+        )
+        await event_updates_channel.send(content=message_content, embed=embed)
+
     async def start_tournament_loop(self):
         await self.refresh_match_calls()
         
@@ -308,13 +357,16 @@ class TournamentManager:
         await self.bot.dh.register_player(tournament['_id'], user_id, player_id)
         
     async def unregister_player(self, user_id):
+        tournament = await self.get_tournament()
+        if f'{user_id}' not in tournament.get('entrants', {}):
+            return
+
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
         
         await discord_user.remove_roles(tournament_role)
         
-        tournament = await self.get_tournament()
         challonge_id = tournament['challonge_data']['id']
         player_id = tournament['entrants'][f'{user_id}']
         
@@ -613,7 +665,7 @@ class TournamentManager:
 
         await channel.send(embed=embed, view=view)
             
-    async def delete_tournament(self, kwargs):
+    async def delete_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         await self.remove_tournament_from_discord()
         if tournament['state'] == 'finished':

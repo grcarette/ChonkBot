@@ -22,6 +22,16 @@ class LevelAPI:
             print(f"API Error: {e}")
             return None
 
+    async def get_stages_from_list(self, stage_codes):
+        try:
+            response = await self.client.post("/levels/batch", json=stage_codes)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except httpx.RequestError as e:
+            print(f"API Error: {e}")
+            return None
+
     async def get_random_stages(self, number):
         try:
             response = await self.client.get(f"/levels/random/{number}")

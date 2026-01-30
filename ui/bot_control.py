@@ -44,6 +44,9 @@ class BotControlView(discord.ui.View):
         self.toggle_autocall_button = ToggleButton(
             label=f"Auto Match-Calling", style=discord.ButtonStyle.primary, on_toggle=self.toggle_autocall, custom_id=f"{name}-toggle_autocall"
         )
+        self.ping_checkin_button = discord.ui.Button(
+            label=f"Ping Check-in {INDICATOR_EMOJIS['bell']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-ping_checkin"
+        )
 
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
@@ -51,6 +54,7 @@ class BotControlView(discord.ui.View):
         self.reset_button.callback = self.reset_tournament
         self.disqualify_player_button.callback = self.disqualify_player
         self.remove_disqualify_button.callback = self.remove_disqualify_player
+        self.ping_checkin_button.callback = self.ping_checkin
 
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
@@ -84,6 +88,7 @@ class BotControlView(discord.ui.View):
         await self.tm.close_registration()
         
     async def start_checkin(self, interaction: discord.Interaction):
+        self.ping_checkin_button.disabled=False
         user_id = interaction.user.id
         embed = discord.Embed(
             title="Are you sure you want to start checkin?",
@@ -91,6 +96,14 @@ class BotControlView(discord.ui.View):
         )
         view = ConfirmationView(self.tm.progress_tournament, user_id, state='checkin')
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def ping_checkin(self, interaction: discord.Interaction):
+        result = await self.tm.ping_checkin()
+        if result:
+            await interaction.response.send_message("Check-in ping sent!", ephemeral=True)
+            self.ping_checkin_button.disabled=True
+        else:
+            await interaction.response.send_message("Maximum pings exceeded. Try again when 10 or less checkins remain.", ephemeral=True)
         
     async def start_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
@@ -140,6 +153,7 @@ class BotControlView(discord.ui.View):
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.toggle_autocall_button)
+            self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
         elif state == 'active':
             self.add_item(self.disqualify_player_button)

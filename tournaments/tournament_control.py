@@ -58,7 +58,8 @@ class TournamentControl:
         await self.tournament_config_handler.add_stages(stagelist)
         
     async def add_random_stages(self, stage_count):
-        await self.tournament_config_handler.add_random_stages(stage_count)
+        random_stages = await self.tournament_config_handler.add_random_stages(stage_count)
+        return random_stages
     
     async def update_tournament_state(self, state):
         await self.bc.update_tournament_state(state)

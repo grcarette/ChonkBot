@@ -25,6 +25,7 @@ class TournamentMethodsMixin:
             'stagelist': [],
             'entrants': {},
             'dqs': [],
+            'checked_in': [],
         }
         result = await self.tournament_collection.insert_one(tournament)
         tournament = await self.get_tournament(name=tournament['name'])

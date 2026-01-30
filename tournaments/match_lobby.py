@@ -130,7 +130,20 @@ class MatchLobby:
         embed = await view.generate_embed()
         mentions = get_mentions(self.remaining_players)
         await self.channel.send(' '.join(mentions),embed=embed, view=view)
+
+        userlist = []
+        for player in self.remaining_players:
+            user = discord.utils.get(self.guild.members, id=player)
+            if user:
+                userlist.append(user)
         
+        for user in userlist:
+            opponents = ', '.join(player.display_name for player in userlist if player.id != user.id)
+            await user.send(
+                f"**Your match in {self.tournament['name']} against `{opponents}` is ready**\n"
+                f"Look for your match lobby channel at the top of the {self.guild.name} server to check in."
+            )
+
     async def checkin_player(self, player_id):
         lobby = await self.dh.lobby_checkin_player(self.match_id, player_id)
         return lobby

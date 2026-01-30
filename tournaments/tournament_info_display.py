@@ -6,6 +6,7 @@ from io import BytesIO
 from utils.discord_preset_colors import get_random_color
 from utils.color_utils import discord_color_from_hex
 from utils.get_bracket_link import get_bracket_link
+from utils.embed_utils import create_stage_embed
 
 from ui.config_control.info_display import InfoDisplayView
 from ui.link_view import LinkView
@@ -35,6 +36,7 @@ class TournamentInfoDisplay:
                     if item.style == discord.ButtonStyle.link:
                         await self.add_link(item.label, item.url)
         await self.update_display()
+        await self.post_stages()
     
     async def update_display(self):
         embed = await self.generate_embed()
@@ -63,6 +65,21 @@ class TournamentInfoDisplay:
             color=color
         )
         return embed
+
+    async def post_stages(self):
+        tournament = await self.tm.get_tournament()
+        channel = await self.tm.get_channel('stagelist')
+        await channel.purge(limit=None)
+        embed_list = []
+
+        if len(tournament['stagelist']) == 0:
+            return
+
+        stages = await self.tm.bot.dh.get_stages_from_list(tournament['stagelist'])
+        for stage in stages:
+            embed = await create_stage_embed(stage)
+            embed_list.append(embed)
+        await channel.send(embeds=embed_list)
     
     async def add_link(self, link_label, link_url):
         channel = await self.tm.get_channel('event-info')

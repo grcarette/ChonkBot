@@ -46,6 +46,7 @@ INDICATOR_EMOJIS = {
     'paint': '🎨',
     'pause': '⏸️',
     'hourglass': '⌛',
+    'bell': '🔔',
 }
 
 RESULT_EMOJIS = {

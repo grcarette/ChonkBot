@@ -88,7 +88,6 @@ class TournamentHandler():
                 organizer_role=organizer_role
             )
         
-        await self.post_stages(tournament['name'], channel_dict['stagelist'])
         tournament = await self.bot.dh.get_tournament(name=tournament['name'])
 
         tournament_manager = await self.initialize_event(tournament)
@@ -122,15 +121,6 @@ class TournamentHandler():
         view = ConfirmationView(tm.reset_report, user_id, lobby=lobby)
         await channel.send(embed=embed, view=view)
  
-    async def post_stages(self, tournament_name, channel):
-        tournament = await self.bot.dh.get_tournament(name=tournament_name)
-        embed_list = []
-        for stage_code in tournament['stagelist']:
-            stage = await self.bot.dh.get_stage(code=stage_code)
-            embed = await create_stage_embed(stage)
-            embed_list.append(embed)
-        await channel.send(embeds=embed_list)
-        
     async def add_stages_tournament(self, tournament):       
         if tournament['config']['randomized_stagelist'] == True:
             stages = await self.bot.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
@@ -160,10 +150,6 @@ class TournamentHandler():
             elif str(member.id) in tournament['entrants']:
                 await self.tournaments[tournament_id].unregister_player(member.id)
 
-            if member.id == 883733550334095391:
-                print('morfin')
-                if str(member.id) in tournament['entrants']:
-                    print('reg')
 
     def get_tournament_category(self, category_id):
         guild = self.bot.guilds[0]

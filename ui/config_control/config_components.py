@@ -93,4 +93,4 @@ class TournamentFormatSelect(discord.ui.Select):
         selected_format = self.values[0]
         await self.tc.edit_tournament_config(format=selected_format)
         await interaction.response.defer()
-        
+

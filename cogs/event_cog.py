@@ -94,6 +94,7 @@ class EventCog(commands.Cog, name="event"):
     @app_commands.checks.has_role("Event Organizer")
     async def test_tournament(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send("Creating test tournament...", ephemeral=True)
 
         tournament_data = {
             'name': "test tournament",
@@ -107,11 +108,8 @@ class EventCog(commands.Cog, name="event"):
         tournament = await self.bot.dh.get_tournament(name="test tournament")
         if tournament:
             await self.bot.dh.delete_tournament(tournament['_id'])
-        response = await self.bot.th.set_up_tournament(tournament_data)
-        if response:
-            await interaction.followup.send("Test tournament created.")
-        else:
-            await interaction.followup.send(f"Error: Failed to create tournament (name may already exist).")
+        await self.bot.th.set_up_tournament(tournament_data)
+
 
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

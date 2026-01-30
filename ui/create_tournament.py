@@ -96,11 +96,10 @@ class TournamentSettingsView(discord.ui.View):
 
     @discord.ui.button(label=f"Submit", style=discord.ButtonStyle.success, disabled=True, row=3)
     async def submit_tournament(self, interaction: discord.Interaction, button: discord.ui.Button):
-        message = await interaction.response.send_message(f"Tournament `{self.tournament_name}` created.", ephemeral=True)
-        try:
-            await interaction.delete_original_response()
-        except discord.NotFound:
-            pass
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send(f"Tournament `{self.tournament_name}` created.", ephemeral=True)
+        await interaction.delete_original_response()
+
         tournament_data = {
             'name': self.tournament_name,
             'date': self.tournament_date,
@@ -112,6 +111,7 @@ class TournamentSettingsView(discord.ui.View):
         }
         await self.bot.th.set_up_tournament(tournament_data)
         self.stop()
+        
         
 
         
