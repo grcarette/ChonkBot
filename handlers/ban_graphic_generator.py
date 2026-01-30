@@ -11,7 +11,7 @@ class StageBannerGenerator:
         top_padding=10,
         text_height=30,
         background_color="white",
-        font_path="assets/fonts/KGNextToMeSolid.ttf",
+        font_path="assets/fonts/KGNexttoMeSolid.ttf",
         font_size=20,
         text_color="white"
     ):
@@ -29,7 +29,7 @@ class StageBannerGenerator:
                 print(f"The directory {font_dir} does not exist at all!")
         except Exception as e:
             print(f"Error checking directory: {e}")
-            
+
         self.banner_width = banner_width
         self.stage_height = stage_height
         self.top_padding = top_padding
