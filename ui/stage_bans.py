@@ -37,7 +37,7 @@ class StageButton(discord.ui.Button):
                 
 class StageBansView(discord.ui.View):
     def __init__(self, original_button):
-        super().__init__()
+        super().__init__(timeout=None)
         self.lobby = original_button.lobby
         self.original_button = original_button
         self.num_stage_bans = self.original_button.num_stage_bans

@@ -67,7 +67,7 @@ class BotControlView(discord.ui.View):
             self.close_reg_button.disabled = True
         
     async def toggle_autocall(self, interaction: discord.Interaction, state):
-        self.tm.autocall_matches = state
+        await self.tm.toggle_autocall(state)
                 
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()

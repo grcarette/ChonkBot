@@ -428,6 +428,10 @@ class TournamentManager:
         if channel:
             await channel.purge(limit=None)
         self.match_calls.clear()
+
+    async def toggle_autocall(self, state):
+        self.autocall_matches = state
+        await self.refresh_match_calls()
     
     async def call_matches(self):
         tournament = await self.get_tournament()
