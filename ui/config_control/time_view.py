@@ -7,7 +7,7 @@ TIMESTAMP_TOOL_URL = 'https://r.3v.fi/discord-timestamps/'
 
 class TimePickerView(discord.ui.View):
     def __init__(self, config_control):
-        super().__init__()
+        super().__init__(timeout=None)
         self.cc = config_control
         self.tc = self.cc.tc
         

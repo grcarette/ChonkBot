@@ -6,7 +6,7 @@ import functools
 
 class EditLinksView(discord.ui.View):
     def __init__(self, tournament_info_display):
-        super().__init__()
+        super().__init__(timeout=None)
         self.tid = tournament_info_display
         self.info_display_view = self.tid.info_display_view
         

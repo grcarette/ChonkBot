@@ -15,7 +15,7 @@ class TournamentConfigModal(discord.ui.Modal, title="Create Tournament"):
         
 class TournamentSettingsView(discord.ui.View):
     def __init__(self, user, bot):
-        super().__init__()
+        super().__init__(timeout=None)
         self.user = user
         self.bot = bot
         self.tournament_name = ''

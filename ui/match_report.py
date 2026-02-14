@@ -2,7 +2,7 @@ import discord
 
 class MatchReportView(discord.ui.View):
     def __init__(self, lobby, parent, original_message):
-        super().__init__()
+        super().__init__(timeout=None)
         self.lobby = lobby
         self.winner = None
         self.parent = parent

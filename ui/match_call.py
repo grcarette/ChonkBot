@@ -2,7 +2,7 @@ import discord
 
 class MatchCallView(discord.ui.View):
     def __init__(self, tournament_manager, match_data, match_held=False):
-        super().__init__()
+        super().__init__(timeout=None)
         self.tm = tournament_manager
         self.match_data = match_data
         self.match_held = match_held

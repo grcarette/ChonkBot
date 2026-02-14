@@ -6,7 +6,7 @@ import functools
 
 class EditStagelistView(discord.ui.View):
     def __init__(self, tournament_control):
-        super().__init__()
+        super().__init__(timeout=None)
         self.tc = tournament_control
 
     async def setup(self):
