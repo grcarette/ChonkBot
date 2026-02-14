@@ -47,6 +47,9 @@ class BotControlView(discord.ui.View):
         self.ping_checkin_button = discord.ui.Button(
             label=f"Ping Check-in {INDICATOR_EMOJIS['bell']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-ping_checkin"
         )
+        self.refresh_match_calls_button = discord.ui.Button(
+            label=f"Refresh Match Calls {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-refresh_match_calls"
+        )
 
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
@@ -55,6 +58,7 @@ class BotControlView(discord.ui.View):
         self.disqualify_player_button.callback = self.disqualify_player
         self.remove_disqualify_button.callback = self.remove_disqualify_player
         self.ping_checkin_button.callback = self.ping_checkin
+        self.refresh_match_calls_button.callback = self.refresh_match_calls
 
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
@@ -68,6 +72,10 @@ class BotControlView(discord.ui.View):
         
     async def toggle_autocall(self, interaction: discord.Interaction, state):
         await self.tm.toggle_autocall(state)
+
+    async def refresh_match_calls(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        await self.tm.refresh_match_calls()
                 
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()
@@ -166,6 +174,7 @@ class BotControlView(discord.ui.View):
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
             self.add_item(self.toggle_autocall_button)
+            self.add_item(self.refresh_match_calls_button)
             self.add_item(self.reset_button)
         elif state == 'finished':
             pass
