@@ -7,7 +7,7 @@ from .time_view import TimePickerView
 
 class TournamentConfigView(discord.ui.View):
     def __init__(self, config_control):
-        super().__init__()
+        super().__init__(timeout=None)
         self.cc = config_control
         self.tc = self.cc.tc
         

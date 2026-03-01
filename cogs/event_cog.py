@@ -1,12 +1,18 @@
 import discord
+import re
 from discord.ext import commands
 from discord import app_commands
 
 from utils.errors import *
+from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
+from utils.discord_preset_colors import get_random_color
 from tournaments.match_lobby import MatchLobby
 from tournaments.results_poster import post_results
 from ui.create_tournament import TournamentSettingsView
 from ui.confirmation import ConfirmationView
+from ui.link_view import LinkView
+from tournaments.challonge_handler import ChallongeHandler
+
 
 class EventCog(commands.Cog, name="event"):
     def __init__(self, bot):
@@ -110,6 +116,60 @@ class EventCog(commands.Cog, name="event"):
             await self.bot.dh.delete_tournament(tournament['_id'])
         await self.bot.th.set_up_tournament(tournament_data)
 
+    @app_commands.command(name="post_results", description="Post tournament results to the results channel")
+    @app_commands.checks.has_role("Event Organizer")
+    async def post_results(self, interaction: discord.Interaction, challonge_url: str):
+        RESULTS_CHANNEL_ID = 1346422769721544754
+        channel = discord.utils.get(self.bot.guild.channels, id=RESULTS_CHANNEL_ID)
+        ch = ChallongeHandler()
+        
+        challonge_id = extract_challonge_id(challonge_url)
+        if not challonge_id:
+            return await interaction.response.send_message("Invalid Challonge URL format.", ephemeral=True)
+        tournament_name = await ch.get_tournament_name(challonge_id)
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            final_results = await ch.get_final_results(challonge_id)
+            
+            overall_winner = ''
+            results_list = []
+
+            for player in final_results:
+                rank = player.get('final_rank')
+                name = player.get('name')
+                emoji = ''
+                
+                if rank == 1:
+                    emoji = RESULT_EMOJIS['1st']
+                    overall_winner = f"**{RESULT_EMOJIS['trophy']} Overall Winner: {name}**\n\n"
+                elif rank == 2:
+                    emoji = RESULT_EMOJIS['2nd']
+                elif rank == 3:
+                    emoji = RESULT_EMOJIS['3rd']            
+                elif 3 < rank <= 8:
+                    emoji = RESULT_EMOJIS['medal']
+                    
+                results_list.append(f"{rank}: {name} {emoji}")
+
+            message_content = overall_winner + "\n".join(results_list)
+            embed = discord.Embed(
+                title=f"{tournament_name}",
+                description=message_content,
+                color=get_random_color()
+            )
+            view = LinkView(f"{INDICATOR_EMOJIS['link']} Bracket", challonge_url)
+            await channel.send(embed=embed, view=view)
+            
+            await interaction.followup.send("Results posted successfully!")
+
+        except Exception as e:
+            await interaction.followup.send(f"Error fetching results: {str(e)}")
+
+def extract_challonge_id(url: str) -> str:
+    """Extracts the tournament slug/ID from a standard Challonge URL."""
+    match = re.search(r"challonge\.com\/(?:[^\/]+\/)?([^\/\?]+)", url)
+    return match.group(1) if match else None
 
 async def setup(bot):
     await bot.add_cog(EventCog(bot))

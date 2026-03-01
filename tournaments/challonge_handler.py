@@ -101,6 +101,10 @@ class ChallongeHandler:
     
     async def delete_tournament(self, tournament_id):
         challonge.tournaments.destroy(tournament_id)
+
+    async def get_tournament_name(self, tournament_url):
+        tournament = challonge.tournaments.show(tournament_url)
+        return tournament['name']
     
 async def main():
     ch = ChallongeHandler()

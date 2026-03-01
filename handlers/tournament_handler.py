@@ -21,6 +21,8 @@ from tournaments.tournament_manager import TournamentManager
 from .bracket_handler import BracketHandler
 from tournaments.challonge_handler import ChallongeHandler
 
+RESULTS_CHANNEL_ID = 1346422769721544754
+
 class TournamentHandler():
     def __init__(self, bot):
         self.bot = bot
@@ -149,7 +151,6 @@ class TournamentHandler():
                     await self.tournaments[tournament_id].register_player(member.id)
             elif str(member.id) in tournament['entrants']:
                 await self.tournaments[tournament_id].unregister_player(member.id)
-
 
     def get_tournament_category(self, category_id):
         guild = self.bot.guilds[0]
