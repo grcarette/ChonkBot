@@ -106,7 +106,6 @@ class DataCog(commands.Cog):
             return await interaction.followup.send(f"**{player_data['username']}** is already linked.", ephemeral=True)
 
         recent_tourneys = await self.bot.dh.tournamentdata_api.get_recent_results(player_data['_id'])
-        
         embed = discord.Embed(
             title="Verify Tournament Profile",
             description=f"I found a match for **{target_user.mention}**. Do these recent results look correct?",
