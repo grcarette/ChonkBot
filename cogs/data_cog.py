@@ -1,9 +1,11 @@
 import discord
 from datetime import datetime, timezone
 from discord.ext import commands
+from discord import app_commands
 from utils.errors import PlayerNotFoundError, NameNotUniqueError, PlayerLinkExistsError
 from utils.errors import UserLinkExistsError, PlayerNotRegisteredError, TournamentNotFoundError, MissingH2HParams
 from utils.reaction_utils import create_reaction_flag
+from ui.register_player import RegistrationView
 
 class DataCog(commands.Cog):
     def __init__(self, bot):
@@ -84,6 +86,134 @@ class DataCog(commands.Cog):
                 f'Error: You are not currently registered to a player'
             )
             await channel.send(message_content)
+
+    @app_commands.command(name="register_database", description="Register yourself in the database.")
+    async def register_database(self, interaction: discord.Interaction, member: discord.Member = None):
+        await interaction.response.defer(ephemeral=True)
+        ALLOWED_CHANNEL = "temporary-data-bot"
+        if interaction.channel.name != ALLOWED_CHANNEL:
+            return
+        
+        target_user = member or interaction.user
+        search_name = target_user.display_name
+        
+        player_data = await self.bot.dh.tournamentdata_api.lookup_player(search_name)
+        
+        if not player_data:
+            return await interaction.followup.send(f"No profile found for `{search_name}`.", ephemeral=True)
+
+        if player_data.get("discord_id"):
+            return await interaction.followup.send(f"**{player_data['username']}** is already linked.", ephemeral=True)
+
+        recent_tourneys = await self.bot.dh.tournamentdata_api.get_recent_results(player_data['_id'])
+        
+        embed = discord.Embed(
+            title="Verify Tournament Profile",
+            description=f"I found a match for **{target_user.mention}**. Do these recent results look correct?",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Username", value=player_data['username'], inline=True)
+
+        if recent_tourneys:
+            results_text = ""
+            for t in recent_tourneys:
+                placement = "N/A"
+                for event in t.get('events', []):
+                    res = next((item for item in event.get('results', []) if item['id'] == player_data['_id']), None)
+                    if res:
+                        placement = res.get('placement', '??')
+                        break
+                
+                date_str = str(t.get('date'))[:10]
+                results_text += f"• **{t['name']}** ({date_str}): {placement}\n"
+            
+            embed.add_field(name="Recent Results", value=results_text, inline=False)
+        else:
+            embed.add_field(name="Recent Results", value="No tournament history found.", inline=False)
+
+        view = RegistrationView(self.bot.dh.tournamentdata_api, player_data, target_user)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    @app_commands.command(name="player_history", description="View your detailed tournament history.")
+    async def player_history(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+
+        player = await self.bot.dh.tournamentdata_api.players.find_one(
+            {"discord_id": str(interaction.user.id)}
+        )
+
+        if not player:
+            name_match = await self.bot.dh.tournamentdata_api.lookup_player(interaction.user.display_name)
+            
+            msg = "❌ Your Discord account is not linked to a tournament profile.\n"
+            if name_match:
+                msg += f"I found a profile for **{name_match['username']}** that looks like you! "
+                msg += "Please go to `#temporary-data-bot` and use `/register_database` to link it."
+            else:
+                msg += "I couldn't find a profile matching your name. Please use `/register_database` in `#temporary-data-bot`."
+            
+            return await interaction.followup.send(msg)
+
+        p_id = player['_id']
+        username = player['username']
+
+        match_stats = {} 
+        total_w, total_l = 0, 0
+        matches_cursor = self.bot.dh.tournamentdata_api.matches.find({"$or": [{"winner_id": p_id}, {"loser_id": p_id}]})
+        
+        async for m in matches_cursor:
+            if m.get("is_dq"): continue
+            t_id = m['tournament_id']
+            if t_id not in match_stats: match_stats[t_id] = [0, 0]
+            
+            if m['winner_id'] == p_id:
+                match_stats[t_id][0] += 1
+                total_w += 1
+            else:
+                match_stats[t_id][1] += 1
+                total_l += 1
+
+
+        history = []
+        tourneys_cursor = self.bot.dh.tournamentdata_api.tournaments.find({"events.results.id": p_id})
+        
+        async for t in tourneys_cursor:
+            res_entry = None
+            e_type = "Main"
+            for event in t.get('events', []):
+                res = next((item for item in event.get('results', []) if item['id'] == p_id), None)
+                if res:
+                    res_entry, e_type = res, event.get('event_type', 'Main')
+                    break
+            
+            if not res_entry: continue
+            w, l = match_stats.get(t['_id'], [0, 0])
+            d = t.get("date", "N/A")
+            d_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+
+            history.append({
+                "date": d_str, "name": t.get("name", "Unknown"), "type": e_type,
+                "place": res_entry.get("placement", "??"), "dq": res_entry.get("dq", False),
+                "record": f"{w}-{l}"
+            })
+
+        if not history:
+            return await interaction.followup.send(f"Found your profile (**{username}**), but no tournament history was found.")
+
+        history.sort(key=lambda x: x['date'], reverse=True)
+        out = f"**DETAILED HISTORY: {username.upper()}**\n```\n"
+        out += f"{'DATE':<12} {'TYPE':<10} {'PLACE':<8} {'RECORD':<8} {'TOURNAMENT'}\n{'-'*65}\n"
+        
+        for e in history[:15]:
+            p_str = f"{e['place']}{' [DQ]' if e['dq'] else ''}"
+            t_name = (e['name'][:25] + '..') if len(e['name']) > 25 else e['name']
+            out += f"{e['date']:<12} {e['type']:<10} {p_str:<8} {e['record']:<8} {t_name}\n"
+
+        wr = (total_w / (total_w + total_l) * 100) if (total_w + total_l) > 0 else 0
+        out += f"{'-'*65}\nLIFETIME: {total_w}-{total_l} ({wr:.1f}%) across {len(history)} events.```"
+        
+        await interaction.followup.send(out)
+
         
     # @commands.command(name='get_player_stats', aliases=['stats', 'get player stats', 'get stats'])
     # async def get_player_stats(self, ctx, *, player_name):

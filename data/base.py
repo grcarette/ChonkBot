@@ -1,5 +1,6 @@
 import motor.motor_asyncio
 from data.level_api import LevelAPI
+from data.tournamentdata_api import TournamentDataAPI
 
 class DataHandlerBase:
     def __init__(self):
@@ -12,3 +13,4 @@ class DataHandlerBase:
         self.user_collection = self.db['users']
 
         self.level_api = LevelAPI()
+        self.tournamentdata_api = TournamentDataAPI()
