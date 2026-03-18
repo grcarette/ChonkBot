@@ -50,7 +50,11 @@ class BotControlView(discord.ui.View):
         self.refresh_match_calls_button = discord.ui.Button(
             label=f"Refresh Match Calls {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-refresh_match_calls"
         )
-
+        self.seeding_button = discord.ui.Button(
+            label=f"Change Seeding {INDICATOR_EMOJIS['seed']}", style=discord.ButtonStyle.secondary, custom_id=f"{name}-seeding"
+        )
+        
+        self.seeding_button.callback = self.open_seeding
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
         self.start_button.callback = self.start_tournament
@@ -164,12 +168,14 @@ class BotControlView(discord.ui.View):
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.checkin_button)
+            self.add_item(self.seeding_button)
         elif state == 'checkin':
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.toggle_autocall_button)
             self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
+            self.add_itme(self.seeding_button)
         elif state == 'active':
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
@@ -227,11 +233,13 @@ class BotControlView(discord.ui.View):
             self.required_actions.append('-Nothing')
         
     async def get_pending_stages(self, tournament):
-        pending_stages = []
-        for stage_code in tournament['stagelist']:
-            stage_exists = await self.tm.bot.dh.get_stage(code=stage_code)
-            if not stage_exists:
-                pending_stages.append(stage_code)
+        stagelist = tournament['stagelist']
+        if not stagelist:
+            return []
+        
+        existing_stages = await self.tm.bot.dh.get_stages_from_list(stagelist)
+        existing_codes = {stage['code'] for stage in existing_stages} if existing_stages else set()
+        pending_stages = [code for code in stagelist if code not in existing_codes]
         return pending_stages
                 
     async def generate_embed(self):
@@ -248,7 +256,29 @@ class BotControlView(discord.ui.View):
         )
         return embed
         
-        
+    async def open_seeding(self, interaction: discord.Interaction):
+        tournament = await self.tm.get_tournament()
+        organizer_role = discord.utils.get(
+            interaction.guild.roles,
+            name=f"{tournament['name']} TO"
+        )
+        if organizer_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "Only TOs can access seeding.", ephemeral=True
+            )
+            return
+
+        if 'challonge_data' not in tournament:
+            await interaction.response.send_message(
+                "No Challonge bracket linked to this tournament yet.", ephemeral=True
+            )
+            return
+
+        link = await self.tm.generate_seeding_link()
+        await interaction.response.send_message(
+            f"{INDICATOR_EMOJIS['seed']} **Seeding Tool** — this link expires in 30 minutes:\n{link}",
+            ephemeral=True
+        )
     
         
 

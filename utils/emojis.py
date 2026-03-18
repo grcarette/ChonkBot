@@ -47,6 +47,7 @@ INDICATOR_EMOJIS = {
     'pause': '⏸️',
     'hourglass': '⌛',
     'bell': '🔔',
+    'seed': '🌱',
 }
 
 RESULT_EMOJIS = {

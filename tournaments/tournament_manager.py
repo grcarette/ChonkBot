@@ -754,6 +754,19 @@ class TournamentManager:
     async def undisqualify_player(self, user_id):
         return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
 
+    async def generate_seeding_link(self) -> str:
+        """Generate a one-time seeding URL for TOs. Valid for 30 minutes."""
+        import os
+        from web.seeding_server import generate_token
+ 
+        tournament = await self.get_tournament()
+        challonge_url = tournament['challonge_data']['url']
+        token = generate_token(str(tournament['_id']), challonge_url)
+ 
+        base_url = os.getenv('WEB_BASE_URL', 'http://localhost:8080')
+        return f"{base_url}/seeding?token={token}"
+ 
+
         
         
         
