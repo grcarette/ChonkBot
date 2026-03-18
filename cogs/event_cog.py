@@ -116,6 +116,24 @@ class EventCog(commands.Cog, name="event"):
             await self.bot.dh.delete_tournament(tournament['_id'])
         await self.bot.th.set_up_tournament(tournament_data)
 
+    @app_commands.command(name="register_role", description="Register all players with the tournament role")
+    @app_commands.checks.has_role("Event Organizer")
+    async def register_role(self, interaction: discord.Interaction):
+        category = interaction.channel.category
+        if not category:
+            return await interaction.response.send_message("This channel is not in a category.", ephemeral=True)
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            await interaction.response.send_message("No tournament found for this category.", ephemeral=True)
+            return
+        if not interaction.user.id in tournament['organizers']:
+            await interaction.response.send_message("You are not an organizer of this tournament.", ephemeral=True)
+            return
+
+        await self.bot.th.register_role(category.id)
+        await interaction.response.send_message("All players registered with the tournament role.")
+
     @app_commands.command(name="post_results", description="Post tournament results to the results channel")
     @app_commands.checks.has_role("Event Organizer")
     async def post_results(self, interaction: discord.Interaction, challonge_url: str):
