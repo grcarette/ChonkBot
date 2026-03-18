@@ -14,7 +14,8 @@ class LevelAPI:
 
     async def get_stage_by_code(self, code: str):
         try:
-            response = await self.client.get(f"/levels/{code.upper()}")
+            code = code.strip().upper()
+            response = await self.client.get(f"/levels/{code}")
             if response.status_code == 200:
                 return response.json()
             return None

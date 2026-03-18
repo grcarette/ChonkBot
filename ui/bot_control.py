@@ -53,7 +53,13 @@ class BotControlView(discord.ui.View):
         self.seeding_button = discord.ui.Button(
             label=f"Change Seeding {INDICATOR_EMOJIS['seed']}", style=discord.ButtonStyle.secondary, custom_id=f"{name}-seeding"
         )
-        
+        self.next_round_button = discord.ui.Button(
+            label=f"Start Next Round {INDICATOR_EMOJIS['game_controller']}",
+            style=discord.ButtonStyle.success,
+            custom_id=f"{name}-next_round",
+            disabled=True
+        )
+
         self.seeding_button.callback = self.open_seeding
         self.publish_button.callback = self.publish_tournament
         self.checkin_button.callback = self.start_checkin
@@ -63,9 +69,9 @@ class BotControlView(discord.ui.View):
         self.remove_disqualify_button.callback = self.remove_disqualify_player
         self.ping_checkin_button.callback = self.ping_checkin
         self.refresh_match_calls_button.callback = self.refresh_match_calls
-
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
+        self.next_round_button.callback = self.start_next_round
 
         if tournament['registration_open']:
             self.open_reg_button.disabled = True
@@ -127,7 +133,6 @@ class BotControlView(discord.ui.View):
     async def start_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         tournament = await self.tm.get_tournament()
-        
         embed = discord.Embed(
             title="Are you sure you want to start the tournament?",
             color=discord.Color.yellow()
@@ -154,7 +159,17 @@ class BotControlView(discord.ui.View):
         view = discord.ui.View()
         view.add_item(RemoveDQPlayerSelectMenu(self))
         await interaction.response.send_message(view=view, ephemeral=True)
-        
+
+    async def start_next_round(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        self.next_round_button.disabled = True
+        await self.update_control()
+        await self.tm.swiss_manager.run_pairing_cycle()
+
+    async def enable_next_round_button(self):
+        self.next_round_button.disabled = False
+        await self.update_control()
+
     async def update_tournament_state(self, state):
         if self.message == None:
             self.message = await self.get_control_message()
@@ -175,13 +190,15 @@ class BotControlView(discord.ui.View):
             self.add_item(self.toggle_autocall_button)
             self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
-            self.add_itme(self.seeding_button)
+            self.add_item(self.seeding_button)
         elif state == 'active':
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
             self.add_item(self.toggle_autocall_button)
             self.add_item(self.refresh_match_calls_button)
             self.add_item(self.reset_button)
+            if self.tm.is_swiss:
+                self.add_item(self.next_round_button)
         elif state == 'finished':
             pass
         
@@ -218,16 +235,12 @@ class BotControlView(discord.ui.View):
             else:
                 self.required_actions.append("Add stages to stagelist")
         elif self.stage == "registration":
-            #must have 2 players to open checkin
             pass
         elif self.stage == "checkin":
-            #must close checkin to start tournament
             pass
         elif self.stage == "active":
-            #tournament must be over to end tournament
             pass
         elif self.stage == "finished":
-            #TBD
             pass
         else:
             self.required_actions.append('-Nothing')
@@ -236,7 +249,6 @@ class BotControlView(discord.ui.View):
         stagelist = tournament['stagelist']
         if not stagelist:
             return []
-        
         existing_stages = await self.tm.bot.dh.get_stages_from_list(stagelist)
         existing_codes = {stage['code'] for stage in existing_stages} if existing_stages else set()
         pending_stages = [code for code in stagelist if code not in existing_codes]
@@ -279,9 +291,3 @@ class BotControlView(discord.ui.View):
             f"{INDICATOR_EMOJIS['seed']} **Seeding Tool** — this link expires in 30 minutes:\n{link}",
             ephemeral=True
         )
-    
-        
-
-        
-
-        

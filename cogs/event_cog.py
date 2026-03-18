@@ -41,26 +41,29 @@ class EventCog(commands.Cog, name="event"):
     @app_commands.command(name="delete_tournament", description="Delete current tournament")
     @app_commands.checks.has_role("Event Organizer")
     async def delete_tournament(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         category = interaction.channel.category
         if not category:
-            return await interaction.response.send_message("This channel is not in a category.", ephemeral=True)
+            return await interaction.followup.send("This channel is not in a category.", ephemeral=True)
 
         tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
         if not tournament:
-            await interaction.response.send_message("No tournament found for this category.", ephemeral=True)
-            return
-        if not interaction.user.id in tournament['organizers']:
-            await interaction.response.send_message("You are not an organizer of this tournament.", ephemeral=True)
-            return
-        tm = self.bot.th.tournaments[tournament['_id']]
-        
+            return await interaction.followup.send("No tournament found for this category.", ephemeral=True)
+        if interaction.user.id not in tournament['organizers']:
+            return await interaction.followup.send("You are not an organizer of this tournament.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found. The tournament may have already been deleted.", ephemeral=True)
+
         embed = discord.Embed(
             title="Are you sure you want to delete this tournament?",
             description="This will delete all channels and roles associated.",
             color=discord.Color.red()
         )
         view = ConfirmationView(tm.delete_tournament, interaction.user.id, category_id=category.id)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @app_commands.command(name="reset_call", description="Reset tournament calls")
     @app_commands.checks.has_role("Moderator")
@@ -100,21 +103,23 @@ class EventCog(commands.Cog, name="event"):
     @app_commands.checks.has_role("Event Organizer")
     async def test_tournament(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        await interaction.followup.send("Creating test tournament...", ephemeral=True)
 
         tournament_data = {
             'name': "test tournament",
             'date': discord.utils.utcnow(),
             'organizer': interaction.user.id,
-            'format': 'single elimination',
+            'format': 'swiss',
             'approved_registration': False,
             'randomized_stagelist': True,
             'display_entrants': True,
+            'round_limit': 5,
+            'debug': True,
         }
         tournament = await self.bot.dh.get_tournament(name="test tournament")
         if tournament:
             await self.bot.dh.delete_tournament(tournament['_id'])
         await self.bot.th.set_up_tournament(tournament_data)
+        await interaction.followup.send("Test swiss tournament created.", ephemeral=True)
 
     @app_commands.command(name="register_role", description="Register all players with the tournament role")
     @app_commands.checks.has_role("Event Organizer")

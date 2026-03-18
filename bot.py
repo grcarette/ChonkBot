@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from data import DataHandler
+from data.uchranked_api import UCHRankedAPI
 from handlers.tournament_handler import TournamentHandler
 from handlers.reaction_handler import ReactionHandler
 
@@ -19,6 +20,7 @@ class ChonkBot(commands.Bot):
         self.dh = DataHandler()
         self.th = TournamentHandler(self)
         self.rh = ReactionHandler(self)
+        self.uchranked_api = UCHRankedAPI()
         
         self.debug = False
         self.guild = None
@@ -29,28 +31,27 @@ class ChonkBot(commands.Bot):
         @self.tree.error
         async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
             print(f"Error in command: {error}")
-
             if interaction.response.is_done():
                 await interaction.followup.send(f"An internal error occurred: {str(error)}", ephemeral=True)
             else:
                 await interaction.response.send_message(f"An internal error occurred: {str(error)}", ephemeral=True)
+
         await self.load_cogs()
         for command in self.commands:
             print(f"Command loaded: {command.name}")
         GUILD = discord.Object(id=int(os.getenv('GUILD_ID')))
         self.tree.copy_global_to(guild=GUILD)
         await self.tree.sync(guild=GUILD)
-            
+
     async def on_ready(self):
         self.guild = self.guilds[0]
         await self.th.initialize_active_events()
- 
+
         from web.seeding_server import start_server
         from tournaments.challonge_handler import ChallongeHandler
-        await start_server(challonge_handler_factory=ChallongeHandler)
- 
+        await start_server(challonge_handler_factory=ChallongeHandler, bot=self)
+
         print("Bot initialized")
- 
 
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):
@@ -60,11 +61,10 @@ class ChonkBot(commands.Bot):
                     print(f"Loaded {filename}")
                 except Exception as e:
                     print(f"Failed to load cog {filename}: {e}")
-                    
-if __name__=="__main__":
+
+if __name__ == "__main__":
     load_dotenv()
     intents = discord.Intents.default()
-    
     intents.members = True
     intents.messages = True
     intents.message_content = True

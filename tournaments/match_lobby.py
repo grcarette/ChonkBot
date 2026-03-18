@@ -221,6 +221,10 @@ class MatchLobby:
             loser_message = (
                 f"{loser_mention} Unfortunately you've been eliminated from the tournament. Thank you for playing!"
             )
+        else:
+            loser_message = (
+                f"{loser_mention} This match is now complete. You will be pinged when your next match is ready."
+            )
         player_instructions = discord.Embed(
             title='Lobby Closed',
             description=winner_message + loser_message,

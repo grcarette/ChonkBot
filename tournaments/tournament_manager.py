@@ -1,4 +1,5 @@
 from .challonge_handler import ChallongeHandler
+from .swiss_manager import SwissManager
 from datetime import datetime
 
 from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
@@ -20,13 +21,15 @@ from ui.registration_approval import RegistrationApprovalView
 
 from .match_lobby import MatchLobby
 from .tournament_control import TournamentControl
-from.tournament_info_display import TournamentInfoDisplay
+from .tournament_info_display import TournamentInfoDisplay
 
 import discord
 import random
+import os
 
 RESULTS_CHANNEL_ID = 1346422769721544754
 DEFAULT_CHANNEL_POSITION = 2
+
 
 class TournamentManager:
     def __init__(self, bot, tournament):
@@ -39,27 +42,71 @@ class TournamentManager:
         self.bot_control = None
         self.tournament_reset = False
         self.autocall_matches = False
-        self.debug = False
-        if self.tournament['name'] == 'test tournament':
-            self.debug = True
+        self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
+        self.swiss_manager = None
+
+    # ─── Swiss property ───────────────────────────────────────────────────────
+
+    @property
+    def is_swiss(self) -> bool:
+        return self.tournament.get('format') == 'swiss'
+
+    # ─── Ranked API helper ────────────────────────────────────────────────────
+
+    async def get_ranked_player(self, user_id: int) -> dict | None:
+        """
+        Wrapper around the UCH Ranked API that returns fake data in debug mode.
+        Use this instead of calling self.bot.uchranked_api.get_player directly.
+        """
+        if self.debug:
+            fake_elos = {
+                0: 2100,  # tier 1 → 2 bonus points
+                1: 2200,  # tier 1 → 2 bonus points
+                2: 1600,  # tier 2 → 1 bonus point
+                3: 1500,  # tier 2 → 1 bonus point
+                4: 1100,  # tier 3 → 0 bonus points
+                5: 1000,  # tier 3 → 0 bonus points
+                6: 900,   # tier 3 → 0 bonus points
+                7: 800,   # tier 3 → 0 bonus points
+            }
+            elo = fake_elos.get(user_id % 8, 1000)
+            return {
+                'found': True,
+                'username': f'debug_user_{user_id}',
+                'elo': elo,
+                'rank': 'Debug',
+                'division': 0,
+            }
+        return await self.bot.uchranked_api.get_player(user_id)
+
+    # ─── Initialization ───────────────────────────────────────────────────────
 
     async def initialize_event(self):
         tournament = await self.get_tournament()
-        if 'challonge_data' in tournament:
-            self.ch = ChallongeHandler(tournament['challonge_data']['url'])
+
+        if not self.is_swiss:
+            if 'challonge_data' in tournament:
+                self.ch = ChallongeHandler(tournament['challonge_data']['url'])
+            else:
+                self.ch = ChallongeHandler()
+                challonge_tournament = await self.ch.create_tournament(
+                    name=tournament['name'],
+                    tournament_type=tournament['format'],
+                    start_time=tournament['date']
+                )
+                name = tournament['name']
+                url = challonge_tournament['url']
+                tournament_id = challonge_tournament['id']
+                await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
         else:
-            self.ch = ChallongeHandler()
-            challonge_tournament = await self.ch.create_tournament(
-                name=tournament['name'],
-                tournament_type=tournament['format'],
-                start_time=tournament['date']
-            )
-            name = tournament['name']
-            url = challonge_tournament['url']
-            tournament_id = challonge_tournament['id']
-            await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
-            
+            # Swiss: create the swiss event document if it doesn't exist yet
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+            if not swiss_event:
+                round_limit = tournament.get('round_limit', 8)
+                await self.bot.dh.create_swiss_event(tournament['_id'], round_limit)
+            self.swiss_manager = SwissManager(self)
+
         self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
 
@@ -86,7 +133,7 @@ class TournamentManager:
                 self.bot.add_view(BanStagesButton(match_lobby))
             elif lobby['state'] == 'reporting':
                 self.bot.add_view(MatchReportButton(match_lobby))
-            
+
         if tournament['state'] == 'initialize':
             await self.progress_tournament()
         if tournament['state'] == 'setup':
@@ -99,10 +146,12 @@ class TournamentManager:
             await self.start_tournament_loop()
         elif tournament['state'] == 'finished':
             self.bot.add_view(EndTournamentView(self))
-                
+
         tournament = await self.get_tournament()
         self.organizer_role = discord.utils.get(self.guild.roles, name=f"{tournament['name']} TO")
-      
+
+    # ─── Tournament state progression ────────────────────────────────────────
+
     async def progress_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         state = tournament['state']
@@ -135,7 +184,9 @@ class TournamentManager:
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
             for task in pre_transition_tasks:
                 await task
-        
+
+    # ─── Stages ───────────────────────────────────────────────────────────────
+
     async def add_stages(self, stages):
         valid_stages = []
         stages = stages.split(',')
@@ -144,12 +195,13 @@ class TournamentManager:
             if not valid_code:
                 return stage_code
             valid_stages.append(valid_code)
-
         await self.bot.dh.add_stages_to_tournament(self.tournament['_id'], valid_stages)
         return True
-            
+
+    # ─── Publishing ───────────────────────────────────────────────────────────
+
     async def publish_tournament(self):
-        if self.debug == True:
+        if self.debug:
             return
         guild = self.bot.guilds[0]
         category = self.get_tournament_category()
@@ -160,16 +212,17 @@ class TournamentManager:
                     overwrite = channel.overwrites_for(guild.default_role)
                     overwrite.view_channel = not overwrite.view_channel
                     await channel.set_permissions(guild.default_role, overwrite=overwrite)
-                
+
+    # ─── Registration ─────────────────────────────────────────────────────────
+
     async def open_registration(self):
         tournament = await self.get_tournament()
         if tournament['state'] == 'registration':
             guild = self.bot.guild
             tournament_category = self.get_tournament_category()
-            
             register_channel = await self.get_channel('register')
 
-            if self.debug == True:
+            if self.debug:
                 hide_channel = True
                 default_debug_players = 8
                 for i in range(default_debug_players):
@@ -199,7 +252,7 @@ class TournamentManager:
             self.checkin_view.register_button.disabled = False
             await self.checkin_message.edit(view=self.checkin_view)
         await self.bot.dh.open_registration(tournament['_id'])
-            
+
     async def close_registration(self):
         tournament = await self.get_tournament()
         if tournament['state'] == 'registration':
@@ -208,25 +261,129 @@ class TournamentManager:
             self.checkin_view.register_button.disabled = True
             await self.checkin_message.edit(view=self.checkin_view)
         await self.bot.dh.close_registration(tournament['_id'])
-        
+
     async def toggle_registration_visibility(self):
-        if self.debug == True:
+        if self.debug:
             return
         channel = await self.get_channel('register')
-        
         overwrite = channel.overwrites_for(self.guild.default_role)
         overwrite.view_channel = not overwrite.view_channel
-        
         await channel.set_permissions(self.guild.default_role, overwrite=overwrite)
-        
+
+    async def create_registration_approval(self, user_id, interaction):
+        # Swiss events require a UCH Ranked account
+        if self.is_swiss:
+            ranked_player = await self.get_ranked_player(user_id)
+            if not ranked_player:
+                await interaction.response.send_message(
+                    "You need a UCH Ranked account to participate in this event. "
+                    "You can sign up at <https://uchranked.com>.",
+                    ephemeral=True
+                )
+                return
+
+        already_registered = await self.bot.dh.get_registration_status(
+            self.tournament['_id'], user_id
+        )
+        if already_registered:
+            await interaction.response.send_message(
+                "You are already registered for this event.",
+                ephemeral=True
+            )
+            return
+
+        if self.tournament['config']['approved_registration']:
+            user = discord.utils.get(self.bot.guild.members, id=user_id)
+            approval_channel = await self.get_channel('registration-approval')
+            embed = discord.Embed(title=user.name, color=get_random_color())
+            view = RegistrationApprovalView(self, user_id)
+            await approval_channel.send(embed=embed, view=view)
+            message_content = (
+                f"Your registration for {self.tournament['name']} is awaiting TO approval"
+            )
+        else:
+            await self.register_player(user_id)
+            message_content = f"You are now registered for {self.tournament['name']}"
+
+        await interaction.response.send_message(message_content, ephemeral=True)
+
+    async def register_player(self, user_id):
+        already_registered = await self.bot.dh.get_registration_status(
+            self.tournament['_id'], user_id
+        )
+        if already_registered:
+            return False
+
+        guild = self.guild
+        discord_user = discord.utils.get(guild.members, id=user_id)
+        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
+
+        if not self.debug:
+            await discord_user.add_roles(tournament_role)
+            await self.bot.dh.register_user(discord_user)
+        else:
+            await self.bot.dh.register_user(user_id, debug=True)
+
+        user = await self.bot.dh.get_user(user_id=user_id)
+
+        if self.is_swiss:
+            # Swiss: no Challonge — add to swiss event in DB with elo and tier
+            ranked_player = await self.get_ranked_player(user_id)
+            elo = ranked_player['elo']
+            username = ranked_player['username']
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+            await self.bot.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo)
+            # Store in entrants with None as challonge id so registration status
+            # checks continue to work throughout the rest of the codebase
+            await self.bot.dh.register_player(self.tournament['_id'], user_id, None)
+
+            # If tournament is already active, trigger pairing for the new player
+            tournament = await self.get_tournament()
+            if tournament['state'] == 'active' and self.swiss_manager:
+                await self.swiss_manager.on_player_joined()
+        else:
+            # Normal flow: register on Challonge
+            tournament = await self.get_tournament()
+            player_id = await self.ch.register_player(
+                tournament['challonge_data']['url'], user['name']
+            )
+            await self.bot.dh.register_player(self.tournament['_id'], user_id, player_id)
+
+        return True
+
+    async def unregister_player(self, user_id):
+        tournament = await self.get_tournament()
+        if f'{user_id}' not in tournament.get('entrants', {}):
+            return
+
+        guild = self.guild
+        discord_user = discord.utils.get(guild.members, id=user_id)
+        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
+        await discord_user.remove_roles(tournament_role)
+        await self.bot.dh.unregister_player(tournament['_id'], user_id)
+
+        if self.is_swiss:
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+            if swiss_event:
+                await self.bot.dh.swiss_drop_player(swiss_event['_id'], user_id)
+                # Notify swiss manager if active
+                tournament = await self.get_tournament()
+                if tournament['state'] == 'active' and self.swiss_manager:
+                    await self.swiss_manager.on_player_dropped()
+        else:
+            challonge_id = tournament['challonge_data']['id']
+            player_id = tournament['entrants'][f'{user_id}']
+            await self.ch.unregister_player(challonge_id, player_id)
+
+    # ─── Check-in ─────────────────────────────────────────────────────────────
+
     async def start_checkin(self):
         guild = self.bot.guild
         tournament = await self.get_tournament()
         tournament_category = self.get_tournament_category()
-        
-        checkin_channel = await self.get_channel('checkin')
+        checkin_channel = await self.get_channel('check-in')
 
-        if self.debug == True:
+        if self.debug:
             hide_channel = True
         else:
             hide_channel = False
@@ -252,35 +409,30 @@ class TournamentManager:
         tournament_role = discord.utils.get(self.bot.guild.roles, name=tournament['name'])
         checkin_channel = await self.get_channel('check-in')
         await checkin_channel.purge(limit=None)
-        
         embed = await self.checkin_view.generate_embed()
-        message_content = (
-            f'{tournament_role.mention}'
+        message_content = f'{tournament_role.mention}'
+        self.checkin_message = await checkin_channel.send(
+            content=message_content, embed=embed, view=self.checkin_view
         )
-
-        self.checkin_message = await checkin_channel.send(content=message_content, embed=embed, view=self.checkin_view)
 
     async def ping_checkin(self):
         MAXIMUM_PING_CHECKINS = 10
-
         tournament = await self.get_tournament()
         category = self.get_tournament_category()
         checkin_channel = discord.utils.get(category.text_channels, name='check-in')
 
-        if not checkin_channel: 
+        if not checkin_channel:
             return False
 
         checked_in_list = [str(player) for player in tournament.get('checked_in', [])]
         entrant_ids = list(tournament['entrants'].keys())
-
         missing_count = len(entrant_ids) - len(checked_in_list)
-
-        print(checked_in_list, entrant_ids, missing_count)
 
         if missing_count > MAXIMUM_PING_CHECKINS:
             return False
+
         for player in entrant_ids:
-            if not player in checked_in_list:
+            if player not in checked_in_list:
                 user = discord.utils.get(self.guild.members, id=int(player))
                 if user:
                     await user.send(
@@ -288,25 +440,33 @@ class TournamentManager:
                         f"Go to {checkin_channel.mention} to check in."
                     )
         return True
-            
+
+    # ─── Tournament start ─────────────────────────────────────────────────────
+
     async def start_tournament(self):
         self.banner_filepath = await self.tc.generate_banner()
         tournament = await self.get_tournament()
-        if self.debug == True:
+
+        if self.debug:
             removed_players = []
         else:
-            removed_players = [player for player in tournament['entrants'].keys() if int(player) not in tournament['checked_in']]
+            removed_players = [
+                player for player in tournament['entrants'].keys()
+                if int(player) not in tournament['checked_in']
+            ]
         for player_id in removed_players:
             await self.unregister_player(int(player_id))
+
         checkin_channel = await self.get_channel('check-in')
         register_channel = await self.get_channel('register')
         if checkin_channel:
             await checkin_channel.delete()
         if register_channel:
             await register_channel.delete()
-            
-        await self.ch.start_tournament(tournament['challonge_data']['id'])
-        
+
+        if not self.is_swiss:
+            await self.ch.start_tournament(tournament['challonge_data']['id'])
+
         tournament_category = self.get_tournament_category()
         matchcall_channel = discord.utils.get(tournament_category.channels, name='match-calling')
         if not matchcall_channel:
@@ -315,22 +475,18 @@ class TournamentManager:
                 tournament_category=self.get_tournament_category(),
                 hide_channel=True,
                 channel_name='match-calling',
-                channel_overwrites=CHANNEL_PERMISSIONS[F'match-calling'],
+                channel_overwrites=CHANNEL_PERMISSIONS['match-calling'],
                 organizer_role=self.organizer_role
             )
+
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
         await self.send_instruction_message()
         await self.start_tournament_loop()
 
     async def send_instruction_message(self):
         event_updates_channel = await self.get_channel('event-updates')
-
         tournament_role = discord.utils.get(self.guild.roles, name=self.tournament['name'])
-        
-        message_content = (
-            f'{tournament_role.mention}'
-        )
-
+        message_content = f'{tournament_role.mention}'
         embed = discord.Embed(
             title=f"{self.tournament['name']} has started!",
             description=(
@@ -342,98 +498,22 @@ class TournamentManager:
         await event_updates_channel.send(content=message_content, embed=embed)
 
     async def start_tournament_loop(self):
-        await self.refresh_match_calls()
-        
-    async def end_tournament(self):
-        await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
-        for lobby in self.lobbies:
-            await self.lobbies[lobby].close_lobby()
-        if not self.debug:
-            await self.post_final_results()
-            
-    async def finalize_tournament(self):
-        await self.remove_tournament_from_discord()
-        if self.debug:
-            await self.delete_tournament()
-        
-    async def register_player(self, user_id):
-        already_registered = await self.bot.dh.get_registration_status(self.tournament['_id'], user_id)
-        if already_registered:
-            return False
-
-        guild = self.guild
-        discord_user = discord.utils.get(guild.members, id=user_id)
-        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
-        
-        if not self.debug:
-            await discord_user.add_roles(tournament_role)
-            await self.bot.dh.register_user(discord_user)
+        if self.is_swiss and self.swiss_manager:
+            await self.swiss_manager.start()
         else:
-            await self.bot.dh.register_user(user_id, debug=True)
-        
-        user = await self.bot.dh.get_user(user_id=user_id)
-        tournament = await self.get_tournament()
-        player_id = await self.ch.register_player(tournament['challonge_data']['url'], user['name'])
-        
-        await self.bot.dh.register_player(tournament['_id'], user_id, player_id)
+            await self.refresh_match_calls()
 
-        return True
-        
-    async def unregister_player(self, user_id):
-        tournament = await self.get_tournament()
-        if f'{user_id}' not in tournament.get('entrants', {}):
-            return
+    # ─── Match calling ────────────────────────────────────────────────────────
 
-        guild = self.guild
-        discord_user = discord.utils.get(guild.members, id=user_id)
-        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
-        
-        await discord_user.remove_roles(tournament_role)
-        
-        challonge_id = tournament['challonge_data']['id']
-        player_id = tournament['entrants'][f'{user_id}']
-        
-        await self.bot.dh.unregister_player(tournament['_id'], user_id)
-        await self.ch.unregister_player(challonge_id, player_id)
-        
-    async def create_registration_approval(self, user_id, interaction):
-        if self.tournament['config']['approved_registration'] == True:
-            user = discord.utils.get(self.bot.guild.members, id=user_id)
-            approval_channel = await self.get_channel('registration-approval')
-            embed = discord.Embed(
-                title=user.name,
-                color=get_random_color()
-            )
-            view = RegistrationApprovalView(self, user_id)
-            await approval_channel.send(embed=embed, view=view)
-            
-            message_content = (
-                f"Your registration for {self.tournament['name']} is awaiting TO approval"
-            )
-        else:
-            await self.register_player(user_id)
-            
-            message_content = (
-                f"You are now registered for {self.tournament['name']}"
-            )
-        await interaction.response.send_message(message_content, ephemeral=True)
-        
     async def refresh_match_calls(self):
         await self.purge_match_calls()
         await self.call_matches()
 
-    async def purge_match_calls(self):
-        tournament_category = self.get_tournament_category()
-        channel = discord.utils.get(tournament_category.channels, name='match-calling')
-        if channel:
-            await channel.purge(limit=None)
-        self.match_calls.clear()
-
-    async def toggle_autocall(self, state):
-        self.autocall_matches = state
-        await self.refresh_match_calls()
-    
     async def call_matches(self):
+        if self.is_swiss:
+            # Swiss pairing is handled by SwissManager
+            return
+
         tournament = await self.get_tournament()
         pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
         for match in pending_matches:
@@ -442,13 +522,13 @@ class TournamentManager:
                 return
             match_data = await self.parse_match_data(match)
             match_exists = await self.bot.dh.find_match(match_data['match_id'])
-            if not match_exists and not match_data['match_id'] in self.match_calls:
+            if not match_exists and match_data['match_id'] not in self.match_calls:
                 if self.autocall_matches:
                     await self.call_match(match_data)
                 else:
                     await self.add_match_call(match_data)
             else:
-                if match_exists and not match_data['match_id'] in self.match_calls:
+                if match_exists and match_data['match_id'] not in self.match_calls:
                     if match_exists['state'] == 'held':
                         await self.add_match_call(match_data, match_held=True)
 
@@ -456,47 +536,40 @@ class TournamentManager:
         category = self.get_tournament_category()
         channel = discord.utils.get(category.channels, name='match-calling')
         tournament = await self.get_tournament()
-        
         player_1, player_2 = await self.get_players_from_match(match_data)
-        players = [player_1, player_2]
-        
+
         waiting_since = await self.bot.dh.get_lobby_time(match_data['prereq_matches'])
         waiting_since = self.get_short_timestamp(waiting_since)
-        
+
         if match_data['bracket'] == 'Winners':
             color = discord.Color.green()
         else:
             color = discord.Color.red()
-            
+
         embed = discord.Embed(
-            title = f"{match_data['bracket']} round {match_data['round']} - {player_1['name']} vs {player_2['name']}",
-            description = f"{waiting_since}",
-            color  = color
+            title=f"{match_data['bracket']} round {match_data['round']} - {player_1['name']} vs {player_2['name']}",
+            description=f"{waiting_since}",
+            color=color
         )
         match_call_view = MatchCallView(self, match_data, match_held)
         match_call_message = await channel.send(embed=embed, view=match_call_view)
         await match_call_view.add_message(match_call_message)
         self.match_calls[match_data['match_id']] = match_call_message
-        
+
     async def get_lobby_name(self, match_data):
         player_1, player_2 = await self.get_players_from_match(match_data)
         round = match_data['round']
-        if match_data['bracket'] == 'Winners':
-            bracket_tag = 'w'
-        else:
-            bracket_tag = 'l'
+        bracket_tag = 'w' if match_data['bracket'] == 'Winners' else 'l'
         lobby_name = f"{bracket_tag}r{round}-{player_1['name']} vs {player_2['name']}"
         return lobby_name
-        
+
     async def call_match(self, match_data, hold_match=False):
         guild = self.guild
         tournament = await self.get_tournament()
         player_1, player_2 = await self.get_players_from_match(match_data)
-
         players = [player_1['user_id'], player_2['user_id']]
-        
         lobby_name = await self.get_lobby_name(match_data)
-        
+
         match_lobby = await MatchLobby.create(
             tournament_id=tournament['_id'],
             match_id=match_data['match_id'],
@@ -523,160 +596,170 @@ class TournamentManager:
         await self.lobbies[match_data['match_id']].start_match()
         if match_data['match_id'] in self.match_calls:
             await self.match_calls[match_data['match_id']].delete()
-        
-    async def get_players_from_match(self, match_data):
-        player_1_id = match_data['player_1']
-        player_2_id = match_data['player_2']
-        
-        player_1 = await self.bot.dh.get_user(user_id=player_1_id)
-        player_2 = await self.bot.dh.get_user(user_id=player_2_id)       
-        
-        return player_1, player_2
-        
-    async def parse_match_data(self, match):
-        tournament = await self.get_tournament()
-        format = tournament['format']
-        player_1_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player1_id'])
-        player_2_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player2_id'])
-        
-        round_number = match['round']
-        if format == 'single elimination':
-            bracket = ''
-        elif format == 'double elimination':
-            if round_number > 0:
-                bracket = "Winners"
-            else:
-                bracket = "Losers"
-                
-        pre_reqs = match['prerequisite_match_ids_csv']
-        if pre_reqs == '':
-            prereq_matches = []
-        elif isinstance(pre_reqs, float):
-            prereq_matches = [int(pre_reqs)]
-        elif isinstance(pre_reqs, str):
-            pre_req_ids = pre_reqs.split(',')
-            prereq_matches = [int(pre_req) for pre_req in pre_req_ids]
-               
-        match_data = {
-            'player_1': int(player_1_id),
-            'player_2': int(player_2_id),
-            'match_id': match['id'],
-            'round': round_number,
-            'bracket': bracket, 
-            'tournament': tournament['name'],
-            'prereq_matches': prereq_matches
-        }
-        return match_data
-    
-    async def prompt_end_tournament(self):
-        embed = discord.Embed(
-            title="End Tournament",
-            description="All matches have concluded. Would you like to end the tourament?",
-            color=discord.Color.yellow()
-        )
-        view = EndTournamentView(self)
+
+    async def purge_match_calls(self):
         tournament_category = self.get_tournament_category()
-        channel = discord.utils.get(tournament_category.channels, name='bot-control')
-        await channel.send(embed=embed, view=view)
-    
+        channel = discord.utils.get(tournament_category.channels, name='match-calling')
+        if channel:
+            await channel.purge(limit=None)
+        self.match_calls.clear()
+
+    # ─── Result reporting ─────────────────────────────────────────────────────
+
     async def report_match(self, lobby, is_dq=False):
         lobby_data = await lobby.get_lobby()
         tournament = await self.get_tournament()
         winner_user_id = str(lobby_data['results'][0])
-        winner_id = tournament['entrants'][winner_user_id]
-        await self.ch.report_match(tournament['challonge_data']['url'], lobby_data['match_id'], winner_id, is_dq)
-        status = await self.ch.check_tournament_status(tournament['challonge_data']['id'])
-        await self.close_prereqs(lobby)
-        if status == 'awaiting_review':
-            await self.prompt_end_tournament()
+
+        if not self.is_swiss:
+            winner_id = tournament['entrants'][winner_user_id]
+            await self.ch.report_match(
+                tournament['challonge_data']['url'], lobby_data['match_id'], winner_id, is_dq
+            )
+            status = await self.ch.check_tournament_status(tournament['challonge_data']['id'])
+            await self.close_prereqs(lobby)
+            if status == 'awaiting_review':
+                await self.prompt_end_tournament()
+            else:
+                await self.call_matches()
         else:
-            await self.call_matches()
-        
+            loser_user_id = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+            if swiss_event and loser_user_id:
+                await self.bot.dh.swiss_record_result(
+                    swiss_event['_id'],
+                    lobby_data['match_id'],
+                    int(winner_user_id),
+                    int(loser_user_id),
+                )
+                # Push to UCH Ranked API (skip in debug mode)
+                if not self.debug:
+                    result = await self.bot.uchranked_api.report_match(
+                        player1_id=int(winner_user_id),
+                        player2_id=int(loser_user_id),
+                        score="1-0",
+                    )
+                    if not result.get('success'):
+                        print(f"UCH Ranked API error: {result.get('error')}")
+
+                # Trigger next pairing cycle
+                if self.swiss_manager:
+                    await self.swiss_manager.on_match_complete(
+                        lobby_data['match_id'],
+                        int(winner_user_id),
+                        int(loser_user_id),
+                    )
+
     async def close_prereqs(self, lobby):
         lobby = await lobby.get_lobby()
         for match_id in lobby['prereq_matches']:
             lobby = await self.bot.dh.get_lobby(match_id)
             if not lobby['state'] == 'closed':
                 await self.lobbies[match_id].close_lobby()
-    
+
+    # ─── Reset ───────────────────────────────────────────────────────────────
+
     async def reset_match(self, lobby):
         tournament = await self.get_tournament()
         match_reset = await self.ch.reset_match(tournament['challonge_data']['id'], lobby['match_id'])
-        
         dependent_matches = await self.bot.dh.get_dependent_matches(lobby['match_id'])
         for lobby in dependent_matches:
             await self.bot.lh.delete_lobby(lobby)
         return match_reset
-    
+
     async def reset_report(self, kwargs):
         lobby = kwargs.get('lobby')
         await self.lobbies[lobby['match_id']].reset_report()
         await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
-          
+
     async def reset_tournament(self, kwargs):
         self.tournament_reset = True
         tournament = await self.get_tournament()
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
-        await self.ch.reset_tournament(tournament['challonge_data']['id'])
-        await self.bot.dh.update_tournament_state(self.tournament['_id'],'registration')
+        if not self.is_swiss:
+            await self.ch.reset_tournament(tournament['challonge_data']['id'])
+        await self.bot.dh.update_tournament_state(self.tournament['_id'], 'registration')
         await self.bot.dh.clear_lobbies(self.tournament['_id'])
         await self.purge_match_calls()
         await self.progress_tournament()
         self.tournament_reset = False
-        
-    async def get_tournament(self):
-        tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
-        self.tournament = tournament
-        return tournament
 
-    def get_tournament_category(self):
-        category = discord.utils.get(self.guild.categories, id=self.tournament['category_id'])
-        return category
+    # ─── End tournament ───────────────────────────────────────────────────────
 
-    def get_short_timestamp(self, timestamp):
-        return timestamp.strftime("%I:%M%p").lstrip("0")
-    
-    async def get_channel(self, name):
+    async def end_tournament(self):
+        if not self.is_swiss:
+            await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
+        for lobby in self.lobbies:
+            await self.lobbies[lobby].close_lobby()
+        if not self.debug:
+            await self.post_final_results()
+
+    async def finalize_tournament(self):
+        await self.remove_tournament_from_discord()
+        if self.debug:
+            await self.delete_tournament()
+
+    async def prompt_end_tournament(self):
+        embed = discord.Embed(
+            title="End Tournament",
+            description="All matches have concluded. Would you like to end the tournament?",
+            color=discord.Color.yellow()
+        )
+        view = EndTournamentView(self)
         tournament_category = self.get_tournament_category()
-        channel = discord.utils.get(tournament_category.channels, name=name)
-        return channel
-        
+        channel = discord.utils.get(tournament_category.channels, name='bot-control')
+        await channel.send(embed=embed, view=view)
+
     async def post_final_results(self):
         channel = discord.utils.get(self.bot.guild.channels, id=RESULTS_CHANNEL_ID)
-        challonge_id = self.tournament['challonge_data']['id']
-        final_results = await self.ch.get_final_results(challonge_id)
-        
-        overall_winner = ''
-        results = ''
-        
-        for player in final_results:
-            discord_id = await self.bot.dh.get_user_by_challonge(self.tournament['_id'], player['id'])
-            if discord_id:
-                mention = f"<@{discord_id}>"
-            else:
-                mention = player['name']
-                
-            rank = player['final_rank']
-                
-            if rank == 1:
-                emoji = RESULT_EMOJIS['1st']
-                overall_winner = f"**{RESULT_EMOJIS['trophy']} Overall Winner: {mention}**\n\n"
-            elif rank == 2:
-                emoji = RESULT_EMOJIS['2nd']
-            elif rank == 3:
-                emoji = RESULT_EMOJIS['3rd']            
-            elif rank > 3 and rank <= 8:
-                emoji = RESULT_EMOJIS['medal']
-            else:
-                emoji = ''        
-                
-            results += f"{rank}: {player['name']} {emoji}\n"
-            
-        message_content = overall_winner + results
-        
+
+        if self.is_swiss:
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+            standings = await self.bot.dh.swiss_get_standings(swiss_event['_id'])
+            overall_winner = ''
+            results = ''
+            for i, player in enumerate(standings):
+                rank = i + 1
+                mention = f"<@{player['discord_id']}>"
+                if rank == 1:
+                    emoji = RESULT_EMOJIS['1st']
+                    overall_winner = f"**{RESULT_EMOJIS['trophy']} Overall Winner: {player['username']}**\n\n"
+                elif rank == 2:
+                    emoji = RESULT_EMOJIS['2nd']
+                elif rank == 3:
+                    emoji = RESULT_EMOJIS['3rd']
+                elif rank <= 8:
+                    emoji = RESULT_EMOJIS['medal']
+                else:
+                    emoji = ''
+                results += f"{rank}: {mention} ({player['points']}pts, {player['wins']}W-{player['losses']}L) {emoji}\n"
+            message_content = overall_winner + results
+        else:
+            challonge_id = self.tournament['challonge_data']['id']
+            final_results = await self.ch.get_final_results(challonge_id)
+            overall_winner = ''
+            results = ''
+            for player in final_results:
+                discord_id = await self.bot.dh.get_user_by_challonge(self.tournament['_id'], player['id'])
+                mention = f"<@{discord_id}>" if discord_id else player['name']
+                rank = player['final_rank']
+                if rank == 1:
+                    emoji = RESULT_EMOJIS['1st']
+                    overall_winner = f"**{RESULT_EMOJIS['trophy']} Overall Winner: {player['name']}**\n\n"
+                elif rank == 2:
+                    emoji = RESULT_EMOJIS['2nd']
+                elif rank == 3:
+                    emoji = RESULT_EMOJIS['3rd']
+                elif 3 < rank <= 8:
+                    emoji = RESULT_EMOJIS['medal']
+                else:
+                    emoji = ''
+                results += f"{rank}: {mention} {emoji}\n"
+            message_content = overall_winner + results
+
         tournament = await self.get_tournament()
-        if 'color' in tournament['config']:
+        if 'color' in tournament.get('config', {}):
             color = discord.Color.from_str(tournament['config']['color'])
         else:
             color = get_random_color()
@@ -686,58 +769,53 @@ class TournamentManager:
             description=message_content,
             color=color
         )
-        label = f"{INDICATOR_EMOJIS['link']} Bracket"
-        bracket_link = await get_bracket_link(self.tournament['challonge_data']['url'])
-        
-        view = LinkView(label, bracket_link)
 
-        await channel.send(embed=embed, view=view)
-            
+        if not self.is_swiss:
+            label = f"{INDICATOR_EMOJIS['link']} Bracket"
+            bracket_link = await get_bracket_link(self.tournament['challonge_data']['url'])
+            view = LinkView(label, bracket_link)
+            await channel.send(embed=embed, view=view)
+        else:
+            await channel.send(embed=embed)
+
+    # ─── Delete tournament ────────────────────────────────────────────────────
+
     async def delete_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
         await self.remove_tournament_from_discord()
         if tournament['state'] == 'finished':
             return False
-        
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
-        await self.ch.delete_tournament(tournament['challonge_data']['id'])
+        if not self.is_swiss:
+            await self.ch.delete_tournament(tournament['challonge_data']['id'])
         await self.bot.dh.delete_tournament(tournament['_id'])
+        # Remove from handler so stale references don't cause KeyErrors
+        self.bot.th.tournaments.pop(tournament['_id'], None)
 
-    async def remove_tournament_from_discord(self):    
+    async def remove_tournament_from_discord(self):
         tournament = await self.get_tournament()
         guild = self.bot.guild
         tournament_category = self.get_tournament_category()
         for channel in tournament_category.channels:
             await channel.delete()
-
         tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
         tournament_to_role = discord.utils.get(guild.roles, name=f"{tournament['name']} TO")
-        
         if tournament_role:
             await tournament_role.delete()
         if tournament_to_role:
             await tournament_to_role.delete()
         if tournament_category:
             await tournament_category.delete()
-            
-    async def get_state(self):
-        tournament = await self.get_tournament()
-        return tournament['state']
-    
-    async def add_view(self, view):
-        self.bot.add_view(view)
-        
-    async def edit_tournament_config(self, **kwargs):
-        for key, value in kwargs.items():
-            if key == 'name':
-                pass
-            elif key == 'date':
-                pass
-            elif key == 'stagelist':
-                pass
-                
-            await self.bot.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+
+    # ─── Player management ────────────────────────────────────────────────────
+
+    async def get_players_from_match(self, match_data):
+        player_1_id = match_data['player_1']
+        player_2_id = match_data['player_2']
+        player_1 = await self.bot.dh.get_user(user_id=player_1_id)
+        player_2 = await self.bot.dh.get_user(user_id=player_2_id)
+        return player_1, player_2
 
     async def disqualify_player(self, user_id):
         player_registered = await self.bot.dh.get_registration_status(self.tournament['_id'], user_id)
@@ -748,29 +826,91 @@ class TournamentManager:
             lobby = self.lobbies[lobby_data['match_id']]
             winner_id = (set(lobby_data['players']) - {user_id}).pop()
             await lobby.end_reporting(winner_id, is_dq=True)
-
         return await self.bot.dh.disqualify_player(self.tournament['_id'], user_id)
-        
+
     async def undisqualify_player(self, user_id):
         return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
 
+    # ─── Match data parsing ───────────────────────────────────────────────────
+
+    async def parse_match_data(self, match):
+        tournament = await self.get_tournament()
+        format = tournament['format']
+        player_1_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player1_id'])
+        player_2_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player2_id'])
+
+        round_number = match['round']
+        if format == 'single elimination':
+            bracket = ''
+        elif format == 'double elimination':
+            bracket = 'Winners' if round_number > 0 else 'Losers'
+        else:
+            bracket = ''
+
+        pre_reqs = match['prerequisite_match_ids_csv']
+        if pre_reqs == '':
+            prereq_matches = []
+        elif isinstance(pre_reqs, float):
+            prereq_matches = [int(pre_reqs)]
+        elif isinstance(pre_reqs, str):
+            prereq_matches = [int(p) for p in pre_reqs.split(',')]
+
+        match_data = {
+            'player_1': int(player_1_id),
+            'player_2': int(player_2_id),
+            'match_id': match['id'],
+            'round': round_number,
+            'bracket': bracket,
+            'tournament': tournament['name'],
+            'prereq_matches': prereq_matches
+        }
+        return match_data
+
+    # ─── Seeding ─────────────────────────────────────────────────────────────
+
     async def generate_seeding_link(self) -> str:
-        """Generate a one-time seeding URL for TOs. Valid for 30 minutes."""
-        import os
         from web.seeding_server import generate_token
- 
         tournament = await self.get_tournament()
         challonge_url = tournament['challonge_data']['url']
         token = generate_token(str(tournament['_id']), challonge_url)
- 
-        base_url = os.getenv('WEB_BASE_URL', 'http://localhost:8080')
+        base_url = os.getenv('WEB_BASE_URL', 'http://localhost:8080').strip()
         return f"{base_url}/seeding?token={token}"
- 
 
-        
-        
-        
+    # ─── Autocall ────────────────────────────────────────────────────────────
 
-        
-        
-        
+    async def toggle_autocall(self, state):
+        self.autocall_matches = state
+
+    # ─── Utilities ───────────────────────────────────────────────────────────
+
+    async def get_tournament(self):
+        tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
+        self.tournament = tournament
+        return tournament
+
+    def get_tournament_category(self):
+        return discord.utils.get(self.guild.categories, id=self.tournament['category_id'])
+
+    def get_short_timestamp(self, timestamp):
+        return timestamp.strftime("%I:%M%p").lstrip("0")
+
+    async def get_channel(self, name):
+        tournament_category = self.get_tournament_category()
+        return discord.utils.get(tournament_category.channels, name=name)
+
+    async def get_state(self):
+        tournament = await self.get_tournament()
+        return tournament['state']
+
+    async def add_view(self, view):
+        self.bot.add_view(view)
+
+    async def edit_tournament_config(self, **kwargs):
+        for key, value in kwargs.items():
+            if key in ('name', 'date', 'stagelist'):
+                pass
+        await self.bot.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+
+    async def refresh_match_calls(self):
+        await self.purge_match_calls()
+        await self.call_matches()

@@ -3,8 +3,7 @@ from .users import UserMethodsMixin
 from .tournaments import TournamentMethodsMixin
 from .lobby import LobbyMethodsMixin
 from .stage import StageMethodsMixin
-
-
+from .swiss import SwissMethodsMixin
 
 from utils.errors import *
 from utils.emojis import EMOJI_NUMBERS
@@ -20,14 +19,15 @@ import os
 from dotenv import load_dotenv
 
 class DataHandler(
-    DataHandlerBase, 
-    UserMethodsMixin, 
-    TournamentMethodsMixin, 
-    LobbyMethodsMixin, 
+    DataHandlerBase,
+    UserMethodsMixin,
+    TournamentMethodsMixin,
+    LobbyMethodsMixin,
     StageMethodsMixin,
-    ):
+    SwissMethodsMixin,
+):
     def __init__(self):
-        super().__init__()    
+        super().__init__()
         load_dotenv()
         mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
         self.client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
@@ -38,10 +38,4 @@ class DataHandler(
         self.register_flag_collection = self.db['register_flags']
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
-
-
-        
-        # self.tdb = client['UCHTournamentData']
-        # self.match_collection = self.tdb['matches']
-        # self.player_collection = self.tdb['players']
-        # self.tournament_data_collection = self.tdb['tournaments']
+        self.swiss_collection = self.db['swiss_events']

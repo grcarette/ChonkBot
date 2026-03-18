@@ -15,7 +15,7 @@ class TournamentMethodsMixin:
             'randomized_stagelist': tournament['randomized_stagelist'],
             'display_entrants': tournament['display_entrants'],
         }
-        tournament = {
+        tournament_doc = {
             'name': tournament['name'],
             'date': tournament['date'],
             'organizers': [tournament['organizer']],
@@ -27,9 +27,13 @@ class TournamentMethodsMixin:
             'dqs': [],
             'checked_in': [],
             'registration_open': False,
+            'debug': tournament.get('debug', False),
         }
-        result = await self.tournament_collection.insert_one(tournament)
-        tournament = await self.get_tournament(name=tournament['name'])
+        if tournament['format'] == 'swiss':
+            tournament_doc['round_limit'] = tournament.get('round_limit', 8)
+
+        result = await self.tournament_collection.insert_one(tournament_doc)
+        tournament = await self.get_tournament(name=tournament_doc['name'])
         return tournament
 
     async def close_registration(self, tournament_id):
