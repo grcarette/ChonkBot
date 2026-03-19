@@ -29,7 +29,6 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
         return [], list(available)
 
     # Sort by points descending, elo descending as tiebreaker
-    # This means we try to pair the highest-pointed players first
     players = sorted(available, key=lambda p: (-p['points'], -p['elo']))
 
     pairs = []
@@ -48,16 +47,12 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
                 continue
             if candidate['discord_id'] in used:
                 continue
-            if candidate['discord_id'] in player['match_history']:
-                continue  # never rematch
 
-            # Score this pairing — lower is better
-            # Primary: absolute points difference
-            # Secondary: absolute elo difference (scaled down so it doesn't
-            #            override points unless points are equal)
+            is_rematch = candidate['discord_id'] in player['match_history']
             points_diff = abs(player['points'] - candidate['points'])
             elo_diff = abs(player['elo'] - candidate['elo'])
-            score = (points_diff, elo_diff)
+            rematch_penalty = 1000 if is_rematch else 0
+            score = (rematch_penalty, points_diff, elo_diff)
 
             if best_score is None or score < best_score:
                 best_score = score
@@ -68,12 +63,10 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
             used.add(player['discord_id'])
             used.add(best_opponent['discord_id'])
         else:
-            # No valid opponent found (everyone is a rematch or already used)
             unpaired_ids.add(player['discord_id'])
 
     unpaired = [p for p in players if p['discord_id'] in unpaired_ids and p['discord_id'] not in used]
     return pairs, unpaired
-
 
 def select_bye_candidate(unpaired: list[dict]) -> dict | None:
     """

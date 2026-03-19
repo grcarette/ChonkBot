@@ -18,6 +18,7 @@ from ui.tournament_checkin import TournamentCheckinView
 from ui.end_tournament import EndTournamentView
 from ui.link_view import LinkView
 from ui.registration_approval import RegistrationApprovalView
+from ui.swiss_register import SwissActiveRegisterView
 
 from .match_lobby import MatchLobby
 from .tournament_control import TournamentControl
@@ -143,6 +144,8 @@ class TournamentManager:
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
         elif tournament['state'] == 'active':
+            if self.is_swiss:
+                self.bot.add_view(SwissActiveRegisterView(self))
             await self.start_tournament_loop()
         elif tournament['state'] == 'finished':
             self.bot.add_view(EndTournamentView(self))
@@ -359,14 +362,14 @@ class TournamentManager:
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
-        await discord_user.remove_roles(tournament_role)
+        if discord_user and tournament_role:
+            await discord_user.remove_roles(tournament_role)
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
 
         if self.is_swiss:
             swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
             if swiss_event:
                 await self.bot.dh.swiss_drop_player(swiss_event['_id'], user_id)
-                # Notify swiss manager if active
                 tournament = await self.get_tournament()
                 if tournament['state'] == 'active' and self.swiss_manager:
                     await self.swiss_manager.on_player_dropped()
@@ -458,13 +461,38 @@ class TournamentManager:
             await self.unregister_player(int(player_id))
 
         checkin_channel = await self.get_channel('check-in')
-        register_channel = await self.get_channel('register')
         if checkin_channel:
             await checkin_channel.delete()
-        if register_channel:
-            await register_channel.delete()
 
-        if not self.is_swiss:
+        if self.is_swiss:
+            # Swiss: keep the register channel open with the active join/leave view
+            register_channel = await self.get_channel('register')
+            if register_channel:
+                await register_channel.purge(limit=None)
+                view = SwissActiveRegisterView(self)
+                self.bot.add_view(view)
+                embed = discord.Embed(
+                    title=f"{self.tournament['name']} — Open Registration",
+                    description=(
+                        "The tournament has started, but you can still join or leave at any time.\n\n"
+                        "**Join** to enter the next round.\n"
+                        "**Leave** to drop out. If you are currently in a match, "
+                        "your opponent wins by default."
+                    ),
+                    color=discord.Color.green()
+                )
+                await register_channel.send(embed=embed, view=view)
+                # Make sure the register channel is visible
+                if not self.debug:
+                    overwrite = register_channel.overwrites_for(self.guild.default_role)
+                    overwrite.view_channel = True
+                    await register_channel.set_permissions(
+                        self.guild.default_role, overwrite=overwrite
+                    )
+        else:
+            register_channel = await self.get_channel('register')
+            if register_channel:
+                await register_channel.delete()
             await self.ch.start_tournament(tournament['challonge_data']['id'])
 
         tournament_category = self.get_tournament_category()
@@ -632,8 +660,8 @@ class TournamentManager:
                     int(winner_user_id),
                     int(loser_user_id),
                 )
-                # Push to UCH Ranked API (skip in debug mode)
-                if not self.debug:
+                # Push to UCH Ranked API (skip in debug mode and DQ matches)
+                if not self.debug and not is_dq:
                     result = await self.bot.uchranked_api.report_match(
                         player1_id=int(winner_user_id),
                         player2_id=int(loser_user_id),
@@ -790,7 +818,6 @@ class TournamentManager:
         if not self.is_swiss:
             await self.ch.delete_tournament(tournament['challonge_data']['id'])
         await self.bot.dh.delete_tournament(tournament['_id'])
-        # Remove from handler so stale references don't cause KeyErrors
         self.bot.th.tournaments.pop(tournament['_id'], None)
 
     async def remove_tournament_from_discord(self):

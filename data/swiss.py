@@ -48,6 +48,7 @@ class SwissMethodsMixin:
             'bye_queue': None,
             'bye_task_started_at': None,
             'next_match_sequence': 0,
+            'current_round': 0,
             'created_at': _now(),
         }
         result = await self.swiss_collection.insert_one(event)
@@ -64,6 +65,15 @@ class SwissMethodsMixin:
             {'_id': ObjectId(event_id)},
             {'$set': {'state': state}}
         )
+
+    async def swiss_increment_round(self, event_id: ObjectId) -> int:
+        """Atomically increment the round counter and return the new round number."""
+        result = await self.swiss_collection.find_one_and_update(
+            {'_id': ObjectId(event_id)},
+            {'$inc': {'current_round': 1}},
+            return_document=True
+        )
+        return result['current_round']
 
     # ─── Player management ────────────────────────────────────────────────────
 
@@ -139,6 +149,7 @@ class SwissMethodsMixin:
         match_id: int,
         player_1: int,
         player_2: int,
+        round_number: int,
     ) -> dict:
         """
         Record a new match between two players.
@@ -151,6 +162,7 @@ class SwissMethodsMixin:
             'player_2': player_2,
             'winner': None,
             'state': 'active',
+            'round_number': round_number,
             'created_at': _now(),
         }
         await self.swiss_collection.update_one(
@@ -176,22 +188,26 @@ class SwissMethodsMixin:
         winner_id: int,
         loser_id: int,
     ):
-        """
-        Record the result of a match.
-        - Winner gets 1 point, rounds_played + 1, active_match cleared
-        - Loser gets rounds_played + 1, active_match cleared
-        - Match state set to finished
-        """
         event = await self.get_swiss_event(event_id)
-        winner = event['players'][str(winner_id)]
-        loser = event['players'][str(loser_id)]
+        winner = event['players'].get(str(winner_id))
+        loser = event['players'].get(str(loser_id))
 
-        await self.swiss_collection.update_one(
-            {'_id': ObjectId(event_id), 'matches.match_id': match_id},
+        print(f"swiss_record_result called: match_id={match_id} ({type(match_id)})")
+        print(f"  winner={winner_id}, found={winner is not None}")
+        print(f"  loser={loser_id}, found={loser is not None}")
+        stored_ids = [(m['match_id'], type(m['match_id'])) for m in event.get('matches', [])]
+        print(f"  stored match_ids: {stored_ids}")
+
+        if not winner or not loser:
+            print("  ERROR: winner or loser not found in players dict")
+            return
+
+        result = await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
             {
                 '$set': {
-                    'matches.$.winner': winner_id,
-                    'matches.$.state': 'finished',
+                    'matches.$[m].winner': winner_id,
+                    'matches.$[m].state': 'finished',
                     f'players.{winner_id}.active_match_id': None,
                     f'players.{winner_id}.points': winner['points'] + 1,
                     f'players.{winner_id}.wins': winner['wins'] + 1,
@@ -200,8 +216,10 @@ class SwissMethodsMixin:
                     f'players.{loser_id}.losses': loser['losses'] + 1,
                     f'players.{loser_id}.rounds_played': loser['rounds_played'] + 1,
                 }
-            }
+            },
+            array_filters=[{'m.match_id': match_id}]
         )
+        print(f"  matched={result.matched_count}, modified={result.modified_count}")
 
     # ─── Bye management ───────────────────────────────────────────────────────
 
@@ -224,6 +242,7 @@ class SwissMethodsMixin:
         """
         Award a bye to a player.
         Counts as a round played and grants 1 point.
+        Clears active_match_id so the player is not stuck.
         """
         event = await self.get_swiss_event(event_id)
         player = event['players'][str(discord_id)]
@@ -233,6 +252,7 @@ class SwissMethodsMixin:
                 '$set': {
                     f'players.{discord_id}.points': player['points'] + 1,
                     f'players.{discord_id}.rounds_played': player['rounds_played'] + 1,
+                    f'players.{discord_id}.active_match_id': None,
                     'bye_queue': None,
                     'bye_task_started_at': None,
                 }
@@ -246,17 +266,16 @@ class SwissMethodsMixin:
         Return all players who are:
         - Not dropped
         - Not currently in a match
-        - Have not hit the round limit
         Each returned dict includes the discord_id as a key for convenience.
+        Note: availability is not gated by rounds_played since the round limit
+        is tracked at the event level via current_round, not per-player.
         """
         event = await self.get_swiss_event(event_id)
-        round_limit = event['round_limit']
         available = []
         for discord_id, player in event['players'].items():
             if (
                 not player['dropped']
                 and player['active_match_id'] is None
-                and player['rounds_played'] < round_limit
             ):
                 available.append({'discord_id': int(discord_id), **player})
         return available
@@ -278,17 +297,12 @@ class SwissMethodsMixin:
         return standings
 
     async def swiss_is_event_complete(self, event_id: ObjectId) -> bool:
-        """
-        Returns True if all active (non-dropped) players have
-        reached the round limit and have no active match.
-        """
         event = await self.get_swiss_event(event_id)
-        round_limit = event['round_limit']
+        if event.get('current_round', 0) == 0:
+            return False
+        if event.get('current_round', 0) < event['round_limit']:
+            return False
         for player in event['players'].values():
-            if player['dropped']:
-                continue
-            if player['rounds_played'] < round_limit:
-                return False
-            if player['active_match_id'] is not None:
+            if player.get('active_match_id') is not None:
                 return False
         return True

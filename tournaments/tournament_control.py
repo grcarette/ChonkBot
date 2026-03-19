@@ -90,7 +90,15 @@ class TournamentControl:
         stage_list_data = []
         for map_code in tournament['stagelist']:
             stage = await self.dh.get_stage(code=map_code)
-            stage_list_data.append(stage)
+            if stage:
+                stage_list_data.append(stage)
+
+        # Fill up to 5 stages with random ones if any were missing
+        while len(stage_list_data) < 5:
+            random_stages = await self.dh.get_random_stages(1)
+            if random_stages:
+                stage_list_data.append(random_stages[0])
+
         filepath = await sbg.generate_banner(stage_list_data, tournament)
         return filepath
 

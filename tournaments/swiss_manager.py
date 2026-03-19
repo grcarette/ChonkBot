@@ -1,4 +1,5 @@
 import asyncio
+import random
 import discord
 
 from tournaments.match_lobby import MatchLobby
@@ -55,42 +56,68 @@ class SwissManager:
                 await self.start_bye_wait(available[0], swiss_event)
             return
 
+        # Delete channels from previous round before creating new ones
+        await self.close_previous_round_channels(swiss_event['_id'])
+
+        # Increment the round counter — new round is now current
+        current_round = await self.dh.swiss_increment_round(swiss_event['_id'])
+
+        # Re-fetch after increment
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+
+        await self.randomize_stagelist()
+
         pairs, unpaired = pair_players(available)
 
         for player_1, player_2 in pairs:
-            await self.call_match(player_1, player_2, swiss_event)
+            await self.call_match(player_1, player_2, swiss_event, current_round)
 
         if unpaired:
             candidate = select_bye_candidate(unpaired)
             if candidate and self.bye_task is None:
                 await self.start_bye_wait(candidate, swiss_event)
 
+        # In debug mode all matches resolve instantly so check round complete now
+        if self.tm.debug:
+            await self.check_round_complete()
+
+    # ─── Channel cleanup ─────────────────────────────────────────────────────
+
+    async def close_previous_round_channels(self, event_id):
+        for match_id in list(self.tm.lobbies.keys()):
+            lobby = self.tm.lobbies[match_id]
+            if lobby.channel is not None:
+                try:
+                    await lobby.channel.delete()
+                    lobby.channel = None
+                except discord.NotFound:
+                    lobby.channel = None
+                except Exception as e:
+                    print(f"Error deleting swiss lobby channel {match_id}: {e}")
+
     # ─── Check if round is complete ───────────────────────────────────────────
 
     async def check_round_complete(self):
-        """
-        Check if all active matches in the current round are finished.
-        If so, post standings and enable the Start Next Round button.
-        """
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
-        # If any player still has an active match, the round isn't over
+        # Don't do anything if no rounds have started yet
+        if swiss_event.get('current_round', 0) == 0:
+            return
+
         for player in swiss_event['players'].values():
             if player.get('active_match_id') is not None:
                 return
 
-        # Check if the event is fully complete before enabling the button
         if await self.dh.swiss_is_event_complete(swiss_event['_id']):
             await self.end_event()
             return
 
-        # All matches done — post standings and enable the button
         await self.post_round_complete(swiss_event)
 
     async def post_round_complete(self, swiss_event):
         """Post a standings summary to match-calling and enable the Next Round button."""
-        match_call_channel = await self.tm.get_channel('match-calling')
-        if match_call_channel:
+        event_update_channel = await self.tm.get_channel('event-updates')
+        if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
             top_players = standings[:5]
             standings_text = "\n".join(
@@ -101,19 +128,17 @@ class SwissManager:
                 standings_text += f"\n*...and {len(standings) - 5} more*"
 
             embed = discord.Embed(
-                title="Round Complete",
+                title=f"Round {swiss_event.get('current_round', '?')} Complete",
                 description=f"**Current Standings (Top 5):**\n{standings_text}",
                 color=discord.Color.blue()
             )
-            await match_call_channel.send(embed=embed)
+            await event_update_channel.send(embed=embed)
 
-        # Enable the button in bot control
         await self.tm.tc.bc.enable_next_round_button()
 
     # ─── Match calling ────────────────────────────────────────────────────────
 
-    async def call_match(self, player_1: dict, player_2: dict, swiss_event: dict):
-        """Create a MatchLobby for two players and record it in the swiss event."""
+    async def call_match(self, player_1, player_2, swiss_event, current_round):
         tournament = await self.tm.get_tournament()
 
         match_id = await self.dh.swiss_next_match_id(
@@ -126,6 +151,7 @@ class SwissManager:
             match_id,
             player_1['discord_id'],
             player_2['discord_id'],
+            current_round,
         )
 
         lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
@@ -209,7 +235,6 @@ class SwissManager:
         if swiss_event.get('bye_queue') is not None:
             await self.cancel_bye_wait(swiss_event['_id'])
 
-        # Only pair if we're between rounds — don't interrupt an active round
         for player in swiss_event['players'].values():
             if player.get('active_match_id') is not None:
                 return
@@ -219,14 +244,73 @@ class SwissManager:
     # ─── Called when a player drops ───────────────────────────────────────────
 
     async def on_player_dropped(self):
-        """Called when a player drops. Checks if this completed the round."""
-        await self.check_round_complete()
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        # Only check round complete if a round is actually in progress
+        if swiss_event.get('current_round', 0) > 0:
+            await self.check_round_complete()
 
     # ─── End event ────────────────────────────────────────────────────────────
 
     async def end_event(self):
-        """All players have finished their rounds. Transition to finished state."""
+        """
+        All rounds complete. Clean up channels, mark the swiss event finished,
+        then prompt the TO to end the tournament via the existing End Tournament button.
+        """
         self.running = False
+
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+
+        # Clean up any remaining channels from the final round
+        if not self.tm.debug:
+            for match_id in list(self.tm.lobbies.keys()):
+                lobby = self.tm.lobbies[match_id]
+                if lobby.channel is not None:
+                    try:
+                        await lobby.channel.delete()
+                        lobby.channel = None
+                    except discord.NotFound:
+                        pass
+
         await self.dh.update_swiss_state(swiss_event['_id'], 'finished')
-        await self.tm.progress_tournament()
+
+        # Post final standings to match-calling
+        match_call_channel = await self.tm.get_channel('match-calling')
+        if match_call_channel:
+            standings = await self.dh.swiss_get_standings(swiss_event['_id'])
+            standings_text = "\n".join(
+                f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L)"
+                for i, p in enumerate(standings)
+            )
+            embed = discord.Embed(
+                title="All Rounds Complete — Final Standings",
+                description=standings_text,
+                color=discord.Color.gold()
+            )
+            await match_call_channel.send(embed=embed)
+
+        # Prompt the TO to confirm ending — posts the End Tournament button to bot-control
+        await self.tm.prompt_end_tournament()
+
+    async def randomize_stagelist(self):
+        """Replace the tournament stagelist with a fresh random set and regenerate the banner."""
+        from bson import ObjectId
+        DEFAULT_STAGE_NUMBER = 5
+
+        tournament = await self.tm.get_tournament()
+
+        # Clear existing stagelist
+        await self.dh.tournament_collection.update_one(
+            {'_id': ObjectId(tournament['_id'])},
+            {'$set': {'stagelist': []}}
+        )
+
+        # Fetch and store new random stages
+        stages = await self.dh.get_random_stages(DEFAULT_STAGE_NUMBER)
+        stage_codes = [stage['code'] for stage in stages]
+        await self.dh.add_stages_to_tournament(tournament['_id'], stage_codes)
+
+        # Regenerate the banner
+        self.tm.banner_filepath = await self.tm.tc.generate_banner()
+
+        # Update the stagelist channel
+        await self.tm.tc.refresh_stagelist()

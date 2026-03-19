@@ -102,7 +102,7 @@ class EventCog(commands.Cog, name="event"):
     @app_commands.command(name="test_tournament", description="Create a test tournament (invisible to users)")
     @app_commands.checks.has_role("Event Organizer")
     async def test_tournament(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=True)  # ← must be first, before any awaits
 
         tournament_data = {
             'name': "test tournament",
@@ -112,7 +112,7 @@ class EventCog(commands.Cog, name="event"):
             'approved_registration': False,
             'randomized_stagelist': True,
             'display_entrants': True,
-            'round_limit': 5,
+            'round_limit': 2,  # ← change from 5 to 2
             'debug': True,
         }
         tournament = await self.bot.dh.get_tournament(name="test tournament")
