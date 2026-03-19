@@ -154,7 +154,7 @@ class SwissManager:
             current_round,
         )
 
-        lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
+        lobby_name = f"Round {current_round}-{player_1['username']}-vs-{player_2['username']}"
 
         match_lobby = await MatchLobby.create(
             tournament_id=tournament['_id'],
@@ -167,6 +167,7 @@ class SwissManager:
             tournament_manager=self.tm,
             datahandler=self.dh,
             guild=self.guild,
+            bracket=None,
         )
         self.tm.lobbies[match_id] = match_lobby
         await match_lobby.initialize_match()

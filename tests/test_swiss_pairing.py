@@ -119,19 +119,65 @@ def test_no_rematches():
         assert p1['discord_id'] not in p2['match_history']
 
 
+# ─── Rematch avoidance ────────────────────────────────────────────────────────
+
+def test_no_rematches_when_alternatives_exist():
+    """Players who have already played should not be paired again if alternatives exist."""
+    players = [
+        make_player(1, 1, 1500, match_history=[2]),
+        make_player(2, 0, 1400, match_history=[1]),
+        make_player(3, 1, 1300),
+        make_player(4, 0, 1200),
+    ]
+    pairs, unpaired = pair_players(players)
+    for p1, p2 in pairs:
+        assert p2['discord_id'] not in p1['match_history']
+        assert p1['discord_id'] not in p2['match_history']
+
+
 def test_rematch_forced_when_no_other_option():
     """
-    With only 2 players who have already played each other,
-    one ends up unpaired (rematch avoided, no other option).
+    With only 2 players who have already played each other, the algorithm
+    forces the rematch rather than leaving both unpaired.
+    This is the current greedy algorithm's behavior.
     """
     players = [
         make_player(1, 1, 1500, match_history=[2]),
         make_player(2, 0, 1400, match_history=[1]),
     ]
     pairs, unpaired = pair_players(players)
-    # Cannot pair — only option is a rematch
-    assert len(pairs) == 0
-    assert len(unpaired) == 2
+    assert len(pairs) == 1
+    assert len(unpaired) == 0
+
+
+def test_rematch_penalty_still_prefers_non_rematch():
+    """Even as a last resort, non-rematch options are always preferred."""
+    players = [
+        make_player(1, 2, 1500, match_history=[2]),
+        make_player(2, 2, 1400, match_history=[1]),
+        make_player(3, 2, 1300),
+        make_player(4, 2, 1200),
+    ]
+    pairs, unpaired = pair_players(players)
+    pair_id_sets = [{p['discord_id'] for p in pair} for pair in pairs]
+    assert {1, 2} not in pair_id_sets
+
+
+# ─── All players already played each other ────────────────────────────────────
+
+def test_all_rematches_forces_pairings():
+    """
+    In a fully round-robined group, the algorithm forces rematches
+    rather than leaving everyone unpaired. With 3 players: 1 pair + 1 unpaired.
+    """
+    players = [
+        make_player(1, 2, 1500, match_history=[2, 3]),
+        make_player(2, 1, 1400, match_history=[1, 3]),
+        make_player(3, 0, 1300, match_history=[1, 2]),
+    ]
+    pairs, unpaired = pair_players(players)
+    assert len(pairs) == 1
+    assert len(unpaired) == 1
 
 
 # ─── Bye candidate selection ──────────────────────────────────────────────────
@@ -154,16 +200,3 @@ def test_bye_candidate_single_player():
 
 def test_bye_candidate_empty():
     assert select_bye_candidate([]) is None
-
-
-# ─── All players already played each other ────────────────────────────────────
-
-def test_all_rematches_no_pairs():
-    """In a 3-player round-robin, eventually no pairings are possible."""
-    players = [
-        make_player(1, 2, 1500, match_history=[2, 3]),
-        make_player(2, 1, 1400, match_history=[1, 3]),
-        make_player(3, 0, 1300, match_history=[1, 2]),
-    ]
-    pairs, unpaired = pair_players(players)
-    assert len(pairs) == 0

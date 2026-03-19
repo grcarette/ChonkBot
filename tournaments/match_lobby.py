@@ -16,24 +16,25 @@ class MatchLobby:
             
     @classmethod
     async def create(
-        cls, 
+        cls,
         tournament_id,
-        match_id, 
-        lobby_name, 
-        players, 
-        prereq_matches, 
-        stages, 
-        num_winners, 
-        tournament_manager, 
-        datahandler, 
-        guild, 
+        match_id,
+        lobby_name,
+        players,
+        prereq_matches,
+        stages,
+        num_winners,
+        tournament_manager,
+        datahandler,
+        guild,
+        bracket=None,   # 'Winners', 'Losers', '' for SE, None for Swiss
         ):
-        
-        self=object.__new__(cls)
-        
-        self.tournament_id = tournament_id #_id
+
+        self = object.__new__(cls)
+
+        self.tournament_id = tournament_id
         self.match_id = match_id
-        self.lobby_name = lobby_name 
+        self.lobby_name = lobby_name
         self.players = players
         self.prereq_matches = prereq_matches
         self.stages = stages
@@ -42,10 +43,11 @@ class MatchLobby:
         self.dh = datahandler
         self.guild = guild
         self.channel = None
-        
+        self.bracket = bracket  # store it cleanly
+
         self.tournament = await self.dh.get_tournament_by_id(self.tournament_id)
         self.organizer_role = f"{self.tournament['name']} TO"
-        
+
         lobby_exists = await self.get_lobby()
         if lobby_exists:
             await self.add_channel()
@@ -53,7 +55,7 @@ class MatchLobby:
             await self.setup_lobby()
         lobby = await self.get_lobby()
         self.remaining_players = set([player for player in self.players if player not in lobby['results']])
-    
+
         return self
 
     async def setup_lobby(self):
@@ -64,9 +66,10 @@ class MatchLobby:
             prereq_matches=self.prereq_matches,
             players=self.players,
             stages=self.stages,
-            num_winners=self.num_winners
-            )
-        
+            num_winners=self.num_winners,
+            bracket=self.bracket,
+        )
+            
     async def add_channel(self):
         lobby = await self.get_lobby()
         if lobby['state'] == 'initialize' or lobby['state'] == 'closed':
@@ -202,29 +205,51 @@ class MatchLobby:
 
     async def send_player_instructions(self):
         lobby = await self.get_lobby()
-        if self.channel == None:
+        if self.channel is None:
             return
 
         winner_mention = f"<@{lobby['results'][0]}>"
         loser_mention = f"<@{lobby['results'][1]}>"
-        
-        winner_message = (
-            f"Congratulations {winner_mention}!\n"
-            "You will be pinged when your next match is ready. You might need to wait to play to allow the losers bracket to catch up.\n\n"
-        )
-        if self.lobby_name[0] == 'w':
+
+        if self.tournament_manager.is_swiss:
+            winner_message = (
+                f"Congratulations {winner_mention}! "
+                "You will be pinged when the next round is ready.\n\n"
+            )
+            loser_message = (
+                f"{loser_mention} This match is now complete."
+                "You will be pinged when the next round is ready."
+            )
+        elif self.bracket == 'Winners':
+            winner_message = (
+                f"Congratulations {winner_mention}!\n"
+                "You will be pinged when your next match is ready. "
+                "You might need to wait to play to allow the losers bracket to catch up.\n\n"
+            )
             loser_message = (
                 f"{loser_mention} You've lost this set, but you are not out of the tournament yet.\n"
                 "You will be pinged when it's time to play your next set."
             )
-        elif self.lobby_name[0] == 'l':
+        elif self.bracket == 'Losers':
+            winner_message = (
+                f"Congratulations {winner_mention}!\n"
+                "You will be pinged when your next match is ready.\n\n"
+            )
             loser_message = (
-                f"{loser_mention} Unfortunately you've been eliminated from the tournament. Thank you for playing!"
+                f"{loser_mention} Unfortunately you've been eliminated from the tournament. "
+                "Thank you for playing!"
             )
         else:
-            loser_message = (
-                f"{loser_mention} This match is now complete. You will be pinged when your next match is ready."
+            # Single elimination — one loss is out
+            winner_message = (
+                f"Congratulations {winner_mention}!\n"
+                "You will be pinged when your next match is ready.\n\n"
             )
+            loser_message = (
+                f"{loser_mention} Unfortunately you've been eliminated from the tournament. "
+                "Thank you for playing!"
+            )
+
         player_instructions = discord.Embed(
             title='Lobby Closed',
             description=winner_message + loser_message,

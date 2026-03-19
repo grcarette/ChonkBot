@@ -124,6 +124,7 @@ class TournamentManager:
                 tournament_manager=self,
                 datahandler=self.bot.dh,
                 guild=self.bot.guild,
+                bracket=lobby.get('bracket'),  # pulled from DB
             )
             self.lobbies[lobby['match_id']] = match_lobby
             if lobby['state'] == 'initialized':
@@ -183,10 +184,10 @@ class TournamentManager:
             pre_transition_tasks = [self.finalize_tournament()]
 
         if next_state:
-            await self.tc.update_tournament_state(next_state)
-            await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
             for task in pre_transition_tasks:
                 await task
+            await self.tc.update_tournament_state(next_state)
+            await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
 
     # ─── Stages ───────────────────────────────────────────────────────────────
 
@@ -375,8 +376,9 @@ class TournamentManager:
                     await self.swiss_manager.on_player_dropped()
         else:
             challonge_id = tournament['challonge_data']['id']
-            player_id = tournament['entrants'][f'{user_id}']
-            await self.ch.unregister_player(challonge_id, player_id)
+            player_id = tournament['entrants'].get(f'{user_id}')
+            if player_id is not None:
+                await self.ch.unregister_player(challonge_id, player_id)
 
     # ─── Check-in ─────────────────────────────────────────────────────────────
 
@@ -464,9 +466,10 @@ class TournamentManager:
         if checkin_channel:
             await checkin_channel.delete()
 
+        register_channel = await self.get_channel('register')
+
         if self.is_swiss:
             # Swiss: keep the register channel open with the active join/leave view
-            register_channel = await self.get_channel('register')
             if register_channel:
                 await register_channel.purge(limit=None)
                 view = SwissActiveRegisterView(self)
@@ -482,7 +485,6 @@ class TournamentManager:
                     color=discord.Color.green()
                 )
                 await register_channel.send(embed=embed, view=view)
-                # Make sure the register channel is visible
                 if not self.debug:
                     overwrite = register_channel.overwrites_for(self.guild.default_role)
                     overwrite.view_channel = True
@@ -490,7 +492,7 @@ class TournamentManager:
                         self.guild.default_role, overwrite=overwrite
                     )
         else:
-            register_channel = await self.get_channel('register')
+            # DE/SE: close and delete the register channel
             if register_channel:
                 await register_channel.delete()
             await self.ch.start_tournament(tournament['challonge_data']['id'])
@@ -537,28 +539,35 @@ class TournamentManager:
         await self.purge_match_calls()
         await self.call_matches()
 
-    async def call_matches(self):
-        if self.is_swiss:
-            # Swiss pairing is handled by SwissManager
-            return
-
+    async def call_match(self, match_data, hold_match=False):
+        guild = self.guild
         tournament = await self.get_tournament()
-        pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
-        for match in pending_matches:
-            if self.tournament_reset:
-                await self.purge_match_calls()
-                return
-            match_data = await self.parse_match_data(match)
-            match_exists = await self.bot.dh.find_match(match_data['match_id'])
-            if not match_exists and match_data['match_id'] not in self.match_calls:
-                if self.autocall_matches:
-                    await self.call_match(match_data)
-                else:
-                    await self.add_match_call(match_data)
-            else:
-                if match_exists and match_data['match_id'] not in self.match_calls:
-                    if match_exists['state'] == 'held':
-                        await self.add_match_call(match_data, match_held=True)
+        player_1, player_2 = await self.get_players_from_match(match_data)
+        players = [player_1['user_id'], player_2['user_id']]
+        lobby_name = await self.get_lobby_name(match_data)
+
+        match_lobby = await MatchLobby.create(
+            tournament_id=tournament['_id'],
+            match_id=match_data['match_id'],
+            lobby_name=lobby_name,
+            prereq_matches=match_data['prereq_matches'],
+            players=players,
+            stages=tournament['stagelist'],
+            num_winners=1,
+            tournament_manager=self,
+            datahandler=self.bot.dh,
+            guild=guild,
+            bracket=match_data['bracket'],
+        )
+        self.lobbies[match_data['match_id']] = match_lobby
+        if match_data['match_id'] in self.match_calls and not hold_match:
+            await self.match_calls[match_data['match_id']].delete()
+        if player_1['user_id'] in tournament['dqs']:
+            await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
+        elif player_2['user_id'] in tournament['dqs']:
+            await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
+        else:
+            await match_lobby.initialize_match(hold_match)
 
     async def add_match_call(self, match_data, match_held=False):
         category = self.get_tournament_category()
@@ -569,13 +578,20 @@ class TournamentManager:
         waiting_since = await self.bot.dh.get_lobby_time(match_data['prereq_matches'])
         waiting_since = self.get_short_timestamp(waiting_since)
 
-        if match_data['bracket'] == 'Winners':
+        bracket = match_data['bracket']
+        if bracket == 'Winners':
             color = discord.Color.green()
-        else:
+            title = f"Winners Round {match_data['round']} - {player_1['name']} vs {player_2['name']}"
+        elif bracket == 'Losers':
             color = discord.Color.red()
+            title = f"Losers Round {abs(match_data['round'])} - {player_1['name']} vs {player_2['name']}"
+        else:
+            # Single elimination — no bracket tag
+            color = discord.Color.blue()
+            title = f"Round {match_data['round']} - {player_1['name']} vs {player_2['name']}"
 
         embed = discord.Embed(
-            title=f"{match_data['bracket']} round {match_data['round']} - {player_1['name']} vs {player_2['name']}",
+            title=title,
             description=f"{waiting_since}",
             color=color
         )
@@ -587,7 +603,13 @@ class TournamentManager:
     async def get_lobby_name(self, match_data):
         player_1, player_2 = await self.get_players_from_match(match_data)
         round = match_data['round']
-        bracket_tag = 'w' if match_data['bracket'] == 'Winners' else 'l'
+        bracket = match_data['bracket']
+        if bracket == 'Winners':
+            bracket_tag = 'w'
+        elif bracket == 'Losers':
+            bracket_tag = 'l'
+        else:
+            bracket_tag = 's'
         lobby_name = f"{bracket_tag}r{round}-{player_1['name']} vs {player_2['name']}"
         return lobby_name
 
@@ -698,7 +720,8 @@ class TournamentManager:
     async def reset_report(self, kwargs):
         lobby = kwargs.get('lobby')
         await self.lobbies[lobby['match_id']].reset_report()
-        await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
+        if not self.is_swiss:
+            await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
 
     async def reset_tournament(self, kwargs):
         self.tournament_reset = True

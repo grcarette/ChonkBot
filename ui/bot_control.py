@@ -176,32 +176,35 @@ class BotControlView(discord.ui.View):
         self.clear_items()
         self.stage = state
         if state == 'setup':
-            self.publish_button.disabled=False
+            self.publish_button.disabled = False
             self.add_item(self.publish_button)
         elif state == 'registration':
-            self.checkin_button.disabled=False
+            self.checkin_button.disabled = False
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.checkin_button)
-            self.add_item(self.seeding_button)
+            if not self.tm.is_swiss:
+                self.add_item(self.seeding_button)
         elif state == 'checkin':
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.toggle_autocall_button)
             self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
-            self.add_item(self.seeding_button)
+            if not self.tm.is_swiss:
+                self.add_item(self.seeding_button)
         elif state == 'active':
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
-            self.add_item(self.toggle_autocall_button)
-            self.add_item(self.refresh_match_calls_button)
-            self.add_item(self.reset_button)
+            if not self.tm.is_swiss:
+                self.add_item(self.toggle_autocall_button)
+                self.add_item(self.refresh_match_calls_button)
+                self.add_item(self.reset_button)
             if self.tm.is_swiss:
                 self.add_item(self.next_round_button)
         elif state == 'finished':
             pass
-        
+
         await self.update_control()
 
     async def update_control(self):

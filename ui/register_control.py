@@ -6,13 +6,22 @@ class RegisterControlView(discord.ui.View):
     def __init__(self, tournament_manager):
         super().__init__(timeout=None)
         self.tm = tournament_manager
-        
-        self.register_button = discord.ui.Button(label=f"Register", style=discord.ButtonStyle.success, custom_id=f"{self.tm.tournament['name']}-Register")
-        self.unregister_button = discord.ui.Button(label=f"Unregister", style=discord.ButtonStyle.danger, custom_id=f"{self.tm.tournament['name']}-Unregister")
-        
+
+        tid = str(self.tm.tournament['_id'])
+        self.register_button = discord.ui.Button(
+            label="Register",
+            style=discord.ButtonStyle.success,
+            custom_id=f"{tid}-Register"
+        )
+        self.unregister_button = discord.ui.Button(
+            label="Unregister",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"{tid}-Unregister"
+        )
+
         self.register_button.callback = self.register_player
         self.unregister_button.callback = self.unregister_player
-        
+
         self.add_item(self.register_button)
         self.add_item(self.unregister_button)
         

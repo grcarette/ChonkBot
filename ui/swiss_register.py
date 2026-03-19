@@ -7,21 +7,20 @@ class SwissActiveRegisterView(discord.ui.View):
     Replaces the normal registration embed once a swiss tournament goes active.
     Players can join or leave at any time during the event.
     """
-
     def __init__(self, tournament_manager, timeout=None):
         super().__init__(timeout=timeout)
         self.tm = tournament_manager
 
-        name = tournament_manager.tournament['name']
+        tid = str(tournament_manager.tournament['_id'])
         self.join_button = discord.ui.Button(
             label=f"Join {INDICATOR_EMOJIS['green_check']}",
             style=discord.ButtonStyle.success,
-            custom_id=f"{name}-swiss_join"
+            custom_id=f"{tid}-swiss_join"
         )
         self.leave_button = discord.ui.Button(
             label=f"Leave {INDICATOR_EMOJIS['red_x']}",
             style=discord.ButtonStyle.danger,
-            custom_id=f"{name}-swiss_leave"
+            custom_id=f"{tid}-swiss_leave"
         )
 
         self.join_button.callback = self.join

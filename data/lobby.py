@@ -4,20 +4,21 @@ from bson import ObjectId, SON
 class LobbyMethodsMixin:
     pass
 
-    async def create_lobby(self, tournament, match_id, lobby_name, prereq_matches, players, stages, num_winners, pool=None):
+    async def create_lobby(self, tournament, match_id, lobby_name, prereq_matches, players, stages, num_winners, bracket=None, pool=None):
         query = {
             'tournament': tournament['name']
         }
         lobby_id = await self.lobby_collection.count_documents(query) + 1
-        
+
         prereq_matches = await self.get_prereq_matches(prereq_matches)
-        
+
         lobby_data = {
             'lobby_id': lobby_id,
             'tournament': tournament['_id'],
             'match_id': match_id,
             'lobby_name': lobby_name,
             'prereq_matches': prereq_matches,
+            'bracket': bracket,     # persist this
             'pool': pool,
             'state': 'initialize',
             'players': players,

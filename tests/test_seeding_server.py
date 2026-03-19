@@ -1,6 +1,6 @@
 # tests/test_seeding_server.py
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from aiohttp.test_utils import TestClient, TestServer
 from web.seeding_server import create_app, generate_token
 
@@ -18,7 +18,17 @@ def make_mock_factory(participants=FAKE_PARTICIPANTS):
 
 @pytest.fixture
 async def client():
-    app = create_app(make_mock_factory())
+    mock_bot = AsyncMock()
+    mock_bot.dh = AsyncMock()
+    mock_bot.dh.get_tournament_by_id = AsyncMock(return_value={
+        '_id': 'tournament_123',
+        'name': 'Test Tournament',
+        'entrants': {'1': 1, '2': 2},
+    })
+    mock_bot.guild = AsyncMock()
+    mock_bot.guild.get_member = MagicMock(return_value=None)
+
+    app = create_app(make_mock_factory(), mock_bot)
     async with TestClient(TestServer(app)) as client:
         yield client
 
