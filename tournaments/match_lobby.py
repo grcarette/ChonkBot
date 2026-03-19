@@ -27,7 +27,8 @@ class MatchLobby:
         tournament_manager,
         datahandler,
         guild,
-        bracket=None,   # 'Winners', 'Losers', '' for SE, None for Swiss
+        bracket=None,
+        match_service=None,    # ← add this
         ):
 
         self = object.__new__(cls)
@@ -43,7 +44,8 @@ class MatchLobby:
         self.dh = datahandler
         self.guild = guild
         self.channel = None
-        self.bracket = bracket  # store it cleanly
+        self.bracket = bracket
+        self.match_service = match_service    # ← add this
 
         self.tournament = await self.dh.get_tournament_by_id(self.tournament_id)
         self.organizer_role = f"{self.tournament['name']} TO"
@@ -191,7 +193,14 @@ class MatchLobby:
         if self.num_winners == len(lobby['results']):
             await self.dh.update_lobby_state(self.match_id, 'finished')
             await self.dh.end_match(self.match_id)
-            await self.tournament_manager.report_match(self, is_dq)
+
+            loser_id = next(p for p in self.players if p != winner_id)
+
+            if self.match_service:
+                await self.match_service.record_result(winner_id, loser_id, is_dq)
+            else:
+                await self.tournament_manager.report_match(self, is_dq)
+
             await self.send_player_instructions()
             if is_dq:
                 await self.close_lobby()

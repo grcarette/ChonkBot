@@ -5,6 +5,7 @@ import discord
 from tournaments.match_lobby import MatchLobby
 from tournaments.swiss_pairing import pair_players, select_bye_candidate
 from utils.messages import get_mentions
+from tournaments.match_service import MatchService
 
 BYE_WAIT_SECONDS = 300  # 5 minutes
 
@@ -154,7 +155,18 @@ class SwissManager:
             current_round,
         )
 
-        lobby_name = f"Round {current_round}-{player_1['username']}-vs-{player_2['username']}"
+        lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
+
+        async def on_complete(result):
+            await self.tm.report_match_from_result(result)
+
+        service = MatchService(
+            match_id=match_id,
+            players=[player_1['discord_id'], player_2['discord_id']],
+            stages=tournament['stagelist'],
+            dh=self.dh,
+            on_complete=on_complete,
+        )
 
         match_lobby = await MatchLobby.create(
             tournament_id=tournament['_id'],
@@ -168,6 +180,7 @@ class SwissManager:
             datahandler=self.dh,
             guild=self.guild,
             bracket=None,
+            match_service=service,
         )
         self.tm.lobbies[match_id] = match_lobby
         await match_lobby.initialize_match()

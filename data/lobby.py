@@ -18,7 +18,7 @@ class LobbyMethodsMixin:
             'match_id': match_id,
             'lobby_name': lobby_name,
             'prereq_matches': prereq_matches,
-            'bracket': bracket,     # persist this
+            'bracket': bracket, 
             'pool': pool,
             'state': 'initialize',
             'players': players,

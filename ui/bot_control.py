@@ -272,25 +272,27 @@ class BotControlView(discord.ui.View):
         return embed
         
     async def open_seeding(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         tournament = await self.tm.get_tournament()
         organizer_role = discord.utils.get(
             interaction.guild.roles,
             name=f"{tournament['name']} TO"
         )
         if organizer_role not in interaction.user.roles:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Only TOs can access seeding.", ephemeral=True
             )
             return
 
         if 'challonge_data' not in tournament:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No Challonge bracket linked to this tournament yet.", ephemeral=True
             )
             return
 
         link = await self.tm.generate_seeding_link()
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"{INDICATOR_EMOJIS['seed']} **Seeding Tool** — this link expires in 30 minutes:\n{link}",
             ephemeral=True
         )

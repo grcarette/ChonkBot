@@ -1,5 +1,7 @@
 from .challonge_handler import ChallongeHandler
 from .swiss_manager import SwissManager
+from .match_service import MatchService
+from .format_handlers import make_format_handler
 from datetime import datetime
 
 from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
@@ -46,6 +48,7 @@ class TournamentManager:
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
         self.swiss_manager = None
+        self.format_handler = None
 
     # ─── Swiss property ───────────────────────────────────────────────────────
 
@@ -108,6 +111,8 @@ class TournamentManager:
                 await self.bot.dh.create_swiss_event(tournament['_id'], round_limit)
             self.swiss_manager = SwissManager(self)
 
+        self.format_handler = make_format_handler(self)
+
         self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
 
@@ -124,7 +129,8 @@ class TournamentManager:
                 tournament_manager=self,
                 datahandler=self.bot.dh,
                 guild=self.bot.guild,
-                bracket=lobby.get('bracket'),  # pulled from DB
+                bracket=lobby.get('bracket'),
+                match_service=None,  # rehydrated lobbies fall back to report_match
             )
             self.lobbies[lobby['match_id']] = match_lobby
             if lobby['state'] == 'initialized':
@@ -539,35 +545,28 @@ class TournamentManager:
         await self.purge_match_calls()
         await self.call_matches()
 
-    async def call_match(self, match_data, hold_match=False):
-        guild = self.guild
-        tournament = await self.get_tournament()
-        player_1, player_2 = await self.get_players_from_match(match_data)
-        players = [player_1['user_id'], player_2['user_id']]
-        lobby_name = await self.get_lobby_name(match_data)
+    async def call_matches(self):
+        if self.is_swiss:
+            # Swiss pairing is handled by SwissManager
+            return
 
-        match_lobby = await MatchLobby.create(
-            tournament_id=tournament['_id'],
-            match_id=match_data['match_id'],
-            lobby_name=lobby_name,
-            prereq_matches=match_data['prereq_matches'],
-            players=players,
-            stages=tournament['stagelist'],
-            num_winners=1,
-            tournament_manager=self,
-            datahandler=self.bot.dh,
-            guild=guild,
-            bracket=match_data['bracket'],
-        )
-        self.lobbies[match_data['match_id']] = match_lobby
-        if match_data['match_id'] in self.match_calls and not hold_match:
-            await self.match_calls[match_data['match_id']].delete()
-        if player_1['user_id'] in tournament['dqs']:
-            await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
-        elif player_2['user_id'] in tournament['dqs']:
-            await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
-        else:
-            await match_lobby.initialize_match(hold_match)
+        tournament = await self.get_tournament()
+        pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
+        for match in pending_matches:
+            if self.tournament_reset:
+                await self.purge_match_calls()
+                return
+            match_data = await self.parse_match_data(match)
+            match_exists = await self.bot.dh.find_match(match_data['match_id'])
+            if not match_exists and match_data['match_id'] not in self.match_calls:
+                if self.autocall_matches:
+                    await self.call_match(match_data)
+                else:
+                    await self.add_match_call(match_data)
+            else:
+                if match_exists and match_data['match_id'] not in self.match_calls:
+                    if match_exists['state'] == 'held':
+                        await self.add_match_call(match_data, match_held=True)
 
     async def add_match_call(self, match_data, match_held=False):
         category = self.get_tournament_category()
@@ -620,6 +619,17 @@ class TournamentManager:
         players = [player_1['user_id'], player_2['user_id']]
         lobby_name = await self.get_lobby_name(match_data)
 
+        async def on_complete(result):
+            await self.report_match_from_result(result)
+
+        service = MatchService(
+            match_id=match_data['match_id'],
+            players=players,
+            stages=tournament['stagelist'],
+            dh=self.bot.dh,
+            on_complete=on_complete,
+        )
+
         match_lobby = await MatchLobby.create(
             tournament_id=tournament['_id'],
             match_id=match_data['match_id'],
@@ -631,6 +641,8 @@ class TournamentManager:
             tournament_manager=self,
             datahandler=self.bot.dh,
             guild=guild,
+            bracket=match_data['bracket'],
+            match_service=service,
         )
         self.lobbies[match_data['match_id']] = match_lobby
         if match_data['match_id'] in self.match_calls and not hold_match:
@@ -657,48 +669,31 @@ class TournamentManager:
     # ─── Result reporting ─────────────────────────────────────────────────────
 
     async def report_match(self, lobby, is_dq=False):
+        """
+        Fallback for rehydrated lobbies that don't have a MatchService
+        (i.e. the bot restarted mid-match). Builds the result dict and
+        delegates to the format handler directly.
+        """
         lobby_data = await lobby.get_lobby()
-        tournament = await self.get_tournament()
         winner_user_id = str(lobby_data['results'][0])
+        loser_user_id = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
 
-        if not self.is_swiss:
-            winner_id = tournament['entrants'][winner_user_id]
-            await self.ch.report_match(
-                tournament['challonge_data']['url'], lobby_data['match_id'], winner_id, is_dq
-            )
-            status = await self.ch.check_tournament_status(tournament['challonge_data']['id'])
-            await self.close_prereqs(lobby)
-            if status == 'awaiting_review':
-                await self.prompt_end_tournament()
-            else:
-                await self.call_matches()
-        else:
-            loser_user_id = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
-            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
-            if swiss_event and loser_user_id:
-                await self.bot.dh.swiss_record_result(
-                    swiss_event['_id'],
-                    lobby_data['match_id'],
-                    int(winner_user_id),
-                    int(loser_user_id),
-                )
-                # Push to UCH Ranked API (skip in debug mode and DQ matches)
-                if not self.debug and not is_dq:
-                    result = await self.bot.uchranked_api.report_match(
-                        player1_id=int(winner_user_id),
-                        player2_id=int(loser_user_id),
-                        score="1-0",
-                    )
-                    if not result.get('success'):
-                        print(f"UCH Ranked API error: {result.get('error')}")
+        result = {
+            'match_id': lobby_data['match_id'],
+            'winner_id': int(winner_user_id),
+            'loser_id': int(loser_user_id) if loser_user_id else None,
+            'is_dq': is_dq,
+        }
+        await self.format_handler.on_result(result, lobby)
 
-                # Trigger next pairing cycle
-                if self.swiss_manager:
-                    await self.swiss_manager.on_match_complete(
-                        lobby_data['match_id'],
-                        int(winner_user_id),
-                        int(loser_user_id),
-                    )
+    async def report_match_from_result(self, result):
+        """
+        Called by MatchService.on_complete. Looks up the lobby and delegates
+        to the format handler. This is the primary result path for all new matches.
+        """
+        lobby = self.lobbies.get(result['match_id'])
+        if lobby:
+            await self.format_handler.on_result(result, lobby)
 
     async def close_prereqs(self, lobby):
         lobby = await lobby.get_lobby()
@@ -960,7 +955,3 @@ class TournamentManager:
             if key in ('name', 'date', 'stagelist'):
                 pass
         await self.bot.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
-
-    async def refresh_match_calls(self):
-        await self.purge_match_calls()
-        await self.call_matches()

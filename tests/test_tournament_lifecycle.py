@@ -61,6 +61,11 @@ def make_tm(format='double elimination', state='initialize'):
     # tc (TournamentControl) — just needs update_tournament_state
     tm.tc = AsyncMock()
 
+    # format_handler — stub so report_match and report_match_from_result work
+    # without pulling in real DEFormatHandler / SwissFormatHandler
+    tm.format_handler = MagicMock()
+    tm.format_handler.on_result = AsyncMock()
+
     # Stub out the heavy lifecycle methods so we can assert they're called
     tm.publish_tournament = AsyncMock()
     tm.open_registration = AsyncMock()
