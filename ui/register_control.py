@@ -33,7 +33,10 @@ class RegisterControlView(discord.ui.View):
         if player_registered:
             await interaction.followup.send("You are already registered.", ephemeral=True)
         else:
-            await self.tm.create_registration_approval(user_id, interaction)
+            await self.tm.register_player(user_id)
+            await interaction.followup.send(
+                f"You are now registered for {self.tm.tournament['name']}.", ephemeral=True
+            )
             
     async def unregister_player(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
