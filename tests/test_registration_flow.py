@@ -94,6 +94,7 @@ def make_tm(format='double elimination', state='registration', debug=False):
     tm.format.on_player_unregister = AsyncMock()
     tm.format.on_registration_gate = AsyncMock(return_value=True)
     tm.format.needs_match_call_refresh = True
+    tm.format.on_tournament_start = AsyncMock()
 
     return tm
 

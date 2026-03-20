@@ -115,9 +115,13 @@ class ChallongeFormat(BaseFormat):
     # ─── Optional overrides ───────────────────────────────────────────────────
 
     async def on_reset(self) -> None:
-        """Reset the Challonge bracket to pre-start state."""
-        tournament = await self.tm.get_tournament()
-        await self.ch.reset_tournament(tournament['challonge_data']['id'])
+            """Reset the Challonge bracket to pre-start state."""
+            tournament = await self.tm.get_tournament()
+            challonge_id = tournament['challonge_data']['id']
+            status = await self.ch.check_tournament_status(challonge_id)
+            if status in ('underway', 'awaiting_review', 'complete'):
+                await self.ch.reset_tournament(challonge_id)
+            # If still 'pending', nothing to reset — bracket was never started
 
     async def on_reset_report(self, lobby: dict) -> None:
         """Reopen the match on Challonge so it can be re-reported."""

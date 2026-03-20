@@ -8,13 +8,16 @@ from discord import app_commands
 from utils.errors import *
 from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
 from utils.discord_preset_colors import get_random_color
+
 from tournaments.match_lobby import MatchLobby
 from tournaments.results_poster import post_results
+
 from ui.create_tournament import TournamentSettingsView
 from ui.confirmation import ConfirmationView
 from ui.link_view import LinkView
-from tournaments.challonge_handler import ChallongeHandler
+from ui.force_advance import ForceAdvanceView
 
+from tournaments.challonge_handler import ChallongeHandler
 
 class EventCog(commands.Cog, name="event"):
     def __init__(self, bot):
@@ -34,7 +37,7 @@ class EventCog(commands.Cog, name="event"):
             ephemeral=True
         )
 
-    @app_commands.command(name="reset_lobby", description="Reset a match lobby")
+    @app_commands.command(name="reset_lobby", description="Reset a match lobby to the reporting phase")
     @app_commands.checks.has_role("Event Organizer")
     async def reset_lobby(self, interaction: discord.Interaction):
         await self.bot.th.confirm_reset_lobby(interaction.user.id, interaction.channel.id)
@@ -205,6 +208,89 @@ class EventCog(commands.Cog, name="event"):
 
         except Exception as e:
             await interaction.followup.send(f"Error fetching results: {str(e)}")
+
+# ── cogs/event_cog.py ────────────────────────────────────────────────────────
+# Add to imports at the top alongside other ui imports:
+#
+#   from ui.force_advance import ForceAdvanceView
+
+
+    @app_commands.command(name="force_advance_lobby", description="Force a stuck lobby to a specific state")
+    @app_commands.checks.has_role("Event Organizer")
+    async def force_advance_lobby(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        lobby_data = await self.bot.dh.get_lobby_by_channel(interaction.channel.id)
+        if not lobby_data:
+            return await interaction.followup.send(
+                "This channel is not a lobby channel. Run this command from inside a match lobby.",
+                ephemeral=True
+            )
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found.", ephemeral=True)
+
+        match_lobby = tm.lobbies.get(lobby_data['match_id'])
+        if not match_lobby:
+            return await interaction.followup.send(
+                "Lobby is not active in memory. The bot may have restarted — try `/reset_lobby` instead.",
+                ephemeral=True
+            )
+
+        view = ForceAdvanceView(match_lobby, lobby_data)
+        embed = discord.Embed(
+            title="⚠️ Force Advance Lobby",
+            description=(
+                f"**Current state:** `{lobby_data['state']}`\n\n"
+                "Select where to advance this lobby. "
+                "**Declare Winner** will fully report the match to Challonge and progress the bracket normally.\n\n"
+                "Use this only if the lobby is genuinely stuck and cannot self-recover."
+            ),
+            color=discord.Color.orange()
+        )
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+        async def force_advance(self, target_state: str, winner_id: int = None):
+            """
+            Forcibly advance a stuck lobby to the given state.
+            Called by the /force_advance_lobby slash command.
+
+            target_state options:
+            'stage_bans' — reset and re-run stage banning
+            'reporting'  — skip/reset to reporting, picking a stage if needed
+            'winner'     — declare a winner and run the full end_reporting chain
+
+            For 'reporting' and 'stage_bans', the existing reset_lobby DB helpers
+            are used so player state is restored correctly.
+            For 'winner', end_reporting is called directly so Challonge, player
+            instructions, and match calling all fire as normal.
+            """
+            await self.purge_bot_messages()
+
+            if target_state == 'stage_bans':
+                await self.dh.reset_lobby(self.match_id, 'stage_bans')
+                lobby = await self.get_lobby()
+                self.remaining_players = set(lobby['players'])
+                await self.start_stage_bans()
+
+            elif target_state == 'reporting':
+                await self.dh.reset_lobby(self.match_id, 'report')
+                lobby = await self.get_lobby()
+                self.remaining_players = set(lobby['players'])
+                if not lobby.get('picked_stage'):
+                    picked_stage = random.choice(self.stages)
+                    await self.dh.pick_lobby_stage(self.match_id, picked_stage)
+                await self.start_reporting()
+
+            elif target_state == 'winner':
+                if winner_id is None:
+                    raise ValueError("winner_id is required when forcing to 'winner' state")
+                await self.end_reporting(winner_id=winner_id)
 
 def extract_challonge_id(url: str) -> str:
     """Extracts the tournament slug/ID from a standard Challonge URL."""

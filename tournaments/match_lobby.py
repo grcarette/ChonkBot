@@ -301,6 +301,43 @@ class MatchLobby:
             return True
         else:
             return False
+
+    async def force_advance(self, target_state: str, winner_id: int = None):
+            """
+            Forcibly advance a stuck lobby to the given state.
+            Called by the /force_advance_lobby slash command.
+
+            target_state options:
+            'stage_bans' — reset and re-run stage banning
+            'reporting'  — skip/reset to reporting, picking a stage if needed
+            'winner'     — declare a winner and run the full end_reporting chain
+
+            For 'reporting' and 'stage_bans', the existing reset_lobby DB helpers
+            are used so player state is restored correctly.
+            For 'winner', end_reporting is called directly so Challonge, player
+            instructions, and match calling all fire as normal.
+            """
+            await self.purge_bot_messages()
+
+            if target_state == 'stage_bans':
+                await self.dh.reset_lobby(self.match_id, 'stage_bans')
+                lobby = await self.get_lobby()
+                self.remaining_players = set(lobby['players'])
+                await self.start_stage_bans()
+
+            elif target_state == 'reporting':
+                await self.dh.reset_lobby(self.match_id, 'report')
+                lobby = await self.get_lobby()
+                self.remaining_players = set(lobby['players'])
+                if not lobby.get('picked_stage'):
+                    picked_stage = random.choice(self.stages)
+                    await self.dh.pick_lobby_stage(self.match_id, picked_stage)
+                await self.start_reporting()
+
+            elif target_state == 'winner':
+                if winner_id is None:
+                    raise ValueError("winner_id is required when forcing to 'winner' state")
+                await self.end_reporting(winner_id=winner_id)
     
 
         

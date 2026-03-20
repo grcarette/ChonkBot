@@ -88,12 +88,12 @@ COMMAND_DICT = {
             f'Usage: `!create_tournament <name>-<date: discord timestamp>`'),
         'tag': 'event'
     },
-    'reset_lobby': { 
+    'reset_lobby': {
         'usage': (
             f'`reset_lobby`\n'
-            f'Description: Resets a lobby to the stage banning phase\n'
+            f'Description: Resets a lobby to the reporting phase, allowing both players to re-submit the result\n'
             f"Permissions: Event Organizer, Assistant TO's\n"
-            f'Usage: `!reset_lobby`'),
+            f'Usage: `!reset_lobby` (run from inside the lobby channel)'),
         'tag': 'event'
     },
     'test_lobby': { 

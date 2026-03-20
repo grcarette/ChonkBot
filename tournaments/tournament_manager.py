@@ -28,10 +28,14 @@ from .tournament_info_display import TournamentInfoDisplay
 import discord
 import random
 import os
+import asyncio
 
 RESULTS_CHANNEL_ID = 1346422769721544754
 DEFAULT_CHANNEL_POSITION = 2
 
+CHECKIN_REMINDER_SECONDS = 300
+CHECKIN_POLL_INTERVAL   = 60
+CHECKIN_AUTODQ_SECONDS = 600
 
 class TournamentManager:
     def __init__(self, bot, tournament):
@@ -362,30 +366,52 @@ class TournamentManager:
         )
 
     async def ping_checkin(self):
-        MAXIMUM_PING_CHECKINS = 10
-        tournament = await self.get_tournament()
-        category = self.get_tournament_category()
-        checkin_channel = discord.utils.get(category.text_channels, name='check-in')
+            MAXIMUM_PING_CHECKINS = 10
+            tournament = await self.get_tournament()
+            category = self.get_tournament_category()
+            checkin_channel = discord.utils.get(category.text_channels, name='check-in')
 
-        if not checkin_channel:
-            return False
+            if not checkin_channel:
+                return False
 
-        checked_in_list = [str(player) for player in tournament.get('checked_in', [])]
-        entrant_ids = list(tournament['entrants'].keys())
-        missing_count = len(entrant_ids) - len(checked_in_list)
+            checked_in_list = [str(player) for player in tournament.get('checked_in', [])]
+            entrant_ids = list(tournament['entrants'].keys())
+            missing_count = len(entrant_ids) - len(checked_in_list)
 
-        if missing_count > MAXIMUM_PING_CHECKINS:
-            return False
+            if missing_count > MAXIMUM_PING_CHECKINS:
+                return False
 
-        for player in entrant_ids:
-            if player not in checked_in_list:
-                user = discord.utils.get(self.guild.members, id=int(player))
-                if user:
-                    await user.send(
-                        f"**Reminder: Please check in for `{tournament['name']}`**!\n"
-                        f"Go to {checkin_channel.mention} to check in."
-                    )
-        return True
+            failed_pings = []
+            for player in entrant_ids:
+                if player not in checked_in_list:
+                    user = discord.utils.get(self.guild.members, id=int(player))
+                    if user:
+                        try:
+                            await user.send(
+                                f"**Reminder: Please check in for `{tournament['name']}`**!\n"
+                                f"Go to {checkin_channel.mention} to check in."
+                            )
+                        except discord.Forbidden:
+                            failed_pings.append(user.display_name)
+
+            if failed_pings:
+                try:
+                    channel = await self.get_channel('bot-control')
+                    if channel:
+                        names = ', '.join(f'**{name}**' for name in failed_pings)
+                        embed = discord.Embed(
+                            title="⚠️ Check-in Ping Failed",
+                            description=(
+                                f"Could not DM the following players (DMs likely disabled):\n{names}\n\n"
+                                f"You may want to ping them manually in {checkin_channel.mention}."
+                            ),
+                            color=discord.Color.orange()
+                        )
+                        await channel.send(embed=embed)
+                except Exception as e:
+                    print(f"[ping_checkin] Failed to post DM failure alert: {e}")
+
+            return True
 
     # ─── Tournament start ─────────────────────────────────────────────────────
 
@@ -451,6 +477,7 @@ class TournamentManager:
 
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
         await self.send_instruction_message()
+        await self.format.on_tournament_start()
         await self.start_tournament_loop()
 
     async def send_instruction_message(self):
@@ -471,6 +498,7 @@ class TournamentManager:
         await self.format.on_match_calling_loop()
         if self.format.needs_match_call_refresh:
             await self.refresh_match_calls()
+        self.start_checkin_reminder_loop() 
 
     # ─── Match calling ────────────────────────────────────────────────────────
 
@@ -479,29 +507,63 @@ class TournamentManager:
         await self.call_matches()
 
     async def call_matches(self):
-        tournament = await self.get_tournament()
-        pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
-        for match in pending_matches:
-            if self.tournament_reset:
-                await self.purge_match_calls()
-                return
-            try:
-                match_data = await self.parse_match_data(match)
-            except Exception as e:
-                print(f"[call_matches] Error parsing match {match.get('id')}: {e}")
-                continue
-            if match_data is None:
-                continue
-            match_exists = await self.bot.dh.find_match(match_data['match_id'])
-            if not match_exists and match_data['match_id'] not in self.match_calls:
-                if self.autocall_matches:
-                    await self.call_match(match_data)
+            tournament = await self.get_tournament()
+            pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
+            for match in pending_matches:
+                if self.tournament_reset:
+                    await self.purge_match_calls()
+                    return
+                try:
+                    match_data = await self.parse_match_data(match)
+                except Exception as e:
+                    print(f"[call_matches] Error parsing match {match.get('id')}: {e}")
+                    await self._alert_unresolvable_match(match, str(e))
+                    continue
+                if match_data is None:
+                    await self._alert_unresolvable_match(match)
+                    continue
+                match_exists = await self.bot.dh.find_match(match_data['match_id'])
+                if not match_exists and match_data['match_id'] not in self.match_calls:
+                    if self.autocall_matches:
+                        await self.call_match(match_data)
+                    else:
+                        await self.add_match_call(match_data)
                 else:
-                    await self.add_match_call(match_data)
-            else:
-                if match_exists and match_data['match_id'] not in self.match_calls:
-                    if match_exists['state'] == 'held':
-                        await self.add_match_call(match_data, match_held=True)
+                    if match_exists and match_data['match_id'] not in self.match_calls:
+                        if match_exists['state'] == 'held':
+                            await self.add_match_call(match_data, match_held=True)
+
+    async def _alert_unresolvable_match(self, match, error: str = None):
+        """
+        Posts a visible warning to bot-control when a Challonge match cannot
+        be resolved to Discord users. Without this, the match is silently
+        skipped and TOs have no way to know it was missed.
+        """
+        match_id = match.get('id', 'unknown')
+        p1 = match.get('player1_id', '?')
+        p2 = match.get('player2_id', '?')
+
+        description = (
+            f"Match **{match_id}** (Challonge players `{p1}` vs `{p2}`) "
+            f"could not be resolved to Discord users and was skipped.\n\n"
+            f"This usually means one or both players are not registered in the database. "
+            f"Use `/call_match` to call this match manually once the issue is resolved."
+        )
+        if error:
+            description += f"\n\n**Error:** `{error}`"
+
+        embed = discord.Embed(
+            title="⚠️ Unresolvable Match",
+            description=description,
+            color=discord.Color.orange()
+        )
+
+        try:
+            channel = await self.get_channel('bot-control')
+            if channel:
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"[_alert_unresolvable_match] Failed to post alert: {e}")
 
     async def add_match_call(self, match_data, match_held=False):
         category = self.get_tournament_category()
@@ -630,11 +692,11 @@ class TournamentManager:
             await self.format.on_result(result, lobby)
 
     async def close_prereqs(self, lobby):
-        lobby = await lobby.get_lobby()
-        for match_id in lobby['prereq_matches']:
-            lobby = await self.bot.dh.get_lobby(match_id)
-            if not lobby['state'] == 'closed':
-                await self.lobbies[match_id].close_lobby()
+            lobby_data = await lobby.get_lobby()
+            for match_id in lobby_data['prereq_matches']:
+                prereq_data = await self.bot.dh.get_lobby(match_id)
+                if prereq_data['state'] != 'closed':
+                    await self.lobbies[match_id].close_lobby()
 
     # ─── Reset ───────────────────────────────────────────────────────────────
 
@@ -666,6 +728,7 @@ class TournamentManager:
     # ─── End tournament ───────────────────────────────────────────────────────
 
     async def end_tournament(self):
+        self.stop_checkin_reminder_loop()
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
         await self.format.on_tournament_end()
@@ -770,16 +833,21 @@ class TournamentManager:
         tournament = await self.get_tournament()
         guild = self.bot.guild
         tournament_category = self.get_tournament_category()
-        for channel in tournament_category.channels:
-            await channel.delete()
+
+        if tournament_category:
+            for channel in list(tournament_category.channels):
+                try:
+                    await channel.delete()
+                except discord.NotFound:
+                    pass 
+            await tournament_category.delete()
+
         tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
         tournament_to_role = discord.utils.get(guild.roles, name=f"{tournament['name']} TO")
         if tournament_role:
             await tournament_role.delete()
         if tournament_to_role:
             await tournament_to_role.delete()
-        if tournament_category:
-            await tournament_category.delete()
 
     # ─── Player management ────────────────────────────────────────────────────
 
@@ -893,3 +961,137 @@ class TournamentManager:
             if key in ('name', 'date', 'stagelist'):
                 pass
         await self.bot.dh.edit_tournament_config(self.tournament['_id'], **kwargs)
+
+    def start_checkin_reminder_loop(self):
+        self._checkin_reminded = set()
+        self._checkin_autodqd = set()      # ← add this line
+        self._checkin_reminder_task = asyncio.create_task(
+            self._checkin_reminder_loop()
+        )
+ 
+    async def _checkin_reminder_loop(self):
+        """
+        Every CHECKIN_POLL_INTERVAL seconds, query the DB for lobbies in 'checkin'
+        state that have been waiting longer than CHECKIN_REMINDER_SECONDS, then DM
+        any players who haven't checked in yet and haven't already been reminded.
+        """
+        while True:
+            await asyncio.sleep(CHECKIN_POLL_INTERVAL)
+            try:
+                await self._send_checkin_reminders()
+            except Exception as e:
+                print(f"[checkin_reminder_loop] Unexpected error: {e}")
+ 
+    async def _send_checkin_reminders(self):
+        stale_lobbies = await self.bot.dh.get_stale_checkin_lobbies(
+            self.tournament['_id'], CHECKIN_REMINDER_SECONDS
+        )
+
+        for lobby in stale_lobbies:
+            match_id = lobby['match_id']
+            checked_in = set(lobby.get('checked_in', []))
+            missing = [p for p in lobby['players'] if p not in checked_in]
+
+            if not missing:
+                continue
+
+            # ── Auto-DQ check (10 minutes) ────────────────────────────────────
+            elapsed = (datetime.now() - lobby['state_timestamp']).total_seconds()
+            if elapsed >= CHECKIN_AUTODQ_SECONDS:
+                if match_id not in self._checkin_autodqd:
+                    self._checkin_autodqd.add(match_id)
+                    await self._auto_dq_lobby(lobby, missing)
+                continue  # don't send a reminder after DQ'ing
+
+            # ── Reminder DM (5 minutes) ───────────────────────────────────────
+            for player_id in missing:
+                key = (match_id, player_id)
+                if key in self._checkin_reminded:
+                    continue
+
+                user = discord.utils.get(self.guild.members, id=player_id)
+                if not user:
+                    continue
+
+                lobby_channel = discord.utils.get(
+                    self.guild.channels, id=lobby.get('channel_id')
+                )
+                channel_mention = lobby_channel.mention if lobby_channel else 'your match channel'
+
+                try:
+                    await user.send(
+                        f"**Reminder:** You haven't checked in for your match in "
+                        f"**{self.tournament['name']}**!\n"
+                        f"Go to {channel_mention} and click **Check in** or you may be disqualified."
+                    )
+                    self._checkin_reminded.add(key)
+                except discord.Forbidden:
+                    self._checkin_reminded.add(key)
+ 
+    def stop_checkin_reminder_loop(self):
+        task = getattr(self, '_checkin_reminder_task', None)
+        if task and not task.done():
+            task.cancel()
+        self._checkin_reminded = set()
+        self._checkin_autodqd = set()
+
+    async def _auto_dq_lobby(self, lobby, missing_players):
+        """
+        Resolve a lobby where one or both players failed to check in.
+        The higher-seeded player (lower seed number) wins.
+        If seeds can't be determined, DQ the first missing player and log a warning.
+        Posts a notification to the lobby channel.
+        """
+        match_id = lobby['match_id']
+        all_players = lobby['players']
+
+        try:
+            winner_id = await self._get_higher_seed(all_players)
+        except Exception as e:
+            print(f"[auto_dq] Could not determine seeds for match {match_id}: {e}. "
+                  f"Defaulting to first player in list.")
+            winner_id = all_players[0]
+
+        loser_id = next(p for p in all_players if p != winner_id)
+
+        match_lobby = self.lobbies.get(match_id)
+        if match_lobby and match_lobby.channel:
+            missing_mentions = ' '.join(f'<@{p}>' for p in missing_players)
+            try:
+                await match_lobby.channel.send(
+                    f"⏰ **Check-in time expired.**\n"
+                    f"{missing_mentions} did not check in within the time limit.\n"
+                    f"<@{winner_id}> advances by seed. <@{loser_id}> has been disqualified."
+                )
+            except Exception:
+                pass
+
+        await self.disqualify_player(loser_id)
+
+    async def _get_higher_seed(self, player_ids):
+        """
+        Return the player_id with the lower seed number (higher seeding).
+        Fetches participant data from Challonge.
+        """
+        tournament = await self.get_tournament()
+        entrants = tournament['entrants']
+
+        challonge_to_discord = {
+            int(challonge_id): int(discord_id)
+            for discord_id, challonge_id in entrants.items()
+            if challonge_id is not None
+        }
+
+        participants = await self.ch.get_participants(tournament['challonge_data']['url'])
+
+        seed_map = {}
+        for p in participants:
+            discord_id = challonge_to_discord.get(p['id'])
+            if discord_id in player_ids:
+                seed_map[discord_id] = p.get('seed') or 9999
+
+        if not seed_map:
+            raise ValueError("No seed data found for lobby players")
+
+        return min(seed_map, key=lambda pid: seed_map[pid])
+

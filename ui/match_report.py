@@ -1,3 +1,4 @@
+import asyncio
 import discord
 
 class MatchReportView(discord.ui.View):
@@ -35,7 +36,7 @@ class MatchReportView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         
     @discord.ui.button(label='Submit', style=discord.ButtonStyle.success, disabled=True, custom_id='report_submit')
-    async def submit_winner(self, interaction: discord.Interaction,button: discord.ui.Button):
+    async def submit_winner(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         button.label = 'Submitted Successfully'
         button.disabled = True
@@ -50,6 +51,7 @@ class MatchReportButton(discord.ui.View):
         self.lobby = lobby
         self.reports = []
         self.user_reports = []
+        self._lock = asyncio.Lock()
         
         self.report_button = discord.ui.Button(label='Report Match', style=discord.ButtonStyle.success, custom_id=f"{self.lobby.match_id}-report")
         self.report_button.callback = self.report_match
@@ -69,18 +71,23 @@ class MatchReportButton(discord.ui.View):
             await interaction.response.send_message(message_content, ephemeral=True)
         
     async def add_report(self, user, report, original_message):
-        self.reports.append(int(report))
-        self.user_reports.append(int(user.id))
-        
-        if any(role.name == self.lobby.organizer_role for role in user.roles):
-            await self.lobby.end_reporting(report)
-            await original_message.delete()
-        elif set(self.user_reports) == set(self.lobby.remaining_players):
-            if len(set(self.reports)) > 1:
-                await self.redo_report()
-            else:
-                await self.lobby.end_reporting(int(self.reports[0]))
+        async with self._lock:
+            # Guard: ignore duplicate submissions from the same user
+            if int(user.id) in self.user_reports:
+                return
+
+            self.reports.append(int(report))
+            self.user_reports.append(int(user.id))
+            
+            if any(role.name == self.lobby.organizer_role for role in user.roles):
+                await self.lobby.end_reporting(report)
                 await original_message.delete()
+            elif set(self.user_reports) == set(self.lobby.remaining_players):
+                if len(set(self.reports)) > 1:
+                    await self.redo_report()
+                else:
+                    await self.lobby.end_reporting(int(self.reports[0]))
+                    await original_message.delete()
                 
     async def redo_report(self):
         channel = self.lobby.channel
@@ -91,7 +98,3 @@ class MatchReportButton(discord.ui.View):
         await channel.send(message_content)
         self.user_reports = []
         self.reports = []
-        
-        
-        
-    

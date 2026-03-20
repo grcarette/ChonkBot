@@ -1,3 +1,4 @@
+import asyncio
 import discord
 import os
 from utils.emojis import INDICATOR_EMOJIS
@@ -76,6 +77,7 @@ class BanStagesButton(discord.ui.View):
         self.player_bans = {}
         self.finished_users = []
         self.message = None
+        self._lock = asyncio.Lock()
         
         self.stage_ban_button = discord.ui.Button(label="Ban Stages", style=discord.ButtonStyle.primary, custom_id=f"{self.lobby.match_id}-stageban")
         self.stage_ban_button.callback = self.ban_stages
@@ -96,10 +98,18 @@ class BanStagesButton(discord.ui.View):
             await interaction.response.send_message(view=view, ephemeral=True)
         
     async def submit_player_bans(self, user, banned_stages):
-        self.player_bans[user] = banned_stages
-        self.finished_users.append(user.id)
+        async with self._lock:
+            # Guard: ignore duplicate submissions from the same user
+            if user.id in self.finished_users:
+                return
 
-        if set(self.finished_users) == set(self.lobby.remaining_players):
+            self.player_bans[user] = banned_stages
+            self.finished_users.append(user.id)
+            all_done = set(self.finished_users) == set(self.lobby.remaining_players)
+
+        # Both branches are outside the lock — Discord calls should not
+        # be made while holding it, and the state is already safely committed.
+        if all_done:
             self.stop()
             await self.message.delete()
             self.banned_stages = set(
@@ -148,15 +158,3 @@ class BanStagesButton(discord.ui.View):
         banner_base_path = "assets/banners"
         path = os.path.join(banner_base_path, file_name)
         return path
-        
-            
-        
-        
-        
-    
-        
-            
-            
-            
-
-        

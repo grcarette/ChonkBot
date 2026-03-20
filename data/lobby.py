@@ -311,3 +311,17 @@ class LobbyMethodsMixin:
         }
         active_match = await self.lobby_collection.find_one(query)
         return active_match
+
+    async def get_stale_checkin_lobbies(self, tournament_id, threshold_seconds):
+        """
+        Return all lobbies for this tournament that have been in 'checkin' state
+        for longer than threshold_seconds. Used by the checkin reminder loop.
+        """
+        cutoff = datetime.now() - timedelta(seconds=threshold_seconds)
+        query = {
+            'tournament': ObjectId(tournament_id),
+            'state': 'checkin',
+            'state_timestamp': {'$lt': cutoff},
+        }
+        lobbies = await self.lobby_collection.find(query).to_list(None)
+        return lobbies

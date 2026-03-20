@@ -117,7 +117,7 @@ class TournamentHandler():
         tm = self.tournaments[lobby['tournament']]
         embed = discord.Embed(
             title=f"**CAUTION:**\nAre you absolutely sure you want to reset this lobby?",
-            color=discord.Color.red()
+            description="This will return the lobby to the **reporting phase**. Both players will need to re-submit the match result.",
         )
         
         view = ConfirmationView(tm.reset_report, user_id, lobby=lobby)
