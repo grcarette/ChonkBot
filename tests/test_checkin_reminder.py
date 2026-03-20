@@ -139,6 +139,8 @@ def make_lobby_doc(match_id, players, checked_in=None, channel_id=999):
         'players': players,
         'checked_in': checked_in or [],
         'channel_id': channel_id,
+        # Default to 5 minutes stale — within reminder window, below auto-DQ threshold
+        'state_timestamp': datetime.now() - timedelta(seconds=300),
     }
 
 

@@ -52,6 +52,13 @@ def make_tm(format='double elimination', entrants=None, player_id=42):
     tm.format = MagicMock()
     tm.format.on_player_unregister = AsyncMock()
 
+    # tc mock — needed by unregister_player for update_entrants
+    tm.tc = AsyncMock()
+    tm.tc.tid = AsyncMock()
+    tm.tc.tid.update_entrants = AsyncMock()
+
+    tm.get_tournament = AsyncMock(return_value=tournament)
+
     return tm
 
 

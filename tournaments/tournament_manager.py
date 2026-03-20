@@ -308,7 +308,8 @@ class TournamentManager:
         user = await self.bot.dh.get_user(user_id=user_id)
 
         await self.format.on_player_register(user_id, user)
-        await self.tc.tid.update_entrants()  # ← add this
+        if self.tc:
+            await self.tc.tid.update_entrants()
         return True
 
     async def unregister_player(self, user_id):
@@ -982,6 +983,8 @@ class TournamentManager:
                 print(f"[checkin_reminder_loop] Unexpected error: {e}")
  
     async def _send_checkin_reminders(self):
+        if self.debug:
+            return
         stale_lobbies = await self.bot.dh.get_stale_checkin_lobbies(
             self.tournament['_id'], CHECKIN_REMINDER_SECONDS
         )

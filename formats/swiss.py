@@ -78,6 +78,12 @@ class SwissFormat(BaseFormat):
         Record the match result in the swiss event, report to the UCH Ranked API
         (non-DQ, non-debug matches only), then notify SwissManager so it can
         check whether the round is complete.
+
+        API flow:
+        1. report_match  — submits the result, returns a match_id
+        2. accept_match  — called for both winner and loser to confirm
+           The winner confirm finalizes the match; the loser confirm may return
+           a 500 if the match is already finalized, which is expected and ignored.
         """
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
@@ -93,19 +99,49 @@ class SwissFormat(BaseFormat):
         )
 
         if not self.tm.debug and not result['is_dq']:
-            api_result = await self.tm.bot.uchranked_api.report_match(
-                player1_id=result['winner_id'],
-                player2_id=result['loser_id'],
-                score='1-0',
-            )
-            if not api_result.get('success'):
-                print(f"[SwissFormat] UCH Ranked API error: {api_result.get('error')}")
+            await self._report_to_ranked_api(result['winner_id'], result['loser_id'])
 
         await self.manager.on_match_complete(
             result['match_id'],
             result['winner_id'],
             result['loser_id'],
         )
+
+    async def _report_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
+        """
+        Report a match result to UCH Ranked and confirm it for both players.
+
+        Score is always '1-0' since Swiss tracks wins/losses, not game scores.
+        Confirmation errors on the loser are ignored — the winner confirm alone
+        is sufficient to finalize the match on the API side.
+        """
+        api = self.tm.bot.uchranked_api
+
+        api_result = await api.report_match(
+            player1_id=winner_id,
+            player2_id=loser_id,
+            score='1-0',
+        )
+
+        if not api_result.get('success'):
+            print(f"[SwissFormat] UCH Ranked report error: {api_result.get('error')}")
+            return
+
+        match_id = api_result.get('match_id')
+        if not match_id:
+            print(f"[SwissFormat] UCH Ranked report succeeded but returned no match_id")
+            return
+
+        # Confirm as winner — this finalizes the match
+        confirm_winner = await api.accept_match(discord_id=winner_id, match_id=match_id)
+        if not confirm_winner.get('success'):
+            print(f"[SwissFormat] UCH Ranked winner confirm error: {confirm_winner.get('error')}")
+
+        # Confirm as loser — may 500 if already finalized, safe to ignore
+        try:
+            await api.accept_match(discord_id=loser_id, match_id=match_id)
+        except Exception as e:
+            print(f"[SwissFormat] UCH Ranked loser confirm ignored: {e}")
 
     async def on_tournament_end(self) -> None:
         """Post final standings to the results channel."""
