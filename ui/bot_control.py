@@ -180,6 +180,7 @@ class BotControlView(discord.ui.View):
         await interaction.response.send_message(view=view, ephemeral=True)
 
     async def start_next_round(self, interaction: discord.Interaction):
+        print("[start_next_round] Button clicked")
         await interaction.response.defer()
         self.next_round_button.disabled = True
         await self.update_control()

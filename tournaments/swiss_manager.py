@@ -37,50 +37,59 @@ class SwissManager:
     # ─── Main pairing cycle ───────────────────────────────────────────────────
 
     async def run_pairing_cycle(self):
-        """
-        Pairs all available players and calls their matches.
-        Called on tournament start and when the TO presses Start Next Round.
-        """
+        print("[run_pairing_cycle] Called")
+
         if not self.running:
+            print("[run_pairing_cycle] Aborted — self.running is False")
             return
 
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        print(f"[run_pairing_cycle] Swiss event: _id={swiss_event.get('_id')}, current_round={swiss_event.get('current_round')}, round_limit={swiss_event.get('round_limit')}, state={swiss_event.get('state')}")
 
-        if await self.dh.swiss_is_event_complete(swiss_event['_id']):
+        is_complete = await self.dh.swiss_is_event_complete(swiss_event['_id'])
+        print(f"[run_pairing_cycle] swiss_is_event_complete={is_complete}")
+        if is_complete:
+            print("[run_pairing_cycle] Event is complete — calling end_event")
             await self.end_event()
             return
 
         available = await self.dh.swiss_get_available_players(swiss_event['_id'])
+        print(f"[run_pairing_cycle] Available players ({len(available)}): {[p['discord_id'] for p in available]}")
 
         if len(available) < 2:
+            print(f"[run_pairing_cycle] Not enough players to pair ({len(available)})")
             if len(available) == 1 and self.bye_task is None:
+                print(f"[run_pairing_cycle] Starting bye wait for {available[0]['discord_id']}")
                 await self.start_bye_wait(available[0], swiss_event)
             return
 
-        # Delete channels from previous round before creating new ones
         await self.close_previous_round_channels(swiss_event['_id'])
 
-        # Increment the round counter — new round is now current
         current_round = await self.dh.swiss_increment_round(swiss_event['_id'])
+        print(f"[run_pairing_cycle] Incremented round to {current_round}")
 
-        # Re-fetch after increment
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         await self.randomize_stagelist()
 
         pairs, unpaired = pair_players(available)
+        print(f"[run_pairing_cycle] Pairs: {[{p1['discord_id'], p2['discord_id']} for p1, p2 in pairs]}")
+        print(f"[run_pairing_cycle] Unpaired: {[p['discord_id'] for p in unpaired]}")
 
         for player_1, player_2 in pairs:
+            print(f"[run_pairing_cycle] Calling match: {player_1['discord_id']} vs {player_2['discord_id']}")
             await self.call_match(player_1, player_2, swiss_event, current_round)
 
         if unpaired:
             candidate = select_bye_candidate(unpaired)
             if candidate and self.bye_task is None:
+                print(f"[run_pairing_cycle] Starting bye wait for unpaired player {candidate['discord_id']}")
                 await self.start_bye_wait(candidate, swiss_event)
 
-        # In debug mode all matches resolve instantly so check round complete now
         if self.tm.debug:
             await self.check_round_complete()
+
+        print("[run_pairing_cycle] Done")
 
     # ─── Channel cleanup ─────────────────────────────────────────────────────
 
@@ -116,21 +125,17 @@ class SwissManager:
         await self.post_round_complete(swiss_event)
 
     async def post_round_complete(self, swiss_event):
-        """Post a standings summary to match-calling and enable the Next Round button."""
+        """Post full standings to event-updates and enable the Next Round button."""
         event_update_channel = await self.tm.get_channel('event-updates')
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
-            top_players = standings[:5]
             standings_text = "\n".join(
                 f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L)"
-                for i, p in enumerate(top_players)
+                for i, p in enumerate(standings)
             )
-            if len(standings) > 5:
-                standings_text += f"\n*...and {len(standings) - 5} more*"
-
             embed = discord.Embed(
                 title=f"Round {swiss_event.get('current_round', '?')} Complete",
-                description=f"**Current Standings (Top 5):**\n{standings_text}",
+                description=f"**Current Standings:**\n{standings_text}",
                 color=discord.Color.blue()
             )
             await event_update_channel.send(embed=embed)
@@ -278,15 +283,10 @@ class SwissManager:
     # ─── End event ────────────────────────────────────────────────────────────
 
     async def end_event(self):
-        """
-        All rounds complete. Clean up channels, mark the swiss event finished,
-        then prompt the TO to end the tournament via the existing End Tournament button.
-        """
         self.running = False
 
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
-        # Clean up any remaining channels from the final round
         if not self.tm.debug:
             for match_id in list(self.tm.lobbies.keys()):
                 lobby = self.tm.lobbies[match_id]
@@ -299,22 +299,20 @@ class SwissManager:
 
         await self.dh.update_swiss_state(swiss_event['_id'], 'finished')
 
-        # Post final standings to match-calling
-        match_call_channel = await self.tm.get_channel('match-calling')
-        if match_call_channel:
+        event_update_channel = await self.tm.get_channel('event-updates')
+        if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
             standings_text = "\n".join(
                 f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L)"
                 for i, p in enumerate(standings)
             )
             embed = discord.Embed(
-                title="All Rounds Complete — Final Standings",
+                title="🏆 Final Standings",
                 description=standings_text,
                 color=discord.Color.gold()
             )
-            await match_call_channel.send(embed=embed)
+            await event_update_channel.send(embed=embed)
 
-        # Prompt the TO to confirm ending — posts the End Tournament button to bot-control
         await self.tm.prompt_end_tournament()
 
     async def randomize_stagelist(self):

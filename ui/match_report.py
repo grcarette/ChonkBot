@@ -80,7 +80,7 @@ class MatchReportButton(discord.ui.View):
             self.user_reports.append(int(user.id))
             
             if any(role.name == self.lobby.organizer_role for role in user.roles):
-                await self.lobby.end_reporting(report)
+                await self.lobby.end_reporting(self.reports[-1])
                 await original_message.delete()
             elif set(self.user_reports) == set(self.lobby.remaining_players):
                 if len(set(self.reports)) > 1:

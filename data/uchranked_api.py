@@ -1,5 +1,6 @@
 import os
 import httpx
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,7 +22,12 @@ class UCHRankedAPI:
         async with httpx.AsyncClient(verify=False) as client:
             response = await client.post(url, json=payload, headers=self.headers)
             response.raise_for_status()
-            return response.json()
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                decoder = json.JSONDecoder()
+                obj, _ = decoder.raw_decode(response.text.strip())
+                return obj
 
     async def get_player(self, discord_id: int) -> dict | None:
         data = await self._post("elo.php", {"discord_id": int(discord_id)})

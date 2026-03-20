@@ -34,6 +34,8 @@ class SwissFormat(BaseFormat):
         if not swiss_event:
             round_limit = tournament.get('round_limit', 8)
             await self.dh.create_swiss_event(tournament['_id'], round_limit)
+        elif swiss_event.get('state') == 'active':
+            self.manager.running = True
 
     async def on_player_register(self, user_id: int, user: dict) -> None:
         """

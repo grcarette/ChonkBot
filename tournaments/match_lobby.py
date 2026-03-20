@@ -280,8 +280,13 @@ class MatchLobby:
             self.channel = None
     
     async def reset_report(self):
+        await self.purge_bot_messages()
         await self.dh.reset_lobby(self.match_id, 'report')
-        self.remaining_players = self.players
+        lobby = await self.get_lobby()
+        self.remaining_players = set(lobby['players'])
+        if not lobby.get('picked_stage'):
+            picked_stage = random.choice(self.stages)
+            await self.dh.pick_lobby_stage(self.match_id, picked_stage)
         await self.start_reporting()
         
     async def delete_lobby(self):
