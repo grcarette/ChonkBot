@@ -46,7 +46,6 @@ class TournamentManager:
         self.autocall_matches = False
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
-        self.swiss_manager = None  # set by SwissFormat.__init__ when format is swiss
         self.format = None
 
     # ─── Ranked API helper ────────────────────────────────────────────────────

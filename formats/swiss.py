@@ -24,7 +24,6 @@ class SwissFormat(BaseFormat):
         self.manager = SwissManager(tm)
         # Keep tm.swiss_manager in sync — TournamentManager still references
         # it in start_tournament_loop until step 7 removes it entirely.
-        self.tm.swiss_manager = self.manager
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -143,6 +142,12 @@ class SwissFormat(BaseFormat):
         called, so there's nothing left to do here.
         """
         pass
+
+    async def get_active_buttons(self, state: str) -> list[str]:
+        """Swiss shows the round button when active, nothing else."""
+        if state == 'active':
+            return ['round_button']
+        return []
 
     @property
     def needs_match_call_refresh(self) -> bool:

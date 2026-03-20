@@ -169,6 +169,30 @@ class BaseFormat:
         """
         pass
 
+    async def get_active_buttons(self, state: str) -> list[str]:
+        """
+        Return which format-specific buttons should be shown for this state.
+        BotControlView calls this and adds the returned buttons alongside
+        its fixed state buttons.
+
+        Valid identifiers:
+            'seeding'             — Challonge seeding tool
+            'reset'               — Reset tournament
+            'autocall'            — Toggle auto match-calling
+            'refresh_match_calls' — Manually refresh match calls
+            'round_button'        — Start next Swiss round
+
+        Default implementation covers DE/SE.
+        Override in formats that need different behaviour.
+        """
+        if state == 'registration':
+            return ['seeding']
+        elif state == 'checkin':
+            return ['autocall', 'seeding']
+        elif state == 'active':
+            return ['autocall', 'refresh_match_calls', 'reset']
+        return []
+
     @property
     def needs_match_call_refresh(self) -> bool:
         """
@@ -179,19 +203,26 @@ class BaseFormat:
         return True
 
     @property
-    def supports_reset(self) -> bool:
-        """
-        Whether this format supports mid-tournament reset.
-        If False, the Reset Tournament button is hidden in BotControlView.
-        Default: True.
-        """
+    def needs_match_call_refresh(self) -> bool:
+        """DE/SE: True. Swiss: False."""
         return True
 
     @property
+    def supports_reset(self) -> bool:
+        """DE/SE: True. Swiss: False."""
+        return True
+
+    @property  
     def shows_bracket_link(self) -> bool:
-        """
-        Whether this format has a publicly accessible bracket URL.
-        If True, TournamentInfoDisplay will show a bracket link.
-        Default: False.
-        """
+        """DE/SE: True. Swiss: False."""
+        return False
+
+    @property
+    def shows_seeding_button(self) -> bool:
+        """Whether the seeding tool button should appear. DE/SE: True. Swiss: False."""
+        return False
+
+    @property
+    def shows_round_button(self) -> bool:
+        """Whether the Start Round button should appear. Swiss: True. DE/SE: False."""
         return False

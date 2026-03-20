@@ -1,7 +1,4 @@
 import discord
-import re
-import aiohttp
-from io import BytesIO
 
 from utils.discord_preset_colors import get_random_color
 from utils.color_utils import discord_color_from_hex
@@ -32,8 +29,7 @@ class TournamentInfoDisplay:
             embed = await self.generate_embed()
             self.message = await channel.send(view=self.info_display_view, embed=embed)
 
-            # Only add bracket link for non-swiss events
-            if not self.tm.is_swiss and 'challonge_data' in self.tm.tournament:
+            if self.tm.format and self.tm.format.shows_bracket_link and 'challonge_data' in self.tm.tournament:
                 bracket_url = await get_bracket_link(self.tm.tournament['challonge_data']['url'])
                 await self.add_link(link_label="Bracket", link_url=bracket_url)
         else:
@@ -50,7 +46,17 @@ class TournamentInfoDisplay:
         embed = await self.generate_embed()
         await self.message.edit(view=self.info_display_view, embed=embed)
 
-    async def generate_embed(self):
+    async def update_entrants(self):
+        """
+        Called by TournamentManager whenever a player registers or unregisters.
+        Re-renders the full embed (which includes the entrant list if enabled).
+        """
+        tournament = await self.tm.get_tournament()
+        if not tournament.get('config', {}).get('display_entrants'):
+            return
+        await self.update_display()
+
+    async def generate_embed(self) -> discord.Embed:
         tournament = await self.tm.get_tournament()
         if 'color' in tournament.get('config', {}):
             color = discord_color_from_hex(tournament['config']['color'])
@@ -73,12 +79,85 @@ class TournamentInfoDisplay:
 
         description += f"**TO's:**\n-{organizer_str}\n"
 
+        # ── Entrant list ──────────────────────────────────────────────────────
+        if tournament.get('config', {}).get('display_entrants'):
+            entrant_str = await self._build_entrant_list(tournament)
+            entrant_count = len(tournament.get('entrants', {}))
+            description += f"\n**Entrants ({entrant_count}):**\n{entrant_str}"
+
         embed = discord.Embed(
             title=f"{tournament['name']}",
             description=description,
             color=color
         )
         return embed
+
+    async def _build_entrant_list(self, tournament) -> str:
+        """
+        Build a newline-separated list of entrant display names.
+
+        For DE/SE: ordered by Challonge seed (requires an API call).
+        For Swiss: ordered by registration order (entrants dict key order).
+
+        Falls back to registration order if the Challonge call fails.
+        """
+        entrants = tournament.get('entrants', {})
+        if not entrants:
+            return '*No entrants yet.*'
+
+        ordered_ids = await self._get_ordered_discord_ids(tournament, entrants)
+
+        names = []
+        for i, discord_id in enumerate(ordered_ids, start=1):
+            try:
+                user = await self.dh.get_user(user_id=int(discord_id))
+                name = user['name'] if user else f'Unknown ({discord_id})'
+            except Exception:
+                name = f'Unknown ({discord_id})'
+            names.append(f"{i}. {name}")
+
+        return '\n'.join(names) if names else '*No entrants yet.*'
+
+    async def _get_ordered_discord_ids(self, tournament, entrants) -> list[str]:
+        """
+        Return discord_ids ordered by seed for DE/SE, or by registration
+        order for Swiss. Falls back to registration order on any error.
+        """
+        # Swiss: no seeding, just use insertion order
+        if not (self.tm.format and self.tm.format.shows_bracket_link):
+            return list(entrants.keys())
+
+        # DE/SE: fetch seeds from Challonge
+        if 'challonge_data' not in tournament:
+            return list(entrants.keys())
+
+        try:
+            participants = await self.tm.ch.get_participants(
+                tournament['challonge_data']['url']
+            )
+            # Sort by seed, pushing unseeded players to the end
+            participants_sorted = sorted(
+                participants, key=lambda p: p.get('seed') or 9999
+            )
+            # Build reverse map: challonge_id → discord_id
+            challonge_to_discord = {
+                str(challonge_id): str(discord_id)
+                for discord_id, challonge_id in entrants.items()
+            }
+            ordered = []
+            for p in participants_sorted:
+                discord_id = challonge_to_discord.get(str(p['id']))
+                if discord_id:
+                    ordered.append(discord_id)
+            # Append any discord_ids not found in Challonge response
+            seen = set(ordered)
+            for discord_id in entrants.keys():
+                if discord_id not in seen:
+                    ordered.append(discord_id)
+            return ordered
+        except Exception as e:
+            print(f"[TournamentInfoDisplay] Failed to fetch Challonge seeds: {e}")
+            return list(entrants.keys())
 
     async def post_stages(self):
         tournament = await self.tm.get_tournament()

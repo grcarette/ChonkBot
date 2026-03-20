@@ -6,17 +6,6 @@ from .dq_player_select import DQPlayerSelectMenu, RemoveDQPlayerSelectMenu
 from .toggle_button import ToggleButton
 
 
-def _is_swiss(tm) -> bool:
-    """
-    Helper to determine if the tournament is Swiss without relying on is_swiss property.
-    Uses format.needs_match_call_refresh if format is available, falls back to
-    reading the tournament dict directly for safety during early initialization.
-    """
-    if tm.format is not None:
-        return not tm.format.needs_match_call_refresh
-    return tm.tournament.get('format') == 'swiss'
-
-
 class BotControlView(discord.ui.View):
     def __init__(self, tournament_control, tournament):
         super().__init__(timeout=None)
@@ -92,6 +81,23 @@ class BotControlView(discord.ui.View):
             self.open_reg_button.disabled = False
             self.close_reg_button.disabled = True
 
+    # ─── Button map ───────────────────────────────────────────────────────────
+
+    def _button_map(self) -> dict:
+        """
+        Maps button identifier strings (returned by format.get_active_buttons)
+        to the button instances on this view.
+        """
+        return {
+            'seeding':             self.seeding_button,
+            'reset':               self.reset_button,
+            'autocall':            self.toggle_autocall_button,
+            'refresh_match_calls': self.refresh_match_calls_button,
+            'round_button':        self.next_round_button,
+        }
+
+    # ─── Callbacks ────────────────────────────────────────────────────────────
+
     async def toggle_autocall(self, interaction: discord.Interaction, state):
         await self.tm.toggle_autocall(state)
 
@@ -146,7 +152,6 @@ class BotControlView(discord.ui.View):
 
     async def start_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
-        tournament = await self.tm.get_tournament()
         embed = discord.Embed(
             title="Are you sure you want to start the tournament?",
             color=discord.Color.yellow()
@@ -178,7 +183,7 @@ class BotControlView(discord.ui.View):
         await interaction.response.defer()
         self.next_round_button.disabled = True
         await self.update_control()
-        await self.tm.swiss_manager.run_pairing_cycle()
+        await self.tm.format.manager.run_pairing_cycle()
 
     async def enable_next_round_button(self):
         swiss_event = await self.tm.bot.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
@@ -188,45 +193,70 @@ class BotControlView(discord.ui.View):
         self.next_round_button.disabled = False
         await self.update_control()
 
+    async def open_seeding(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        tournament = await self.tm.get_tournament()
+        organizer_role = discord.utils.get(
+            interaction.guild.roles,
+            name=f"{tournament['name']} TO"
+        )
+        if organizer_role not in interaction.user.roles:
+            await interaction.followup.send("Only TOs can access seeding.", ephemeral=True)
+            return
+
+        if 'challonge_data' not in tournament:
+            await interaction.followup.send(
+                "No Challonge bracket linked to this tournament yet.", ephemeral=True
+            )
+            return
+
+        link = await self.tm.generate_seeding_link()
+        await interaction.followup.send(
+            f"{INDICATOR_EMOJIS['seed']} **Seeding Tool** — this link expires in 30 minutes:\n{link}",
+            ephemeral=True
+        )
+
+    # ─── State management ─────────────────────────────────────────────────────
+
     async def update_tournament_state(self, state):
         if self.message is None:
             self.message = await self.get_control_message()
         self.clear_items()
         self.stage = state
 
-        is_swiss = _is_swiss(self.tm)
-
+        # ── Fixed buttons per state (always shown, format-agnostic) ──────────
         if state == 'setup':
             self.publish_button.disabled = False
             self.add_item(self.publish_button)
+
         elif state == 'registration':
             self.checkin_button.disabled = False
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.checkin_button)
-            if not is_swiss:
-                self.add_item(self.seeding_button)
+
         elif state == 'checkin':
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
-            self.add_item(self.toggle_autocall_button)
             self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
-            if not is_swiss:
-                self.add_item(self.seeding_button)
+
         elif state == 'active':
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
-            if not is_swiss:
-                self.add_item(self.toggle_autocall_button)
-                self.add_item(self.refresh_match_calls_button)
-                self.add_item(self.reset_button)
-            else:
-                self.next_round_button.label = f"Start Round 1 {INDICATOR_EMOJIS['game_controller']}"
-                self.next_round_button.disabled = False
-                self.add_item(self.next_round_button)
-        elif state == 'finished':
-            pass
+
+        # ── Format-specific buttons ───────────────────────────────────────────
+        if self.tm.format:
+            active_buttons = await self.tm.format.get_active_buttons(state)
+            button_map = self._button_map()
+            for key in active_buttons:
+                if key == 'round_button':
+                    # Ensure label reflects current round before adding
+                    self.next_round_button.label = f"Start Round 1 {INDICATOR_EMOJIS['game_controller']}"
+                    self.next_round_button.disabled = False
+                if key in button_map:
+                    self.add_item(button_map[key])
 
         await self.update_control()
 
@@ -260,16 +290,6 @@ class BotControlView(discord.ui.View):
                     self.required_actions.append(action)
             else:
                 self.required_actions.append("Add stages to stagelist")
-        elif self.stage == "registration":
-            pass
-        elif self.stage == "checkin":
-            pass
-        elif self.stage == "active":
-            pass
-        elif self.stage == "finished":
-            pass
-        else:
-            self.required_actions.append('-Nothing')
 
     async def get_pending_stages(self, tournament):
         stagelist = tournament['stagelist']
@@ -293,29 +313,3 @@ class BotControlView(discord.ui.View):
             color=discord.Color.green()
         )
         return embed
-
-    async def open_seeding(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        tournament = await self.tm.get_tournament()
-        organizer_role = discord.utils.get(
-            interaction.guild.roles,
-            name=f"{tournament['name']} TO"
-        )
-        if organizer_role not in interaction.user.roles:
-            await interaction.followup.send(
-                "Only TOs can access seeding.", ephemeral=True
-            )
-            return
-
-        if 'challonge_data' not in tournament:
-            await interaction.followup.send(
-                "No Challonge bracket linked to this tournament yet.", ephemeral=True
-            )
-            return
-
-        link = await self.tm.generate_seeding_link()
-        await interaction.followup.send(
-            f"{INDICATOR_EMOJIS['seed']} **Seeding Tool** — this link expires in 30 minutes:\n{link}",
-            ephemeral=True
-        )

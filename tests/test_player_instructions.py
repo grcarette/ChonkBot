@@ -13,10 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def make_lobby(bracket, is_swiss=False, results=None):
-    """
-    Build a minimal MatchLobby-like object without hitting Discord or the DB.
-    We bypass MatchLobby.create entirely and construct the object directly.
-    """
     from tournaments.match_lobby import MatchLobby
 
     lobby = object.__new__(MatchLobby)
@@ -29,15 +25,15 @@ def make_lobby(bracket, is_swiss=False, results=None):
     lobby.num_winners = 1
     lobby.guild = MagicMock()
 
-    # Mock tournament manager
+    # Mock tournament manager with format
     tm = MagicMock()
-    tm.is_swiss = is_swiss
+    tm.format = MagicMock()
+    tm.format.needs_match_call_refresh = not is_swiss  # False = Swiss, True = DE/SE
+    tm.tournament = {'format': 'swiss' if is_swiss else 'double elimination'}
     lobby.tournament_manager = tm
 
-    # Mock channel — capture what gets sent
     lobby.channel = AsyncMock()
 
-    # Mock dh — return a fake lobby document with results
     lobby.dh = AsyncMock()
     lobby.dh.get_tournament_by_id = AsyncMock(return_value={
         'name': 'Test Tournament',

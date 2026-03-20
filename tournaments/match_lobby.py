@@ -220,7 +220,14 @@ class MatchLobby:
         winner_mention = f"<@{lobby['results'][0]}>"
         loser_mention = f"<@{lobby['results'][1]}>"
 
-        if self.tournament_manager.is_swiss:
+        tm = self.tournament_manager
+        is_swiss = (
+            not tm.format.needs_match_call_refresh
+            if tm.format is not None
+            else tm.tournament.get('format') == 'swiss'
+        )
+
+        if is_swiss:
             winner_message = (
                 f"Congratulations {winner_mention}! "
                 "You will be pinged when the next round is ready.\n\n"
