@@ -110,8 +110,9 @@ class SwissManager:
     async def check_round_complete(self):
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
-        # Don't do anything if no rounds have started yet
         if swiss_event.get('current_round', 0) == 0:
+            return
+        if swiss_event.get('state') == 'finished':
             return
 
         for player in swiss_event['players'].values():
@@ -261,6 +262,8 @@ class SwissManager:
         Called when a player registers during an active swiss event.
         Only triggers pairing if no matches are currently active (between rounds).
         """
+        if not self.running:
+            return
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         if swiss_event.get('bye_queue') is not None:
@@ -275,8 +278,9 @@ class SwissManager:
     # ─── Called when a player drops ───────────────────────────────────────────
 
     async def on_player_dropped(self):
+        if not self.running:
+            return
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
-        # Only check round complete if a round is actually in progress
         if swiss_event.get('current_round', 0) > 0:
             await self.check_round_complete()
 

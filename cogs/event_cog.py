@@ -292,6 +292,149 @@ class EventCog(commands.Cog, name="event"):
                     raise ValueError("winner_id is required when forcing to 'winner' state")
                 await self.end_reporting(winner_id=winner_id)
 
+    @app_commands.command(
+        name="force_report_swiss_match",
+        description="Manually report a stuck Swiss match result (run from inside the lobby channel)"
+    )
+    @app_commands.checks.has_role("Event Organizer")
+    async def force_report_swiss_match(
+        self,
+        interaction: discord.Interaction,
+        winner: discord.Member,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        # Resolve match from the channel
+        lobby_data = await self.bot.dh.lobby_collection.find_one({'channel_id': interaction.channel.id})
+        if not lobby_data:
+            return await interaction.followup.send(
+                "This channel isn't a lobby. Run this command from inside the stuck match channel.",
+                ephemeral=True
+            )
+
+        players = lobby_data['players']
+        w_id = winner.id
+        if w_id not in players:
+            return await interaction.followup.send(
+                f"{winner.mention} is not a player in this match.",
+                ephemeral=True
+            )
+        l_id = next(p for p in players if p != w_id)
+        match_id = lobby_data['match_id']
+
+        # Resolve tournament and TM
+        tournament = await self.bot.dh.get_tournament_by_id(lobby_data['tournament'])
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        if tournament.get('format') != 'swiss':
+            return await interaction.followup.send(
+                "This command is only for Swiss tournaments.", ephemeral=True
+            )
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found.", ephemeral=True)
+
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if not swiss_event:
+            return await interaction.followup.send("No Swiss event found.", ephemeral=True)
+
+        # Verify both players exist in the Swiss event
+        winner_data = swiss_event['players'].get(str(w_id))
+        loser_data = swiss_event['players'].get(str(l_id))
+        if not winner_data or not loser_data:
+            return await interaction.followup.send(
+                "One or both players are not in the Swiss event.", ephemeral=True
+            )
+
+        # 1. Write result to Swiss DB
+        await self.bot.dh.swiss_record_result(swiss_event['_id'], match_id, w_id, l_id)
+
+        # 2. Report to UCH Ranked
+        ranked_status = "⏭️ Debug mode — UCH Ranked skipped."
+        if not tournament.get('debug'):
+            try:
+                result = await self.bot.uchranked_api.report_match(
+                    player1_id=w_id,
+                    player2_id=l_id,
+                    score='1-0',
+                )
+                if not result.get('success'):
+                    ranked_status = f"⚠️ UCH Ranked rejected the report: `{result.get('error')}`"
+                else:
+                    ranked_match_id = result.get('match_id')
+                    try:
+                        await self.bot.uchranked_api.accept_match(w_id, ranked_match_id)
+                        ranked_status = "✅ Reported to UCH Ranked."
+                    except Exception as e:
+                        ranked_status = f"⚠️ Reported but winner confirm failed: `{e}`"
+                    try:
+                        await self.bot.uchranked_api.accept_match(l_id, ranked_match_id)
+                    except Exception:
+                        pass  # loser confirm failure is expected/ignored
+            except Exception as e:
+                ranked_status = f"⚠️ UCH Ranked API error: `{e}`"
+
+        # 3. Trigger round complete check
+        if tm.format and hasattr(tm.format, 'manager'):
+            await tm.format.manager.check_round_complete()
+
+        await interaction.followup.send(
+            f"✅ Match manually reported: {winner.mention} over <@{l_id}>.\n{ranked_status}\nRound check triggered.",
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="force_next_swiss_round",
+        description="Force the next Swiss round to start, abandoning any unfinished matches"
+    )
+    @app_commands.checks.has_role("Event Organizer")
+    async def force_next_swiss_round(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        if tournament.get('format') != 'swiss':
+            return await interaction.followup.send("This command is only for Swiss tournaments.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found.", ephemeral=True)
+
+        if not tm.format or not hasattr(tm.format, 'manager'):
+            return await interaction.followup.send("Swiss manager not found.", ephemeral=True)
+
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if not swiss_event:
+            return await interaction.followup.send("No Swiss event found.", ephemeral=True)
+
+        # Find players still stuck in active matches
+        stuck_players = [
+            (player_id, data['active_match_id'])
+            for player_id, data in swiss_event['players'].items()
+            if data.get('active_match_id') is not None and not data.get('dropped')
+        ]
+
+        # Clear active_match_id for all stuck players
+        for player_id, _ in stuck_players:
+            await self.bot.dh.swiss_set_active_match(swiss_event['_id'], int(player_id), None)
+
+        abandoned_count = len(set(match_id for _, match_id in stuck_players))
+
+        # Run the pairing cycle directly
+        await tm.format.manager.run_pairing_cycle()
+
+        msg = f"✅ Forced next round. "
+        if abandoned_count:
+            msg += f"{abandoned_count} unfinished match(es) were abandoned with no result recorded."
+        else:
+            msg += "No matches were abandoned."
+
+        await interaction.followup.send(msg, ephemeral=True)
+
 def extract_challonge_id(url: str) -> str:
     """Extracts the tournament slug/ID from a standard Challonge URL."""
     match = re.search(r"challonge\.com\/(?:[^\/]+\/)?([^\/\?]+)", url)

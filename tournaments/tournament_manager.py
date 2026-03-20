@@ -484,12 +484,23 @@ class TournamentManager:
         event_updates_channel = await self.get_channel('event-updates')
         tournament_role = discord.utils.get(self.guild.roles, name=self.tournament['name'])
         message_content = f'{tournament_role.mention}'
-        embed = discord.Embed(
-            title=f"{self.tournament['name']} has started!",
-            description=(
+
+        if self.format and not self.format.needs_match_call_refresh:
+            # Swiss
+            description = (
+                "Matches will be called in rounds. "
+                "When your match is ready, a private channel will be made for you and your opponent at the top of this server.\n"
+            )
+        else:
+            # DE / SE
+            description = (
                 "Look at the bracket in #event-info to see when you will be playing.\n"
                 "When your match is called, a private channel will be made for you and your opponent at the top of this server.\n"
-            ),
+            )
+
+        embed = discord.Embed(
+            title=f"{self.tournament['name']} has started!",
+            description=description,
             color=discord.Color.green()
         )
         await event_updates_channel.send(content=message_content, embed=embed)

@@ -110,40 +110,54 @@ class SwissFormat(BaseFormat):
         )
 
     async def _report_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
-        """
-        Report a match result to UCH Ranked and confirm it for both players.
-
-        Score is always '1-0' since Swiss tracks wins/losses, not game scores.
-        Confirmation errors on the loser are ignored — the winner confirm alone
-        is sufficient to finalize the match on the API side.
-        """
-        api = self.tm.bot.uchranked_api
-
-        api_result = await api.report_match(
-            player1_id=winner_id,
-            player2_id=loser_id,
-            score='1-0',
-        )
-
-        if not api_result.get('success'):
-            print(f"[SwissFormat] UCH Ranked report error: {api_result.get('error')}")
-            return
-
-        match_id = api_result.get('match_id')
-        if not match_id:
-            print(f"[SwissFormat] UCH Ranked report succeeded but returned no match_id")
-            return
-
-        # Confirm as winner — this finalizes the match
-        confirm_winner = await api.accept_match(discord_id=winner_id, match_id=match_id)
-        if not confirm_winner.get('success'):
-            print(f"[SwissFormat] UCH Ranked winner confirm error: {confirm_winner.get('error')}")
-
-        # Confirm as loser — may 500 if already finalized, safe to ignore
         try:
-            await api.accept_match(discord_id=loser_id, match_id=match_id)
+            result = await self.tm.bot.uchranked_api.report_match(
+                player1_id=winner_id,
+                player2_id=loser_id,
+                score='1-0',
+            )
+            if not result.get('success'):
+                await self._alert_ranked_api_failure(winner_id, loser_id, result.get('error'))
+                return
+
+            match_id = result.get('match_id')
+            if not match_id:
+                await self._alert_ranked_api_failure(winner_id, loser_id, "No match_id returned")
+                return
+
+            try:
+                await self.tm.bot.uchranked_api.accept_match(winner_id, match_id)
+            except Exception as e:
+                print(f"[Swiss] Winner accept_match failed: {e}")
+
+            try:
+                await self.tm.bot.uchranked_api.accept_match(loser_id, match_id)
+            except Exception:
+                pass  # expected/ignored
+
         except Exception as e:
-            print(f"[SwissFormat] UCH Ranked loser confirm ignored: {e}")
+            await self._alert_ranked_api_failure(winner_id, loser_id, str(e))
+
+    async def _alert_ranked_api_failure(self, winner_id: int, loser_id: int, error: str = None) -> None:
+        print(f"[Swiss] UCH Ranked API failure: winner={winner_id} loser={loser_id} error={error}")
+        try:
+            channel = await self.tm.get_channel('bot-control')
+            if channel:
+                embed = discord.Embed(
+                    title="⚠️ UCH Ranked API Failure",
+                    description=(
+                        f"Match result for <@{winner_id}> over <@{loser_id}> "
+                        f"**was recorded in the Swiss DB** but **failed to reach UCH Ranked**.\n\n"
+                        f"The tournament can continue normally. "
+                        f"Use `/force_report_swiss_match` if you need to manually re-trigger the round check, "
+                        f"or report the match to UCH Ranked manually.\n\n"
+                        + (f"**Error:** `{error}`" if error else "")
+                    ),
+                    color=discord.Color.red(),
+                )
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"[Swiss] Failed to send API failure alert: {e}")
 
     async def on_tournament_end(self) -> None:
         """Post final standings to the results channel."""
