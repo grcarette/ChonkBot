@@ -69,6 +69,7 @@ class ChallongeFormat(BaseFormat):
         """Destroy the Challonge participant for this player."""
         tournament = await self.tm.get_tournament()
         player_id = tournament['entrants'].get(str(user_id))
+        print(f"[on_player_unregister] user_id={user_id} player_id={player_id}")
         if player_id is not None:
             await self.ch.unregister_player(tournament['challonge_data']['id'], player_id)
 

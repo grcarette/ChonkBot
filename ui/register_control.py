@@ -26,20 +26,18 @@ class RegisterControlView(discord.ui.View):
         self.add_item(self.unregister_button)
         
     async def register_player(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         player_registered = await self.get_registration_status(interaction)
         user_id = interaction.user.id
-        category_id = interaction.channel.category_id
-        tournament = await self.tm.bot.dh.get_tournament(category_id=category_id)
-        
+
         if player_registered:
-            message_content = (
-                "You are already registered."
-            )
-            await interaction.response.send_message(message_content, ephemeral=True)
+            await interaction.followup.send("You are already registered.", ephemeral=True)
         else:
             await self.tm.create_registration_approval(user_id, interaction)
             
     async def unregister_player(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
         user_id = interaction.user.id
         category_id = interaction.channel.category_id
         tournament = await self.tm.bot.dh.get_tournament(category_id=category_id)
@@ -49,7 +47,7 @@ class RegisterControlView(discord.ui.View):
         )
         if player_registered:
             await self.tm.unregister_player(user_id)
-        await interaction.response.send_message(message_content, ephemeral=True)
+        await interaction.followup.send(message_content, ephemeral=True)
         
     async def get_registration_status(self, interaction):
         user_id = interaction.user.id

@@ -105,7 +105,7 @@ class TournamentManager:
                 datahandler=self.bot.dh,
                 guild=self.bot.guild,
                 bracket=lobby.get('bracket'),
-                match_service=None,  # rehydrated lobbies fall back to report_match
+                match_service=None,
             )
             self.lobbies[lobby['match_id']] = match_lobby
             if lobby['state'] == 'initialized':
@@ -117,11 +117,14 @@ class TournamentManager:
             elif lobby['state'] == 'reporting':
                 self.bot.add_view(MatchReportButton(match_lobby))
 
+        tournament = await self.get_tournament()  # ← re-fetch so state checks are current
+
         if tournament['state'] == 'initialize':
             await self.progress_tournament()
         if tournament['state'] == 'setup':
             pass
         elif tournament['state'] == 'registration':
+            self.bot.add_view(RegisterControlView(self))
             self.bot.add_view(RegisterControlView(self))
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
@@ -259,7 +262,6 @@ class TournamentManager:
         await channel.set_permissions(self.guild.default_role, overwrite=overwrite)
 
     async def create_registration_approval(self, user_id, interaction):
-        # Run the format's registration gate (e.g. UCH Ranked check for Swiss)
         allowed = await self.format.on_registration_gate(user_id, interaction)
         if not allowed:
             return
@@ -268,9 +270,8 @@ class TournamentManager:
             self.tournament['_id'], user_id
         )
         if already_registered:
-            await interaction.response.send_message(
-                "You are already registered for this event.",
-                ephemeral=True
+            await interaction.followup.send(
+                "You are already registered for this event.", ephemeral=True
             )
             return
 
@@ -280,14 +281,12 @@ class TournamentManager:
             embed = discord.Embed(title=user.name, color=get_random_color())
             view = RegistrationApprovalView(self, user_id)
             await approval_channel.send(embed=embed, view=view)
-            message_content = (
-                f"Your registration for {self.tournament['name']} is awaiting TO approval"
-            )
+            message_content = f"Your registration for {self.tournament['name']} is awaiting TO approval"
         else:
             await self.register_player(user_id)
             message_content = f"You are now registered for {self.tournament['name']}"
 
-        await interaction.response.send_message(message_content, ephemeral=True)
+        await interaction.followup.send(message_content, ephemeral=True)
 
     async def register_player(self, user_id):
         already_registered = await self.bot.dh.get_registration_status(
@@ -308,13 +307,13 @@ class TournamentManager:
 
         user = await self.bot.dh.get_user(user_id=user_id)
 
-        # Delegate format-specific registration (Challonge participant / Swiss event entry)
         await self.format.on_player_register(user_id, user)
-
+        await self.tc.tid.update_entrants()  # ← add this
         return True
 
     async def unregister_player(self, user_id):
         tournament = await self.get_tournament()
+        print(f"[unregister_player] called for user_id={user_id}, in entrants: {str(user_id) in tournament.get('entrants', {})}")
         if f'{user_id}' not in tournament.get('entrants', {}):
             return
 
@@ -323,10 +322,10 @@ class TournamentManager:
         tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
         if discord_user and tournament_role:
             await discord_user.remove_roles(tournament_role)
-        await self.bot.dh.unregister_player(tournament['_id'], user_id)
 
-        # Delegate format-specific unregistration (Challonge destroy / Swiss drop)
-        await self.format.on_player_unregister(user_id)
+        await self.format.on_player_unregister(user_id)           # ← move this up
+        await self.bot.dh.unregister_player(tournament['_id'], user_id)  # ← now after
+        await self.tc.tid.update_entrants()
 
     # ─── Check-in ─────────────────────────────────────────────────────────────
 
