@@ -1,7 +1,6 @@
 from .challonge_handler import ChallongeHandler
-from .swiss_manager import SwissManager
 from .match_service import MatchService
-from .format_handlers import make_format_handler
+from formats import make_format
 from datetime import datetime
 
 from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
@@ -47,14 +46,8 @@ class TournamentManager:
         self.autocall_matches = False
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
-        self.swiss_manager = None
-        self.format_handler = None
-
-    # ─── Swiss property ───────────────────────────────────────────────────────
-
-    @property
-    def is_swiss(self) -> bool:
-        return self.tournament.get('format') == 'swiss'
+        self.swiss_manager = None  # set by SwissFormat.__init__ when format is swiss
+        self.format = None
 
     # ─── Ranked API helper ────────────────────────────────────────────────────
 
@@ -89,29 +82,8 @@ class TournamentManager:
     async def initialize_event(self):
         tournament = await self.get_tournament()
 
-        if not self.is_swiss:
-            if 'challonge_data' in tournament:
-                self.ch = ChallongeHandler(tournament['challonge_data']['url'])
-            else:
-                self.ch = ChallongeHandler()
-                challonge_tournament = await self.ch.create_tournament(
-                    name=tournament['name'],
-                    tournament_type=tournament['format'],
-                    start_time=tournament['date']
-                )
-                name = tournament['name']
-                url = challonge_tournament['url']
-                tournament_id = challonge_tournament['id']
-                await self.bot.dh.add_challonge_to_tournament(name, url, tournament_id)
-        else:
-            # Swiss: create the swiss event document if it doesn't exist yet
-            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
-            if not swiss_event:
-                round_limit = tournament.get('round_limit', 8)
-                await self.bot.dh.create_swiss_event(tournament['_id'], round_limit)
-            self.swiss_manager = SwissManager(self)
-
-        self.format_handler = make_format_handler(self)
+        self.format = make_format(self)
+        await self.format.on_initialize()
 
         self.tc = TournamentControl(self)
         await self.tc.initialize_controls()
@@ -151,7 +123,7 @@ class TournamentManager:
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
         elif tournament['state'] == 'active':
-            if self.is_swiss:
+            if self.format and not self.format.needs_match_call_refresh:
                 self.bot.add_view(SwissActiveRegisterView(self))
             await self.start_tournament_loop()
         elif tournament['state'] == 'finished':
@@ -227,18 +199,20 @@ class TournamentManager:
 
     async def open_registration(self):
         tournament = await self.get_tournament()
+
+        if self.debug:
+            default_debug_players = 8
+            for i in range(default_debug_players):
+                try:
+                    await self.register_player(i)
+                except Exception as e:
+                    print(f"[open_registration] Failed to register debug player {i}: {e}")
+
         if tournament['state'] == 'registration':
             guild = self.bot.guild
             tournament_category = self.get_tournament_category()
             register_channel = await self.get_channel('register')
-
-            if self.debug:
-                hide_channel = True
-                default_debug_players = 8
-                for i in range(default_debug_players):
-                    await self.register_player(i)
-            else:
-                hide_channel = False
+            hide_channel = True if self.debug else False
 
             if not register_channel:
                 register_channel = await create_channel(
@@ -261,6 +235,7 @@ class TournamentManager:
         elif tournament['state'] == 'checkin':
             self.checkin_view.register_button.disabled = False
             await self.checkin_message.edit(view=self.checkin_view)
+
         await self.bot.dh.open_registration(tournament['_id'])
 
     async def close_registration(self):
@@ -281,16 +256,10 @@ class TournamentManager:
         await channel.set_permissions(self.guild.default_role, overwrite=overwrite)
 
     async def create_registration_approval(self, user_id, interaction):
-        # Swiss events require a UCH Ranked account
-        if self.is_swiss:
-            ranked_player = await self.get_ranked_player(user_id)
-            if not ranked_player:
-                await interaction.response.send_message(
-                    "You need a UCH Ranked account to participate in this event. "
-                    "You can sign up at <https://uchranked.com>.",
-                    ephemeral=True
-                )
-                return
+        # Run the format's registration gate (e.g. UCH Ranked check for Swiss)
+        allowed = await self.format.on_registration_gate(user_id, interaction)
+        if not allowed:
+            return
 
         already_registered = await self.bot.dh.get_registration_status(
             self.tournament['_id'], user_id
@@ -336,28 +305,8 @@ class TournamentManager:
 
         user = await self.bot.dh.get_user(user_id=user_id)
 
-        if self.is_swiss:
-            # Swiss: no Challonge — add to swiss event in DB with elo and tier
-            ranked_player = await self.get_ranked_player(user_id)
-            elo = ranked_player['elo']
-            username = ranked_player['username']
-            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
-            await self.bot.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo)
-            # Store in entrants with None as challonge id so registration status
-            # checks continue to work throughout the rest of the codebase
-            await self.bot.dh.register_player(self.tournament['_id'], user_id, None)
-
-            # If tournament is already active, trigger pairing for the new player
-            tournament = await self.get_tournament()
-            if tournament['state'] == 'active' and self.swiss_manager:
-                await self.swiss_manager.on_player_joined()
-        else:
-            # Normal flow: register on Challonge
-            tournament = await self.get_tournament()
-            player_id = await self.ch.register_player(
-                tournament['challonge_data']['url'], user['name']
-            )
-            await self.bot.dh.register_player(self.tournament['_id'], user_id, player_id)
+        # Delegate format-specific registration (Challonge participant / Swiss event entry)
+        await self.format.on_player_register(user_id, user)
 
         return True
 
@@ -373,18 +322,8 @@ class TournamentManager:
             await discord_user.remove_roles(tournament_role)
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
 
-        if self.is_swiss:
-            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
-            if swiss_event:
-                await self.bot.dh.swiss_drop_player(swiss_event['_id'], user_id)
-                tournament = await self.get_tournament()
-                if tournament['state'] == 'active' and self.swiss_manager:
-                    await self.swiss_manager.on_player_dropped()
-        else:
-            challonge_id = tournament['challonge_data']['id']
-            player_id = tournament['entrants'].get(f'{user_id}')
-            if player_id is not None:
-                await self.ch.unregister_player(challonge_id, player_id)
+        # Delegate format-specific unregistration (Challonge destroy / Swiss drop)
+        await self.format.on_player_unregister(user_id)
 
     # ─── Check-in ─────────────────────────────────────────────────────────────
 
@@ -394,10 +333,7 @@ class TournamentManager:
         tournament_category = self.get_tournament_category()
         checkin_channel = await self.get_channel('check-in')
 
-        if self.debug:
-            hide_channel = True
-        else:
-            hide_channel = False
+        hide_channel = True if self.debug else False
 
         if not checkin_channel:
             checkin_channel = await create_channel(
@@ -474,8 +410,12 @@ class TournamentManager:
 
         register_channel = await self.get_channel('register')
 
-        if self.is_swiss:
-            # Swiss: keep the register channel open with the active join/leave view
+        if self.format.needs_match_call_refresh:
+            # DE/SE: delete the register channel, bracket drives match calling
+            if register_channel:
+                await register_channel.delete()
+        else:
+            # Swiss: keep register channel open with active join/leave view
             if register_channel:
                 await register_channel.purge(limit=None)
                 view = SwissActiveRegisterView(self)
@@ -497,11 +437,6 @@ class TournamentManager:
                     await register_channel.set_permissions(
                         self.guild.default_role, overwrite=overwrite
                     )
-        else:
-            # DE/SE: close and delete the register channel
-            if register_channel:
-                await register_channel.delete()
-            await self.ch.start_tournament(tournament['challonge_data']['id'])
 
         tournament_category = self.get_tournament_category()
         matchcall_channel = discord.utils.get(tournament_category.channels, name='match-calling')
@@ -534,9 +469,8 @@ class TournamentManager:
         await event_updates_channel.send(content=message_content, embed=embed)
 
     async def start_tournament_loop(self):
-        if self.is_swiss and self.swiss_manager:
-            await self.swiss_manager.start()
-        else:
+        await self.format.on_match_calling_loop()
+        if self.format.needs_match_call_refresh:
             await self.refresh_match_calls()
 
     # ─── Match calling ────────────────────────────────────────────────────────
@@ -546,17 +480,19 @@ class TournamentManager:
         await self.call_matches()
 
     async def call_matches(self):
-        if self.is_swiss:
-            # Swiss pairing is handled by SwissManager
-            return
-
         tournament = await self.get_tournament()
         pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
         for match in pending_matches:
             if self.tournament_reset:
                 await self.purge_match_calls()
                 return
-            match_data = await self.parse_match_data(match)
+            try:
+                match_data = await self.parse_match_data(match)
+            except Exception as e:
+                print(f"[call_matches] Error parsing match {match.get('id')}: {e}")
+                continue
+            if match_data is None:
+                continue
             match_exists = await self.bot.dh.find_match(match_data['match_id'])
             if not match_exists and match_data['match_id'] not in self.match_calls:
                 if self.autocall_matches:
@@ -585,7 +521,6 @@ class TournamentManager:
             color = discord.Color.red()
             title = f"Losers Round {abs(match_data['round'])} - {player_1['name']} vs {player_2['name']}"
         else:
-            # Single elimination — no bracket tag
             color = discord.Color.blue()
             title = f"Round {match_data['round']} - {player_1['name']} vs {player_2['name']}"
 
@@ -672,7 +607,7 @@ class TournamentManager:
         """
         Fallback for rehydrated lobbies that don't have a MatchService
         (i.e. the bot restarted mid-match). Builds the result dict and
-        delegates to the format handler directly.
+        delegates to the format directly.
         """
         lobby_data = await lobby.get_lobby()
         winner_user_id = str(lobby_data['results'][0])
@@ -684,16 +619,16 @@ class TournamentManager:
             'loser_id': int(loser_user_id) if loser_user_id else None,
             'is_dq': is_dq,
         }
-        await self.format_handler.on_result(result, lobby)
+        await self.format.on_result(result, lobby)
 
     async def report_match_from_result(self, result):
         """
         Called by MatchService.on_complete. Looks up the lobby and delegates
-        to the format handler. This is the primary result path for all new matches.
+        to the format. This is the primary result path for all new matches.
         """
         lobby = self.lobbies.get(result['match_id'])
         if lobby:
-            await self.format_handler.on_result(result, lobby)
+            await self.format.on_result(result, lobby)
 
     async def close_prereqs(self, lobby):
         lobby = await lobby.get_lobby()
@@ -715,16 +650,14 @@ class TournamentManager:
     async def reset_report(self, kwargs):
         lobby = kwargs.get('lobby')
         await self.lobbies[lobby['match_id']].reset_report()
-        if not self.is_swiss:
-            await self.ch.reset_match(self.tournament['challonge_data']['id'], lobby['match_id'])
+        await self.format.on_reset_report(lobby)
 
     async def reset_tournament(self, kwargs):
         self.tournament_reset = True
         tournament = await self.get_tournament()
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
-        if not self.is_swiss:
-            await self.ch.reset_tournament(tournament['challonge_data']['id'])
+        await self.format.on_reset()
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'registration')
         await self.bot.dh.clear_lobbies(self.tournament['_id'])
         await self.purge_match_calls()
@@ -734,12 +667,9 @@ class TournamentManager:
     # ─── End tournament ───────────────────────────────────────────────────────
 
     async def end_tournament(self):
-        if not self.is_swiss:
-            await self.ch.finalize_tournament(self.tournament['challonge_data']['id'])
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
-        if not self.debug:
-            await self.post_final_results()
+        await self.format.on_tournament_end()
 
     async def finalize_tournament(self):
         await self.remove_tournament_from_discord()
@@ -760,8 +690,8 @@ class TournamentManager:
     async def post_final_results(self):
         channel = discord.utils.get(self.bot.guild.channels, id=RESULTS_CHANNEL_ID)
 
-        if self.is_swiss:
-            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+        if swiss_event:
             standings = await self.bot.dh.swiss_get_standings(swiss_event['_id'])
             overall_winner = ''
             results = ''
@@ -816,7 +746,7 @@ class TournamentManager:
             color=color
         )
 
-        if not self.is_swiss:
+        if self.format.shows_bracket_link:
             label = f"{INDICATOR_EMOJIS['link']} Bracket"
             bracket_link = await get_bracket_link(self.tournament['challonge_data']['url'])
             view = LinkView(label, bracket_link)
@@ -833,8 +763,7 @@ class TournamentManager:
             return False
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
-        if not self.is_swiss:
-            await self.ch.delete_tournament(tournament['challonge_data']['id'])
+        await self.format.on_tournament_delete()
         await self.bot.dh.delete_tournament(tournament['_id'])
         self.bot.th.tournaments.pop(tournament['_id'], None)
 
@@ -860,6 +789,11 @@ class TournamentManager:
         player_2_id = match_data['player_2']
         player_1 = await self.bot.dh.get_user(user_id=player_1_id)
         player_2 = await self.bot.dh.get_user(user_id=player_2_id)
+        if player_1 is None or player_2 is None:
+            raise ValueError(
+                f"[get_players_from_match] Could not find users: "
+                f"p1={player_1_id} → {player_1}, p2={player_2_id} → {player_2}"
+            )
         return player_1, player_2
 
     async def disqualify_player(self, user_id):
@@ -883,6 +817,11 @@ class TournamentManager:
         format = tournament['format']
         player_1_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player1_id'])
         player_2_id = await self.bot.dh.get_user_by_challonge(tournament['_id'], match['player2_id'])
+
+        if player_1_id is None or player_2_id is None:
+            print(f"[parse_match_data] Could not resolve players for match {match['id']}: "
+                f"p1={match['player1_id']} → {player_1_id}, p2={match['player2_id']} → {player_2_id}")
+            return None
 
         round_number = match['round']
         if format == 'single elimination':

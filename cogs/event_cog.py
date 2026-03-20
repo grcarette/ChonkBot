@@ -1,5 +1,7 @@
 import discord
 import re
+import typing
+
 from discord.ext import commands
 from discord import app_commands
 
@@ -101,25 +103,40 @@ class EventCog(commands.Cog, name="event"):
 
     @app_commands.command(name="test_tournament", description="Create a test tournament (invisible to users)")
     @app_commands.checks.has_role("Event Organizer")
-    async def test_tournament(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)  # ← must be first, before any awaits
+    async def test_tournament(
+        self,
+        interaction: discord.Interaction,
+        format: typing.Literal['swiss', 'de'] = 'swiss',
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        if format == 'de':
+            tournament_format = 'double elimination'
+            name = 'test tournament de'
+        else:
+            tournament_format = 'swiss'
+            name = 'test tournament'
 
         tournament_data = {
-            'name': "test tournament",
+            'name': name,
             'date': discord.utils.utcnow(),
             'organizer': interaction.user.id,
-            'format': 'swiss',
+            'format': tournament_format,
             'approved_registration': False,
             'randomized_stagelist': True,
             'display_entrants': True,
-            'round_limit': 2,  # ← change from 5 to 2
+            'round_limit': 2,  # only used for swiss
             'debug': True,
         }
-        tournament = await self.bot.dh.get_tournament(name="test tournament")
-        if tournament:
-            await self.bot.dh.delete_tournament(tournament['_id'])
+
+        existing = await self.bot.dh.get_tournament(name=name)
+        if existing:
+            await self.bot.dh.delete_tournament(existing['_id'])
+
         await self.bot.th.set_up_tournament(tournament_data)
-        await interaction.followup.send("Test swiss tournament created.", ephemeral=True)
+        await interaction.followup.send(
+            f"Test **{tournament_format}** tournament created.", ephemeral=True
+        )
 
     @app_commands.command(name="register_role", description="Register all players with the tournament role")
     @app_commands.checks.has_role("Event Organizer")

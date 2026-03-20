@@ -61,10 +61,13 @@ def make_tm(format='double elimination', state='initialize'):
     # tc (TournamentControl) — just needs update_tournament_state
     tm.tc = AsyncMock()
 
-    # format_handler — stub so report_match and report_match_from_result work
-    # without pulling in real DEFormatHandler / SwissFormatHandler
-    tm.format_handler = MagicMock()
-    tm.format_handler.on_result = AsyncMock()
+    tm.format = MagicMock()
+    tm.format.on_result = AsyncMock()
+    tm.format.on_reset = AsyncMock()
+    tm.format.on_tournament_end = AsyncMock()
+    tm.format.on_tournament_delete = AsyncMock()
+    tm.format.needs_match_call_refresh = True
+    tm.format.supports_reset = True
 
     # Stub out the heavy lifecycle methods so we can assert they're called
     tm.publish_tournament = AsyncMock()
@@ -234,7 +237,7 @@ async def test_reset_tournament_de_calls_challonge_reset():
     tm.purge_match_calls = AsyncMock()
     tm.progress_tournament = AsyncMock()
     await tm.reset_tournament({})
-    tm.ch.reset_tournament.assert_awaited_once_with('chid')
+    tm.format.on_reset.assert_awaited_once()
 
 
 @pytest.mark.asyncio

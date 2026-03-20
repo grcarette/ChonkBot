@@ -35,6 +35,9 @@ def make_tm_with_lobby(format='double elimination'):
     tm.bot.dh = AsyncMock()
     tm.bot.dh.get_tournament_by_id = AsyncMock(return_value=tournament)
 
+    tm.format = MagicMock()
+    tm.format.on_reset_report = AsyncMock()
+
     return tm, mock_lobby
 
 
@@ -42,7 +45,7 @@ def make_tm_with_lobby(format='double elimination'):
 async def test_de_reset_report_calls_challonge():
     tm, mock_lobby = make_tm_with_lobby(format='double elimination')
     await tm.reset_report({'lobby': {'match_id': 55}})
-    tm.ch.reset_match.assert_awaited_once_with('chid', 55)
+    tm.format.on_reset_report.assert_awaited_once_with({'match_id': 55})
 
 
 @pytest.mark.asyncio

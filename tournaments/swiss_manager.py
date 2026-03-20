@@ -32,7 +32,7 @@ class SwissManager:
         self.running = True
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         await self.dh.update_swiss_state(swiss_event['_id'], 'active')
-        await self.run_pairing_cycle()
+        await self.tm.tc.bc.enable_next_round_button()
 
     # ─── Main pairing cycle ───────────────────────────────────────────────────
 
@@ -154,6 +154,18 @@ class SwissManager:
             player_2['discord_id'],
             current_round,
         )
+
+        if self.tm.debug:
+            # In debug mode: skip Discord entirely, auto-resolve with player_1 winning
+            winner_id = player_1['discord_id']
+            loser_id = player_2['discord_id']
+            await self.dh.swiss_record_result(
+                swiss_event['_id'],
+                match_id,
+                winner_id,
+                loser_id,
+            )
+            return
 
         lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
 

@@ -32,14 +32,12 @@ class UserMethodsMixin:
             result = await self.user_collection.insert_one(user_data)
             user = await self.user_collection.find_one(query)
             return user
-        
-    async def get_user(self, **kwargs): 
+            
+    async def get_user(self, **kwargs):
         user = await self.user_collection.find_one(kwargs)
         if user:
             return user
-        else:
-            key, value = next(iter(kwargs.items()))
-            raise UserNotFoundError(f"Error: User with {key}: {value} not found")
+        return None
         
     async def get_user_by_challonge(self, tournament_id, challonge_id):
         tournament = await self.get_tournament_by_id(tournament_id)

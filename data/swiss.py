@@ -281,19 +281,65 @@ class SwissMethodsMixin:
         return available
 
     async def swiss_get_standings(self, event_id: ObjectId) -> list[dict]:
-        """
-        Return all players sorted by:
-        1. Points (descending)
-        2. Wins (descending)
-        3. Elo (descending)
-        Each returned dict includes discord_id for convenience.
-        """
         event = await self.get_swiss_event(event_id)
-        standings = [
-            {'discord_id': int(did), **p}
-            for did, p in event['players'].items()
-        ]
-        standings.sort(key=lambda p: (-p['points'], -p['wins'], -p['elo']))
+        players = event['players']
+
+        standings = []
+        for discord_id, player in players.items():
+            # Buchholz: sum of all opponents' current points
+            opponent_points = [
+                players[str(opp_id)]['points']
+                for opp_id in player.get('match_history', [])
+                if str(opp_id) in players
+            ]
+            buchholz = sum(opponent_points)
+
+            # Buchholz Cut 1: drop the lowest opponent score
+            buchholz_cut1 = sum(sorted(opponent_points)[1:]) if len(opponent_points) > 1 else buchholz
+
+            standings.append({
+                'discord_id': int(discord_id),
+                'buchholz': buchholz,
+                'buchholz_cut1': buchholz_cut1,
+                **player,
+            })
+
+        # Head-to-head lookup: did player A beat player B directly?
+        def head_to_head(player_a, player_b):
+            """Returns 1 if A beat B, -1 if B beat A, 0 if they didn't play."""
+            for match in event.get('matches', []):
+                players_in_match = {match['player_1'], match['player_2']}
+                a_id = player_a['discord_id']
+                b_id = player_b['discord_id']
+                if players_in_match == {a_id, b_id}:
+                    if match['winner'] == a_id:
+                        return 1
+                    elif match['winner'] == b_id:
+                        return -1
+            return 0
+
+        import functools
+
+        def compare(a, b):
+            # 1. Points
+            if a['points'] != b['points']:
+                return -1 if a['points'] > b['points'] else 1
+            # 2. Buchholz
+            if a['buchholz'] != b['buchholz']:
+                return -1 if a['buchholz'] > b['buchholz'] else 1
+            # 3. Buchholz Cut 1
+            if a['buchholz_cut1'] != b['buchholz_cut1']:
+                return -1 if a['buchholz_cut1'] > b['buchholz_cut1'] else 1
+            # 4. Head to head
+            h2h = head_to_head(a, b)
+            if h2h != 0:
+                return -h2h  # -1 means A beat B → A ranks higher → return -1
+            # 5. Wins (same as points in bo1, but kept for completeness)
+            if a['wins'] != b['wins']:
+                return -1 if a['wins'] > b['wins'] else 1
+            return 0
+
+        standings.sort(key=functools.cmp_to_key(compare))
         return standings
 
     async def swiss_is_event_complete(self, event_id: ObjectId) -> bool:

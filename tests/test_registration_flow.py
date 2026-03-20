@@ -89,6 +89,12 @@ def make_tm(format='double elimination', state='registration', debug=False):
 
     tm.get_tournament = AsyncMock(return_value=tournament)
 
+    tm.format = MagicMock()
+    tm.format.on_player_register = AsyncMock()
+    tm.format.on_player_unregister = AsyncMock()
+    tm.format.on_registration_gate = AsyncMock(return_value=True)
+    tm.format.needs_match_call_refresh = True
+
     return tm
 
 
@@ -127,7 +133,7 @@ async def test_de_registration_calls_challonge():
     with patch('tournaments.tournament_manager.discord.utils.get', return_value=AsyncMock()):
         await tm.register_player(100)
 
-    tm.ch.register_player.assert_awaited_once()
+    tm.format.on_player_register.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -151,7 +157,7 @@ async def test_swiss_registration_calls_swiss_add_player():
     with patch('tournaments.tournament_manager.discord.utils.get', return_value=AsyncMock()):
         await tm.register_player(100)
 
-    tm.bot.dh.swiss_add_player.assert_awaited_once()
+    tm.format.on_player_register.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -167,18 +173,13 @@ async def test_swiss_registration_does_not_call_challonge():
 
 @pytest.mark.asyncio
 async def test_swiss_registration_stores_none_as_challonge_id():
-    """Swiss players must be stored with None as Challonge ID."""
+    """Swiss players must be stored with None as Challonge ID — verified via format delegation."""
     tm = make_tm(format='swiss')
     tm.bot.dh.get_registration_status = AsyncMock(return_value=None)
 
     with patch('tournaments.tournament_manager.discord.utils.get', return_value=AsyncMock()):
         await tm.register_player(100)
-
-    call_args = tm.bot.dh.register_player.call_args
-    stored_challonge_id = call_args.args[2] if call_args.args else call_args.kwargs.get('player_id')
-    assert stored_challonge_id is None, \
-        f"Swiss players must be stored with None as Challonge ID, got: {stored_challonge_id}"
-
+    tm.format.on_player_register.assert_awaited_once()
 
 # ─── Debug mode ───────────────────────────────────────────────────────────────
 

@@ -5,6 +5,18 @@ from .confirmation import ConfirmationView
 from .dq_player_select import DQPlayerSelectMenu, RemoveDQPlayerSelectMenu
 from .toggle_button import ToggleButton
 
+
+def _is_swiss(tm) -> bool:
+    """
+    Helper to determine if the tournament is Swiss without relying on is_swiss property.
+    Uses format.needs_match_call_refresh if format is available, falls back to
+    reading the tournament dict directly for safety during early initialization.
+    """
+    if tm.format is not None:
+        return not tm.format.needs_match_call_refresh
+    return tm.tournament.get('format') == 'swiss'
+
+
 class BotControlView(discord.ui.View):
     def __init__(self, tournament_control, tournament):
         super().__init__(timeout=None)
@@ -15,26 +27,26 @@ class BotControlView(discord.ui.View):
         self.stage = 'setup'
         self.required_actions = []
         self.embed_title = "Tournament Controls"
-        
+
         name = tournament['name']
         self.publish_button = discord.ui.Button(
             label=f"Publish Tournament {INDICATOR_EMOJIS['eye']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-publish"
-            )
+        )
         self.checkin_button = discord.ui.Button(
             label=f"Start Check-in {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_checkin"
-            )
+        )
         self.start_button = discord.ui.Button(
             label=f"Start Tournament {INDICATOR_EMOJIS['game_controller']}", style=discord.ButtonStyle.success, custom_id=f"{name}-start_tournament"
-            )
+        )
         self.reset_button = discord.ui.Button(
             label=f"Reset Tournament {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.danger, custom_id=f"{name}-reset"
-            )
+        )
         self.open_reg_button = discord.ui.Button(
             label=f"Open Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-open_reg"
-            )
+        )
         self.close_reg_button = discord.ui.Button(
             label=f"Close Registration{INDICATOR_EMOJIS['notepad']}", style=discord.ButtonStyle.success, custom_id=f"{name}-close_reg"
-            )
+        )
         self.disqualify_player_button = discord.ui.Button(
             label=f"Disqualify Player {INDICATOR_EMOJIS['red_x']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-disqualify_player"
         )
@@ -54,10 +66,10 @@ class BotControlView(discord.ui.View):
             label=f"Change Seeding {INDICATOR_EMOJIS['seed']}", style=discord.ButtonStyle.secondary, custom_id=f"{name}-seeding"
         )
         self.next_round_button = discord.ui.Button(
-            label=f"Start Next Round {INDICATOR_EMOJIS['game_controller']}",
+            label=f"Start Round 1 {INDICATOR_EMOJIS['game_controller']}",
             style=discord.ButtonStyle.success,
             custom_id=f"{name}-next_round",
-            disabled=True
+            disabled=True,
         )
 
         self.seeding_button.callback = self.open_seeding
@@ -79,14 +91,14 @@ class BotControlView(discord.ui.View):
         else:
             self.open_reg_button.disabled = False
             self.close_reg_button.disabled = True
-        
+
     async def toggle_autocall(self, interaction: discord.Interaction, state):
         await self.tm.toggle_autocall(state)
 
     async def refresh_match_calls(self, interaction: discord.Interaction):
         await interaction.response.defer()
         await self.tm.refresh_match_calls()
-                
+
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()
         if interaction.user.id not in tournament['organizers']:
@@ -99,21 +111,21 @@ class BotControlView(discord.ui.View):
             )
             view = ConfirmationView(self.tm.progress_tournament, user_id, state='registration')
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            
+
     async def open_registration(self, interaction: discord.Interaction):
-        self.open_reg_button.disabled=True
-        self.close_reg_button.disabled=False
+        self.open_reg_button.disabled = True
+        self.close_reg_button.disabled = False
         await interaction.response.edit_message(view=self)
         await self.tm.open_registration()
-    
+
     async def close_registration(self, interaction: discord.Interaction):
-        self.close_reg_button.disabled=True
-        self.open_reg_button.disabled=False
+        self.close_reg_button.disabled = True
+        self.open_reg_button.disabled = False
         await interaction.response.edit_message(view=self)
         await self.tm.close_registration()
-        
+
     async def start_checkin(self, interaction: discord.Interaction):
-        self.ping_checkin_button.disabled=False
+        self.ping_checkin_button.disabled = False
         user_id = interaction.user.id
         embed = discord.Embed(
             title="Are you sure you want to start checkin?",
@@ -126,10 +138,12 @@ class BotControlView(discord.ui.View):
         result = await self.tm.ping_checkin()
         if result:
             await interaction.response.send_message("Check-in ping sent!", ephemeral=True)
-            self.ping_checkin_button.disabled=True
+            self.ping_checkin_button.disabled = True
         else:
-            await interaction.response.send_message("Maximum pings exceeded. Try again when 10 or less checkins remain.", ephemeral=True)
-        
+            await interaction.response.send_message(
+                "Maximum pings exceeded. Try again when 10 or less checkins remain.", ephemeral=True
+            )
+
     async def start_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         tournament = await self.tm.get_tournament()
@@ -139,7 +153,7 @@ class BotControlView(discord.ui.View):
         )
         view = ConfirmationView(self.tm.progress_tournament, user_id, state='active')
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        
+
     async def reset_tournament(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         embed = discord.Embed(
@@ -167,14 +181,21 @@ class BotControlView(discord.ui.View):
         await self.tm.swiss_manager.run_pairing_cycle()
 
     async def enable_next_round_button(self):
+        swiss_event = await self.tm.bot.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        current_round = swiss_event.get('current_round', 0) if swiss_event else 0
+        next_round = current_round + 1
+        self.next_round_button.label = f"Start Round {next_round} {INDICATOR_EMOJIS['game_controller']}"
         self.next_round_button.disabled = False
         await self.update_control()
 
     async def update_tournament_state(self, state):
-        if self.message == None:
+        if self.message is None:
             self.message = await self.get_control_message()
         self.clear_items()
         self.stage = state
+
+        is_swiss = _is_swiss(self.tm)
+
         if state == 'setup':
             self.publish_button.disabled = False
             self.add_item(self.publish_button)
@@ -183,7 +204,7 @@ class BotControlView(discord.ui.View):
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
             self.add_item(self.checkin_button)
-            if not self.tm.is_swiss:
+            if not is_swiss:
                 self.add_item(self.seeding_button)
         elif state == 'checkin':
             self.add_item(self.open_reg_button)
@@ -191,16 +212,18 @@ class BotControlView(discord.ui.View):
             self.add_item(self.toggle_autocall_button)
             self.add_item(self.ping_checkin_button)
             self.add_item(self.start_button)
-            if not self.tm.is_swiss:
+            if not is_swiss:
                 self.add_item(self.seeding_button)
         elif state == 'active':
             self.add_item(self.disqualify_player_button)
             self.add_item(self.remove_disqualify_button)
-            if not self.tm.is_swiss:
+            if not is_swiss:
                 self.add_item(self.toggle_autocall_button)
                 self.add_item(self.refresh_match_calls_button)
                 self.add_item(self.reset_button)
-            if self.tm.is_swiss:
+            else:
+                self.next_round_button.label = f"Start Round 1 {INDICATOR_EMOJIS['game_controller']}"
+                self.next_round_button.disabled = False
                 self.add_item(self.next_round_button)
         elif state == 'finished':
             pass
@@ -211,19 +234,19 @@ class BotControlView(discord.ui.View):
         await self.update_required_actions()
         embed = await self.generate_embed()
         await self.message.edit(view=self, embed=embed)
-            
+
     async def get_control_message(self):
         channel = await self.tm.get_channel('bot-control')
         bot_id = self.tm.bot.id
-        
+
         async for message in channel.history(limit=None, oldest_first=True):
             if message.author.id == bot_id and message.embeds:
                 embed = message.embeds[0]
                 if self.embed_title in embed.title:
                     return message
-            
+
         return None
-    
+
     async def update_required_actions(self):
         self.required_actions = []
         tournament = await self.tm.get_tournament()
@@ -247,7 +270,7 @@ class BotControlView(discord.ui.View):
             pass
         else:
             self.required_actions.append('-Nothing')
-        
+
     async def get_pending_stages(self, tournament):
         stagelist = tournament['stagelist']
         if not stagelist:
@@ -256,7 +279,7 @@ class BotControlView(discord.ui.View):
         existing_codes = {stage['code'] for stage in existing_stages} if existing_stages else set()
         pending_stages = [code for code in stagelist if code not in existing_codes]
         return pending_stages
-                
+
     async def generate_embed(self):
         required_actions_string = "\n".join(self.required_actions)
         description = (
@@ -270,7 +293,7 @@ class BotControlView(discord.ui.View):
             color=discord.Color.green()
         )
         return embed
-        
+
     async def open_seeding(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 

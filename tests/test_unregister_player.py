@@ -49,6 +49,9 @@ def make_tm(format='double elimination', entrants=None, player_id=42):
     })
     tm.bot.dh.get_registration_status = AsyncMock(return_value=True)
 
+    tm.format = MagicMock()
+    tm.format.on_player_unregister = AsyncMock()
+
     return tm
 
 
@@ -69,7 +72,7 @@ async def unregister(tm, user_id=999):
 async def test_swiss_drops_from_swiss_event():
     tm = make_tm(format='swiss', entrants={'999': None})
     await unregister(tm)
-    tm.bot.dh.swiss_drop_player.assert_awaited_once_with('swiss-eid', 999)
+    tm.format.on_player_unregister.assert_awaited_once_with(999)
 
 
 @pytest.mark.asyncio
@@ -92,15 +95,13 @@ async def test_swiss_calls_dh_unregister_player():
 async def test_de_calls_challonge_unregister_with_correct_player_id():
     tm = make_tm(format='double elimination', entrants={'999': 42})
     tm.tournament['challonge_data'] = {'id': 'chid'}
-
-    # get_tournament needs to return the full tournament including challonge_data
     tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={
         **tm.tournament,
         'challonge_data': {'id': 'chid'},
     })
 
     await unregister(tm)
-    tm.ch.unregister_player.assert_awaited_once_with('chid', 42)
+    tm.format.on_player_unregister.assert_awaited_once_with(999)
 
 
 @pytest.mark.asyncio

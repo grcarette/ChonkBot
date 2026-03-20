@@ -77,12 +77,8 @@ def make_lobby(bracket='Winners', is_swiss=False, results=None, num_winners=1):
 
 
 def make_tm_for_report(format='double elimination'):
-    """
-    Build a TournamentManager stub for report_match / format_handler testing.
-    Wires up the real format_handler so routing logic is actually exercised.
-    """
     from tournaments.tournament_manager import TournamentManager
-    from tournaments.format_handlers import make_format_handler
+    from formats import make_format
 
     tournament = {
         '_id': 'tid',
@@ -100,7 +96,7 @@ def make_tm_for_report(format='double elimination'):
     tm.tournament_reset = False
     tm.lobbies = {}
     tm.match_calls = {}
-    tm.swiss_manager = AsyncMock()
+    tm.swiss_manager = None
     tm.guild = MagicMock()
 
     tm.bot = MagicMock()
@@ -120,8 +116,14 @@ def make_tm_for_report(format='double elimination'):
     tm.call_matches = AsyncMock()
     tm.prompt_end_tournament = AsyncMock()
 
-    # Wire up the real format handler so routing is actually tested
-    tm.format_handler = make_format_handler(tm)
+    tm.format = make_format(tm)
+
+    if format in ('double elimination', 'single elimination'):
+        tm.format.ch = tm.ch
+    elif format == 'swiss':
+        mock_manager = AsyncMock()
+        tm.format.manager = mock_manager
+        tm.swiss_manager = mock_manager
 
     return tm
 
@@ -394,13 +396,9 @@ async def test_swiss_report_match_non_dq_calls_ranked_api():
 
 @pytest.mark.asyncio
 async def test_report_match_from_result_delegates_to_format_handler():
-    """
-    MatchService.on_complete calls report_match_from_result, which looks up
-    the lobby and passes the result dict to format_handler.on_result.
-    """
     tm = make_tm_for_report(format='double elimination')
-    tm.format_handler = AsyncMock()
-    tm.format_handler.on_result = AsyncMock()
+    tm.format = AsyncMock()          # ← was tm.format_handler
+    tm.format.on_result = AsyncMock()
 
     mock_lobby = AsyncMock()
     tm.lobbies = {10: mock_lobby}
@@ -408,18 +406,17 @@ async def test_report_match_from_result_delegates_to_format_handler():
     result = {'match_id': 10, 'winner_id': 100, 'loser_id': 200, 'is_dq': False}
     await tm.report_match_from_result(result)
 
-    tm.format_handler.on_result.assert_awaited_once_with(result, mock_lobby)
+    tm.format.on_result.assert_awaited_once_with(result, mock_lobby)
 
 
 @pytest.mark.asyncio
 async def test_report_match_from_result_silent_if_lobby_missing():
-    """If the lobby isn't tracked (edge case), should not raise."""
     tm = make_tm_for_report()
-    tm.format_handler = AsyncMock()
-    tm.format_handler.on_result = AsyncMock()
+    tm.format = AsyncMock()          # ← was tm.format_handler
+    tm.format.on_result = AsyncMock()
     tm.lobbies = {}
 
     result = {'match_id': 99, 'winner_id': 100, 'loser_id': 200, 'is_dq': False}
-    await tm.report_match_from_result(result)  # should not raise
+    await tm.report_match_from_result(result)
 
-    tm.format_handler.on_result.assert_not_awaited()
+    tm.format.on_result.assert_not_awaited()
