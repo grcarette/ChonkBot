@@ -35,7 +35,7 @@ DEFAULT_CHANNEL_POSITION = 2
 
 CHECKIN_REMINDER_SECONDS = 300
 CHECKIN_POLL_INTERVAL   = 60
-CHECKIN_AUTODQ_SECONDS = 600
+CHECKIN_AUTODQ_SECONDS = 6000
 
 class TournamentManager:
     def __init__(self, bot, tournament):
@@ -1108,3 +1108,26 @@ class TournamentManager:
 
         return min(seed_map, key=lambda pid: seed_map[pid])
 
+    async def end_swiss_tournament_flow(self, kwargs=None):
+        """
+        Force-end a Swiss tournament: close lobbies, post results, finalize.
+        Called by /end_swiss_tournament via ConfirmationView.
+        """
+        # Mark the swiss event as finished
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+        if swiss_event:
+            await self.bot.dh.update_swiss_state(swiss_event['_id'], 'finished')
+
+        # Stop the manager from running
+        if hasattr(self.format, 'manager'):
+            self.format.manager.running = False
+
+        # Close all lobbies and fire on_tournament_end (posts standings to match-calling)
+        await self.end_tournament()
+
+        # Post final results to the results channel
+        await self.post_final_results()
+
+        # Update tournament state and tear down Discord
+        await self.bot.dh.update_tournament_state(self.tournament['_id'], 'finished')
+        await self.finalize_tournament()

@@ -435,6 +435,76 @@ class EventCog(commands.Cog, name="event"):
 
         await interaction.followup.send(msg, ephemeral=True)
 
+    @app_commands.command(
+        name="reset_swiss_round",
+        description="Delete all current round lobbies and re-run Swiss pairing from scratch"
+    )
+    @app_commands.checks.has_role("Event Organizer")
+    async def reset_swiss_round(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        if tournament.get('format') != 'swiss':
+            return await interaction.followup.send("This command is only for Swiss tournaments.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found.", ephemeral=True)
+
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if not swiss_event:
+            return await interaction.followup.send("No Swiss event found for this tournament.", ephemeral=True)
+
+        # 1. Delete all active lobby channels and clear them from memory
+        await tm.format.manager.close_previous_round_channels(swiss_event['_id'])
+
+        # 2. Reset player states and decrement the round counter in the DB
+        await self.bot.dh.swiss_reset_round(swiss_event['_id'])
+        tm.format.manager.running = True
+        # 3. Re-run pairing
+        await tm.format.manager.run_pairing_cycle()
+
+        await interaction.followup.send(
+            "✅ Round reset. All lobbies deleted and pairing has been re-run.",
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="end_swiss_tournament",
+        description="Close all lobbies, post final standings, and end the Swiss tournament"
+    )
+    @app_commands.checks.has_role("Event Organizer")
+    async def end_swiss_tournament(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        if tournament.get('format') != 'swiss':
+            return await interaction.followup.send("This command is only for Swiss tournaments.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found.", ephemeral=True)
+
+        embed = discord.Embed(
+            title="⚠️ End Tournament",
+            description=(
+                "This will:\n"
+                "• Close all active lobbies\n"
+                "• Post final standings to the results channel\n"
+                "• Tear down all tournament channels and roles\n\n"
+                "**This cannot be undone.** Are you sure?"
+            ),
+            color=discord.Color.red()
+        )
+        view = ConfirmationView(tm.end_swiss_tournament_flow, interaction.user.id)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
 def extract_challonge_id(url: str) -> str:
     """Extracts the tournament slug/ID from a standard Challonge URL."""
     match = re.search(r"challonge\.com\/(?:[^\/]+\/)?([^\/\?]+)", url)

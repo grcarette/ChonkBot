@@ -352,3 +352,24 @@ class SwissMethodsMixin:
             if player.get('active_match_id') is not None:
                 return False
         return True
+
+    async def swiss_reset_round(self, event_id: ObjectId):
+        event = await self.get_swiss_event(event_id)
+
+        set_fields = {}
+        for discord_id, player in event['players'].items():
+            if not player.get('dropped'):
+                set_fields[f'players.{discord_id}.active_match_id'] = None
+
+        # Set to 6 so that run_pairing_cycle's swiss_increment_round brings it to 7
+        set_fields['current_round'] = 6
+        set_fields['bye_queue'] = None
+        set_fields['bye_task_started_at'] = None
+
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {
+                '$set': set_fields,
+                '$pull': {'matches': {'round_number': event.get('current_round', 0), 'state': 'active'}},
+            }
+        )
