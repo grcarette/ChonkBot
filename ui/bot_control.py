@@ -4,6 +4,7 @@ from utils.emojis import INDICATOR_EMOJIS
 from .confirmation import ConfirmationView
 from .dq_player_select import DQPlayerSelectMenu, RemoveDQPlayerSelectMenu
 from .toggle_button import ToggleButton
+from .preregister import PreregisterView
 
 
 class BotControlView(discord.ui.View):
@@ -60,6 +61,11 @@ class BotControlView(discord.ui.View):
             custom_id=f"{name}-next_round",
             disabled=True,
         )
+        self.preregister_button = discord.ui.Button(
+            label="Pre-register Player",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"{name}-preregister"
+        )
 
         self.seeding_button.callback = self.open_seeding
         self.publish_button.callback = self.publish_tournament
@@ -73,6 +79,7 @@ class BotControlView(discord.ui.View):
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
         self.next_round_button.callback = self.start_next_round
+        self.preregister_button.callback = self.preregister_player
 
         if tournament['registration_open']:
             self.open_reg_button.disabled = True
@@ -230,11 +237,13 @@ class BotControlView(discord.ui.View):
         if state == 'setup':
             self.publish_button.disabled = False
             self.add_item(self.publish_button)
+            self.add_item(self.preregister_button) 
 
         elif state == 'registration':
             self.checkin_button.disabled = False
             self.add_item(self.open_reg_button)
             self.add_item(self.close_reg_button)
+            self.add_item(self.preregister_button) 
             self.add_item(self.checkin_button)
 
         elif state == 'checkin':
@@ -314,3 +323,10 @@ class BotControlView(discord.ui.View):
             color=discord.Color.green()
         )
         return embed
+
+    async def preregister_player(self, interaction: discord.Interaction):
+        if interaction.user.id not in self.tm.tournament['organizers']:
+            await interaction.response.send_message("Only organizers can pre-register players.", ephemeral=True)
+            return
+        view = PreregisterView(self.tm)
+        await interaction.response.send_message("Select a player to pre-register:", view=view, ephemeral=True)

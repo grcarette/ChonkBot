@@ -19,5 +19,9 @@ def make_format(tm):
     if fmt == 'swiss':
         from formats.swiss import SwissFormat
         return SwissFormat(tm)
+        
+    if fmt == 'swiss filter':
+        from formats.swiss_filter import SwissFilterFormat
+        return SwissFilterFormat(tm)
 
     raise ValueError(f"Unknown tournament format: '{fmt}'")

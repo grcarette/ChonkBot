@@ -505,6 +505,31 @@ class EventCog(commands.Cog, name="event"):
         view = ConfirmationView(tm.end_swiss_tournament_flow, interaction.user.id)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
+    @app_commands.command(name="force_end_tournament", description="Force end a stuck tournament, skipping Challonge finalization")
+    @app_commands.checks.has_role("Event Organizer")
+    async def force_end_tournament(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        tournament = await self.bot.dh.get_tournament_by_channel(interaction.channel)
+        if not tournament:
+            return await interaction.followup.send("No tournament found for this channel.", ephemeral=True)
+
+        tm = self.bot.th.tournaments.get(tournament['_id'])
+        if not tm:
+            return await interaction.followup.send("Tournament manager not found in memory.", ephemeral=True)
+
+        # Close all lobbies
+        tm.stop_checkin_reminder_loop()
+        for lobby in tm.lobbies:
+            await tm.lobbies[lobby].close_lobby()
+
+        # Skip format's on_tournament_end() (which calls Challonge finalize) 
+        # and go straight to Discord cleanup + state update
+        await self.bot.dh.update_tournament_state(tournament['_id'], 'finished')
+        await tm.remove_tournament_from_discord()
+
+        await interaction.followup.send("Tournament forcefully ended. Challonge finalization was skipped — finalize the bracket manually on Challonge if needed.", ephemeral=True)
+
 def extract_challonge_id(url: str) -> str:
     """Extracts the tournament slug/ID from a standard Challonge URL."""
     match = re.search(r"challonge\.com\/(?:[^\/]+\/)?([^\/\?]+)", url)

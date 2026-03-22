@@ -77,7 +77,7 @@ class TournamentSettingsView(discord.ui.View):
             discord.SelectOption(label="Single Elimination", value="single elimination"),
             discord.SelectOption(label="Double Elimination", value="double elimination"),
             discord.SelectOption(label="Swiss", value="swiss"),
-            discord.SelectOption(label="FFA Filter (not currently supported)", value="FFA Filter"),
+            discord.SelectOption(label="Swiss Filter", value="swiss filter"),
         ],
         row=1
     )
@@ -88,8 +88,7 @@ class TournamentSettingsView(discord.ui.View):
         select.placeholder = select.values[0]
         self.format_select = True
 
-        if self.tournament_format == 'swiss':
-            # Prompt for round limit immediately when swiss is selected
+        if self.tournament_format in ('swiss', 'swiss filter'):
             modal = RoundLimitModal(self.set_round_limit)
             await interaction.response.send_modal(modal)
         else:

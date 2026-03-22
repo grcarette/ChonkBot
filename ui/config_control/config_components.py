@@ -84,7 +84,7 @@ class TournamentFormatSelect(discord.ui.Select):
                 discord.SelectOption(label="single elimination", value="single elimination"),
                 discord.SelectOption(label="double elimination", value="double elimination"),
                 discord.SelectOption(label="swiss", value="swiss"),
-                discord.SelectOption(label="FFA Filter", value="FFA Filter"),
+                discord.SelectOption(label="swiss filter", value="swiss filter"),
             ],
             row=1
         )

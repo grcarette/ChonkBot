@@ -44,8 +44,8 @@ class SwissFormat(BaseFormat):
         If the tournament is already active, notify SwissManager to trigger pairing.
         """
         ranked_player = await self.tm.get_ranked_player(user_id)
-        elo = ranked_player['elo']
-        username = ranked_player['username']
+        elo = ranked_player['elo'] if ranked_player else 1200
+        username = user['name'] if user else f"Player {user_id}"
 
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if swiss_event:
