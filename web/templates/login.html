@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Control — Sign In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0d0d14;
+            --surface:   #13131f;
+            --border:    #1e1e30;
+            --accent:    #5b8dee;
+            --accent-2:  #3d6fd4;
+            --text:      #e4e4f0;
+            --muted:     #5a5a7a;
+            --error:     #e05c6e;
+            --discord:   #5865f2;
+            --discord-h: #4752c4;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ── Atmospheric background ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 20% 10%, rgba(91,141,238,0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 50% at 80% 90%, rgba(61,111,212,0.06) 0%, transparent 55%);
+            pointer-events: none;
+        }
+
+        /* ── Grid lines ── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(91,141,238,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(91,141,238,0.03) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+        }
+
+        .card {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 400px;
+            padding: 48px 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(91,141,238,0.05);
+            animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @font-face {
+            font-family: 'KGBlankSpaceSolid';
+            src: url('/assets/fonts/KGBlankSpaceSolid.ttf') format('truetype');
+        }
+
+        .wordmark {
+            font-family: 'KGBlankSpaceSolid', 'Syne', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 0.04em;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .tagline {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 40px;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin-bottom: 32px;
+        }
+
+        .prompt {
+            font-size: 0.9rem;
+            color: var(--muted);
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+
+        .btn-discord {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 14px 20px;
+            background: var(--discord);
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+            box-shadow: 0 4px 20px rgba(88,101,242,0.3);
+        }
+
+        .btn-discord:hover {
+            background: var(--discord-h);
+            box-shadow: 0 6px 28px rgba(88,101,242,0.45);
+            transform: translateY(-1px);
+        }
+
+        .btn-discord:active {
+            transform: translateY(0);
+        }
+
+        .btn-discord svg {
+            flex-shrink: 0;
+        }
+
+        .error-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 12px 14px;
+            background: rgba(224,92,110,0.08);
+            border: 1px solid rgba(224,92,110,0.25);
+            border-radius: 8px;
+            font-size: 0.82rem;
+            color: var(--error);
+            line-height: 1.4;
+            animation: shake 0.3s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25%       { transform: translateX(-4px); }
+            75%       { transform: translateX(4px); }
+        }
+
+        .error-box svg { flex-shrink: 0; }
+
+        .error-box:empty { display: none; }
+
+        .footer-note {
+            margin-top: 28px;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            text-align: center;
+            letter-spacing: 0.06em;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="wordmark">ChonkBot</div>
+        <div class="tagline">Tournament Control Panel</div>
+        <div class="divider"></div>
+        <p class="prompt">Sign in with your Discord account to access the tournament dashboard. You must have the Tournament Organizer role to continue.</p>
+
+        <a href="/auth/redirect" class="btn-discord">
+            <!-- Discord logo -->
+            <svg width="22" height="16" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20.317 1.492a19.825 19.825 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.305 18.305 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 1.492a.07.07 0 00-.032.027C.533 6.093-.32 10.555.099 14.961a.08.08 0 00.031.055 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.442a.061.061 0 00-.031-.03zM8.02 12.278c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" fill="white"/>
+            </svg>
+            Sign in with Discord
+        </a>
+
+        <div id="error-box" class="error-box">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span id="error-text">__ERROR_MESSAGE__</span>
+        </div>
+
+        <p class="footer-note">Access restricted to Tournament Organizers</p>
+    </div>
+
+    <script>
+        // Hide error box if empty
+        const errorText = document.getElementById('error-text').textContent.trim();
+        if (!errorText) {
+            document.getElementById('error-box').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

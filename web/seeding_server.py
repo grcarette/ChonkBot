@@ -3,6 +3,14 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from aiohttp import web
 
+from web.auth import (
+    require_auth,
+    handle_login,
+    handle_oauth_redirect,
+    handle_oauth_callback,
+    handle_logout,
+)
+
 # token_store maps token -> { tournament_id, challonge_url, expires_at }
 token_store: dict[str, dict] = {}
 
@@ -30,6 +38,8 @@ def validate_token(token: str) -> dict | None:
         return None
     return data
 
+
+# ─── Seeding routes (existing, token-auth) ───────────────────────────────────
 
 async def handle_seeding_page(request: web.Request) -> web.Response:
     token = request.query.get('token')
@@ -64,12 +74,9 @@ async def handle_get_participants(request: web.Request) -> web.Response:
     challonge_handler = request.app['challonge_handler_factory'](token_data['challonge_url'])
 
     try:
-        # Fetch participants from Challonge
         participants = await challonge_handler.get_participants(token_data['challonge_url'])
         participants_sorted = sorted(participants, key=lambda p: p.get('seed') or 999)
 
-        # Build reverse map: challonge_participant_id (int) -> discord_user_id (int)
-        # tournament entrants is stored as { str(discord_user_id): challonge_participant_id }
         tournament = await bot.dh.get_tournament_by_id(token_data['tournament_id'])
         challonge_to_discord = {
             int(challonge_id): int(discord_id)
@@ -125,16 +132,47 @@ async def handle_update_seed(request: web.Request) -> web.Response:
         return web.json_response({'error': str(e)}, status=500)
 
 
+# ─── Dashboard route (session-auth) ──────────────────────────────────────────
+
+@require_auth
+async def handle_dashboard(request: web.Request) -> web.Response:
+    """Serve the main TO dashboard."""
+    session = request['session']
+
+    bot = request.app['bot']
+    tournaments = await bot.dh.get_active_events()
+
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'dashboard.html')
+    with open(template_path, 'r') as f:
+        html = f.read()
+
+    html = html.replace('__USERNAME__', session['discord_username'])
+    html = html.replace('__AVATAR_URL__', session.get('avatar') or '')
+    return web.Response(content_type='text/html', charset='utf-8', text=html)
+
+
+# ─── App factory ─────────────────────────────────────────────────────────────
+
 def create_app(challonge_handler_factory, bot) -> web.Application:
     """
     Create and configure the aiohttp app.
     challonge_handler_factory: callable that takes a tournament_url and returns a ChallongeHandler
-    bot: the ChonkBot instance, used to resolve Discord member avatars
+    bot: the ChonkBot instance
     """
     app = web.Application()
     app['challonge_handler_factory'] = challonge_handler_factory
     app['bot'] = bot
 
+    # Auth routes
+    app.router.add_get('/auth/login', handle_login)
+    app.router.add_get('/auth/redirect', handle_oauth_redirect)
+    app.router.add_get('/auth/callback', handle_oauth_callback)
+    app.router.add_get('/auth/logout', handle_logout)
+
+    # Dashboard
+    app.router.add_get('/dashboard', handle_dashboard)
+
+    # Seeding (existing token-based routes)
     app.router.add_get('/seeding', handle_seeding_page)
     app.router.add_get('/api/participants', handle_get_participants)
     app.router.add_post('/api/seed', handle_update_seed)
@@ -155,4 +193,4 @@ async def start_server(challonge_handler_factory, bot):
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
-    print(f"Seeding server running on {host}:{port}")
+    print(f"Server running on {host}:{port}")

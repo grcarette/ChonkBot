@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Control — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #0d0d14;
+            --surface:     #13131f;
+            --surface-2:   #181828;
+            --border:      #1e1e30;
+            --border-2:    #252540;
+            --accent:      #5b8dee;
+            --accent-dim:  rgba(91,141,238,0.12);
+            --accent-2:    #3d6fd4;
+            --text:        #e4e4f0;
+            --muted:       #5a5a7a;
+            --muted-2:     #8080a0;
+            --success:     #4caf82;
+            --warning:     #f0a440;
+            --danger:      #e05c6e;
+            --sidebar-w:   220px;
+        }
+
+        @font-face {
+            font-family: 'KGBlankSpaceSolid';
+            src: url('/assets/fonts/KGBlankSpaceSolid.ttf') format('truetype');
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: var(--sidebar-w);
+            min-height: 100vh;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+        }
+
+        .sidebar-header {
+            padding: 28px 20px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .wordmark {
+            font-family: 'KGBlankSpaceSolid', 'Syne', sans-serif;
+            font-size: 1.2rem;
+            color: var(--accent);
+            letter-spacing: 0.03em;
+            margin-bottom: 4px;
+        }
+
+        .wordmark-sub {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--muted);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .nav {
+            flex: 1;
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .nav-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--muted);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding: 12px 8px 6px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--muted-2);
+            cursor: pointer;
+            transition: background 0.12s, color 0.12s;
+            text-decoration: none;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover { background: var(--accent-dim); color: var(--text); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+
+        .nav-item svg { flex-shrink: 0; opacity: 0.7; }
+        .nav-item.active svg { opacity: 1; }
+
+        .sidebar-footer {
+            padding: 16px 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .user-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: 8px;
+        }
+
+        .user-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--border-2);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .user-avatar-placeholder {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--accent);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .user-name {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            transition: color 0.12s;
+        }
+
+        .logout-btn:hover { color: var(--danger); }
+
+        /* ── Main content ── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .topbar {
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+        }
+
+        .page-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .page-subtitle {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+            margin-top: 2px;
+        }
+
+        .content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        /* ── Section ── */
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+            animation: fadein 0.2s ease;
+        }
+
+        @keyframes fadein {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Stat cards ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--muted);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .stat-value.accent { color: var(--accent); }
+
+        /* ── Tournament list ── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .tournament-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .tournament-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .tournament-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent), 0 4px 20px rgba(91,141,238,0.1);
+        }
+
+        .t-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent);
+        }
+
+        .t-info { flex: 1; min-width: 0; }
+
+        .t-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .t-meta {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            margin-top: 3px;
+            letter-spacing: 0.04em;
+        }
+
+        .t-badge {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 99px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .badge-active   { background: rgba(76,175,130,0.12); color: var(--success); }
+        .badge-reg      { background: rgba(240,164,64,0.12);  color: var(--warning); }
+        .badge-checkin  { background: rgba(91,141,238,0.12);  color: var(--accent); }
+        .badge-setup    { background: rgba(90,90,122,0.2);    color: var(--muted-2); }
+        .badge-finished { background: rgba(90,90,122,0.12);   color: var(--muted); }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+
+        .empty-state svg {
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* ── Coming soon panel ── */
+        .coming-soon {
+            background: var(--surface);
+            border: 1px dashed var(--border-2);
+            border-radius: 12px;
+            padding: 48px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .coming-soon svg { opacity: 0.2; margin-bottom: 16px; }
+
+        .coming-soon h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--muted-2);
+            margin-bottom: 8px;
+        }
+
+        .coming-soon p {
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        /* ── Loading spinner ── */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 32px;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Sidebar ─────────────────────────────────────────────── -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="wordmark">ChonkBot</div>
+            <div class="wordmark-sub">Control Panel</div>
+        </div>
+
+        <nav class="nav">
+            <div class="nav-label">Overview</div>
+            <button class="nav-item active" data-section="overview">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Dashboard
+            </button>
+
+            <div class="nav-label">Tournament</div>
+            <button class="nav-item" data-section="matches">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Match Calling
+            </button>
+            <button class="nav-item" data-section="players">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Players & DQs
+            </button>
+            <button class="nav-item" data-section="results">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                Results
+            </button>
+            <button class="nav-item" data-section="config">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.62 14.1M14.12 2.29A10 10 0 0 0 2.05 14.91M4.93 19.07a10 10 0 0 0 14.1 1.62M2.29 9.88A10 10 0 0 1 14.91 21.95"/></svg>
+                Config
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-row">
+                <div id="user-avatar-wrap"></div>
+                <span class="user-name" id="username-display">__USERNAME__</span>
+                <a href="/auth/logout" class="logout-btn" title="Sign out">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ── Main ─────────────────────────────────────────────────── -->
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <div class="page-title" id="topbar-title">Dashboard</div>
+                <div class="page-subtitle" id="topbar-sub">Overview of active tournaments</div>
+            </div>
+        </div>
+
+        <div class="content">
+
+            <!-- Overview -->
+            <div class="section active" id="section-overview">
+                <div class="stat-grid" id="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Active Tournaments</div>
+                        <div class="stat-value accent" id="stat-active">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Open Lobbies</div>
+                        <div class="stat-value" id="stat-lobbies">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Registered Players</div>
+                        <div class="stat-value" id="stat-players">—</div>
+                    </div>
+                </div>
+
+                <div class="section-header">
+                    <div class="section-title">Tournaments</div>
+                </div>
+
+                <div id="tournament-list-wrap">
+                    <div class="loading-row">
+                        <div class="spinner"></div>
+                        Loading tournaments…
+                    </div>
+                </div>
+            </div>
+
+            <!-- Match Calling -->
+            <div class="section" id="section-matches">
+                <div class="coming-soon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <h3>Match Calling</h3>
+                    <p>Call and manage matches directly from the dashboard.<br>Coming in the next phase.</p>
+                </div>
+            </div>
+
+            <!-- Players & DQs -->
+            <div class="section" id="section-players">
+                <div class="coming-soon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <h3>Players & DQs</h3>
+                    <p>View entrants and issue disqualifications from here.<br>Coming in the next phase.</p>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="section" id="section-results">
+                <div class="coming-soon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <h3>Results</h3>
+                    <p>Force and reset match results from the dashboard.<br>Coming in the next phase.</p>
+                </div>
+            </div>
+
+            <!-- Config -->
+            <div class="section" id="section-config">
+                <div class="coming-soon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.62 14.1M14.12 2.29A10 10 0 0 0 2.05 14.91"/></svg>
+                    <h3>Configuration</h3>
+                    <p>Manage tournament settings, stagelist, and links.<br>Coming in the next phase.</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        const USERNAME  = '__USERNAME__';
+        const AVATAR_URL = '__AVATAR_URL__';
+
+        // ── Avatar ──────────────────────────────────────────────────────────
+        const avatarWrap = document.getElementById('user-avatar-wrap');
+        if (AVATAR_URL) {
+            const img = document.createElement('img');
+            img.src = AVATAR_URL;
+            img.className = 'user-avatar';
+            img.alt = '';
+            avatarWrap.appendChild(img);
+        } else {
+            const ph = document.createElement('div');
+            ph.className = 'user-avatar-placeholder';
+            ph.textContent = USERNAME.charAt(0).toUpperCase();
+            avatarWrap.appendChild(ph);
+        }
+
+        // ── Navigation ──────────────────────────────────────────────────────
+        const SECTION_META = {
+            overview: { title: 'Dashboard',     sub: 'Overview of active tournaments' },
+            matches:  { title: 'Match Calling', sub: 'Call and manage matches' },
+            players:  { title: 'Players & DQs', sub: 'Manage entrants and disqualifications' },
+            results:  { title: 'Results',       sub: 'Force and reset match results' },
+            config:   { title: 'Configuration', sub: 'Tournament settings and stagelist' },
+        };
+
+        const navItems = document.querySelectorAll('.nav-item[data-section]');
+        const sections = document.querySelectorAll('.section');
+
+        navItems.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.section;
+
+                navItems.forEach(b => b.classList.remove('active'));
+                sections.forEach(s => s.classList.remove('active'));
+
+                btn.classList.add('active');
+                document.getElementById(`section-${target}`).classList.add('active');
+
+                const meta = SECTION_META[target] || {};
+                document.getElementById('topbar-title').textContent = meta.title || '';
+                document.getElementById('topbar-sub').textContent   = meta.sub || '';
+            });
+        });
+
+        // ── Load tournaments ─────────────────────────────────────────────────
+        async function loadTournaments() {
+            try {
+                const res = await fetch('/api/tournaments');
+                if (!res.ok) throw new Error('Failed to load');
+                const data = await res.json();
+                renderTournaments(data.tournaments);
+                renderStats(data);
+            } catch (err) {
+                document.getElementById('tournament-list-wrap').innerHTML = `
+                    <div class="empty-state">
+                        <p>Failed to load tournaments.<br>${escapeHtml(err.message)}</p>
+                    </div>`;
+            }
+        }
+
+        function renderStats(data) {
+            document.getElementById('stat-active').textContent   = data.active_count ?? '—';
+            document.getElementById('stat-lobbies').textContent  = data.lobby_count  ?? '—';
+            document.getElementById('stat-players').textContent  = data.player_count ?? '—';
+        }
+
+        function renderTournaments(tournaments) {
+            const wrap = document.getElementById('tournament-list-wrap');
+            if (!tournaments || tournaments.length === 0) {
+                wrap.innerHTML = `
+                    <div class="empty-state">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        <p>No active tournaments.<br>Create one from Discord to get started.</p>
+                    </div>`;
+                return;
+            }
+
+            const BADGE = {
+                active:       ['badge-active',  'Active'],
+                registration: ['badge-reg',     'Registration'],
+                checkin:      ['badge-checkin', 'Check-in'],
+                setup:        ['badge-setup',   'Setup'],
+                finished:     ['badge-finished','Finished'],
+                initialize:   ['badge-setup',   'Initializing'],
+            };
+
+            const list = document.createElement('div');
+            list.className = 'tournament-list';
+
+            tournaments.forEach(t => {
+                const [badgeClass, badgeLabel] = BADGE[t.state] || ['badge-setup', t.state];
+                const entrantCount = t.entrant_count ?? 0;
+                const format = t.format ?? '';
+
+                const card = document.createElement('div');
+                card.className = 'tournament-card';
+                card.innerHTML = `
+                    <div class="t-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                    <div class="t-info">
+                        <div class="t-name">${escapeHtml(t.name)}</div>
+                        <div class="t-meta">${escapeHtml(format)} · ${entrantCount} entrant${entrantCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    <span class="t-badge ${badgeClass}">${badgeLabel}</span>
+                `;
+                list.appendChild(card);
+            });
+
+            wrap.innerHTML = '';
+            wrap.appendChild(list);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        loadTournaments();
+    </script>
+</body>
+</html>

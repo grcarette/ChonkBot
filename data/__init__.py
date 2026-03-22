@@ -4,6 +4,7 @@ from .tournaments import TournamentMethodsMixin
 from .lobby import LobbyMethodsMixin
 from .stage import StageMethodsMixin
 from .swiss import SwissMethodsMixin
+from .sessions import SessionMethodsMixin
 
 from utils.errors import *
 from utils.emojis import EMOJI_NUMBERS
@@ -25,6 +26,7 @@ class DataHandler(
     LobbyMethodsMixin,
     StageMethodsMixin,
     SwissMethodsMixin,
+    SessionMethodsMixin, 
 ):
     def __init__(self):
         super().__init__()
@@ -39,3 +41,4 @@ class DataHandler(
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
         self.swiss_collection = self.db['swiss_events']
+        self.session_collection = self.db['sessions']

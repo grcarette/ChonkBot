@@ -12,6 +12,7 @@ class DataHandlerBase:
         self.lobby_collection = self.db['lobbies']
         self.user_collection = self.db['users']
         self.swiss_collection = self.db['swiss_events']
+        self.sessions_collection = self.db['sessions']
 
         self.level_api = LevelAPI()
         self.tournamentdata_api = TournamentDataAPI()
