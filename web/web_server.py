@@ -271,14 +271,47 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     if not tournament:
         return web.json_response({'error': 'Tournament not found'}, status=404)
 
-    # Entrant list with display names
+    fmt = tournament.get('format', '')   # ← add this line
+
+    seed_by_discord: dict[int, int | None] = {}
+    challonge_id_by_discord: dict[int, int | None] = {}
+    is_bracket_fmt = fmt in ('single elimination', 'double elimination')
+    if is_bracket_fmt and 'challonge_data' in tournament:
+        try:
+            ch = bot.th.tournaments.get(tournament['_id'])
+            ch_handler = (ch.format.ch if ch and hasattr(ch, 'format') and ch.format and hasattr(ch.format, 'ch') else None)
+            if ch_handler is None:
+                from tournaments.challonge_handler import ChallongeHandler
+                ch_handler = ChallongeHandler(tournament['challonge_data']['url'])
+            participants = await ch_handler.get_participants(tournament['challonge_data']['url'])
+            challonge_to_discord = {
+                int(challonge_id): int(discord_id)
+                for discord_id, challonge_id in tournament.get('entrants', {}).items()
+                if challonge_id is not None
+            }
+            discord_to_challonge = {v: k for k, v in challonge_to_discord.items()}
+            for p in participants:
+                discord_id = challonge_to_discord.get(p['id'])
+                if discord_id:
+                    seed_by_discord[discord_id] = p.get('seed')
+                    challonge_id_by_discord[discord_id] = p['id']
+        except Exception:
+            pass
+
     entrants = []
-    for discord_id_str in tournament.get('entrants', {}).keys():
-        user = await bot.dh.get_user(user_id=int(discord_id_str))
+    for discord_id_str, challonge_id_raw in tournament.get('entrants', {}).items():
+        discord_id_int = int(discord_id_str)
+        user = await bot.dh.get_user(user_id=discord_id_int)
         entrants.append({
-            'discord_id': int(discord_id_str),
-            'name':       user['name'] if user else f'Unknown ({discord_id_str})',
+            'discord_id':   discord_id_int,
+            'name':         user['name'] if user else f'Unknown ({discord_id_str})',
+            'seed':         seed_by_discord.get(discord_id_int),
+            'challonge_id': challonge_id_by_discord.get(discord_id_int),
         })
+
+    # Sort by seed for bracket formats so the table arrives pre-sorted
+    if is_bracket_fmt:
+        entrants.sort(key=lambda e: e['seed'] if e['seed'] is not None else 9999)
 
     # Active lobbies with player names
     raw_lobbies = await bot.dh.get_active_lobbies(tournament['_id'])
@@ -530,6 +563,45 @@ async def handle_remove_stage(request: web.Request) -> web.Response:
     return web.json_response({'ok': True})
 
 @require_auth
+async def handle_set_seed(request: web.Request) -> web.Response:
+    """Update a participant's Challonge seed from the event dashboard."""
+    tournament_id = request.match_info['tournament_id']
+    bot           = request.app['bot']
+
+    try:
+        body = await request.json()
+        challonge_id = int(body['challonge_id'])
+        new_seed     = int(body['seed'])
+    except (KeyError, ValueError, TypeError, Exception):
+        return web.json_response({'error': 'challonge_id and seed (integers) are required'}, status=400)
+
+    if new_seed < 1:
+        return web.json_response({'error': 'Seed must be >= 1'}, status=400)
+
+    tournament = await bot.dh.get_tournament_by_id(tournament_id)
+    if not tournament:
+        return web.json_response({'error': 'Tournament not found'}, status=404)
+
+    fmt = tournament.get('format', '')
+    if fmt not in ('single elimination', 'double elimination'):
+        return web.json_response({'error': 'Seeding is only available for DE/SE tournaments'}, status=400)
+
+    if 'challonge_data' not in tournament:
+        return web.json_response({'error': 'No Challonge bracket linked yet'}, status=400)
+
+    try:
+        ch = bot.th.tournaments.get(tournament['_id'])
+        ch_handler = (ch.format.ch if ch and hasattr(ch, 'format') and ch.format and hasattr(ch.format, 'ch') else None)
+        if ch_handler is None:
+            from tournaments.challonge_handler import ChallongeHandler
+            ch_handler = ChallongeHandler(tournament['challonge_data']['url'])
+        await ch_handler.update_seed(tournament['challonge_data']['url'], challonge_id, new_seed)
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=502)
+
+    return web.json_response({'ok': True})
+
+@require_auth
 async def handle_get_bracket(request: web.Request) -> web.Response:
     """
     Return all bracket matches for a DE/SE tournament, enriched with
@@ -752,6 +824,7 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get('/api/tournament/{tournament_id}/bracket', handle_get_bracket)
     app.router.add_get('/api/tournament/{tournament_id}/stagelist', handle_get_stagelist)
     app.router.add_get('/api/stages/browse', handle_browse_stages)
+    app.router.add_post('/api/tournament/{tournament_id}/seed', handle_set_seed)
 
     # Seeding
     app.router.add_get( '/seeding',          handle_seeding_page)

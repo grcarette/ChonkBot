@@ -316,4 +316,33 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
 .browser-card-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .browser-card-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 
+/* ── Participants / seeding ── */
+#seeding-list { list-style: none; padding: 8px 0; margin: 0; position: relative; }
+.participant-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px; border-bottom: 1px solid var(--border);
+    cursor: default; user-select: none;
+    transition: transform 0.18s ease, background 0.1s;
+    position: relative; z-index: 1;
+}
+.participant-item:last-child { border-bottom: none; }
+.participant-item.is-dragging { opacity: 0; pointer-events: none; }
+.participant-item.shift-up   { transform: translateY(calc(-1 * (var(--pi-h) + 0px))); transition: transform 0.18s ease; }
+.participant-item.shift-down { transform: translateY(var(--pi-h)); transition: transform 0.18s ease; }
+.participant-drag-handle { color: var(--text-muted); cursor: grab; flex-shrink: 0; display: flex; }
+.participant-drag-handle:hover { color: var(--text-primary); }
+.participant-seed { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 22px; text-align: right; }
+.participant-name { flex: 1; font-size: 13px; font-weight: 500; }
+.participant-tags { display: flex; gap: 6px; }
+#participant-drag-ghost {
+    position: fixed; pointer-events: none; z-index: 1000;
+    opacity: 0.93; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    background: var(--bg-card); border: 1px solid var(--accent);
+    border-radius: 8px; width: var(--ghost-w);
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px; transform: scale(1.02);
+}
+/* Non-bracket format: plain table fallback */
+#participants-table-wrap .data-table { width: 100%; }
+
 @keyframes spin { to { transform: rotate(360deg); } }

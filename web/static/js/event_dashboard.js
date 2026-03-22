@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SECTION_META = {
         overview:  { title: 'Overview',      sub: 'Tournament status and controls' },
-        players:   { title: 'Players & DQs', sub: 'Manage entrants and disqualifications' },
+        participants:{ title: 'Participants', sub: 'Manage entrants and disqualifications' },
         matches:   { title: 'Matches',       sub: 'Active lobbies and match state' },
         results:   { title: 'Results',       sub: 'Force match results' },
         config:    { title: 'Configuration', sub: 'Tournament settings' },
@@ -92,6 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('browser-search').addEventListener('input', renderBrowser);
 
     // Start polling
+    const wrap = document.getElementById('participants-list-wrap');
+    if (wrap) {
+        wrap._checkedIn = data.checked_in || [];
+        wrap._dqs       = data.dqs        || [];
+        wrap._showCI    = ['checkin', 'active'].includes(data.state);
+    }
+    renderPlayers(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
     loadTournament();
     setInterval(loadTournament, 5000);
 });
@@ -117,7 +124,7 @@ async function loadTournament() {
         renderStats(data);
         renderActionArea(data);
         renderEntrantsCollapsible(data.entrants || [], data.checked_in || [], data.dqs || [], data.state);
-        renderPlayers(data.entrants || [], data.checked_in || [], data.dqs || [], data.state);
+        renderPlayers(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
         renderMatches(data.lobbies || []);
         renderResults(data.lobbies || []);
         populateConfig(data);
@@ -266,17 +273,215 @@ function renderActionArea(t) {
     }
 }
 
-// ── Players & DQs ─────────────────────────────────────────────────────────────
+// ── Participants ──────────────────────────────────────────────────────────────
 
-function renderPlayers(entrants, checkedIn, dqs, state) {
-    const tbody  = document.getElementById('players-tbody');
+let _participantDragState = null;
+
+function renderPlayers(entrants, checkedIn, dqs, state, format) {
+    const wrap      = document.getElementById('participants-list-wrap');
+    const isBracket = format === 'single elimination' || format === 'double elimination';
+    const showCI    = ['checkin', 'active'].includes(state);
+
     document.getElementById('players-count').textContent =
         `${entrants.length} entrant${entrants.length !== 1 ? 's' : ''}`;
-    const showCI = ['checkin','active'].includes(state);
+
     if (!entrants.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No entrants yet.</td></tr>`;
+        wrap.innerHTML = `<div class="empty-state">No entrants yet.</div>`;
         return;
     }
+
+    if (isBracket) {
+        renderSeedingList(wrap, entrants, checkedIn, dqs, showCI);
+    } else {
+        renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI);
+    }
+}
+
+// ── Drag-and-drop seeding list (DE/SE only) ───────────────────────────────────
+
+function renderSeedingList(wrap, entrants, checkedIn, dqs, showCI) {
+    // entrants already arrive sorted by seed from the server
+    wrap._entrants = [...entrants]; // keep a mutable copy for drag ops
+
+    wrap.innerHTML = `<ul id="seeding-list"></ul>
+        <div id="seeding-save-status" style="height:24px;text-align:center;font-size:12px;padding:6px 0;color:var(--text-muted)"></div>`;
+
+    _rebuildSeedingList(wrap, checkedIn, dqs, showCI);
+}
+
+function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
+    const list     = document.getElementById('seeding-list');
+    const entrants = wrap._entrants;
+    list.innerHTML = '';
+
+    entrants.forEach((e, i) => {
+        const isDQ = dqs.includes(e.discord_id);
+        const isCI = checkedIn.includes(e.discord_id);
+        let tag = '';
+        if (isDQ)                tag = `<span class="tag tag-dq">DQ</span>`;
+        else if (showCI && isCI) tag = `<span class="tag tag-checkin">✓</span>`;
+
+        const nameEsc = escapeHtml(e.name).replace(/'/g, "\\'");
+        const dqBtn   = isDQ
+            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer(${e.discord_id})">Un-DQ</button>`
+            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer(${e.discord_id},'${nameEsc}')">DQ</button>`;
+
+        const li = document.createElement('li');
+        li.className = 'participant-item';
+        li.dataset.index = i;
+        li.innerHTML = `
+            <span class="participant-drag-handle" title="Drag to reseed">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
+                    <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
+                    <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
+                </svg>
+            </span>
+            <span class="participant-seed">${i + 1}</span>
+            <span class="participant-name">${escapeHtml(e.name)}</span>
+            <span class="participant-tags">${tag}</span>
+            <span class="participant-actions">${dqBtn}</span>`;
+
+        li.addEventListener('pointerdown', _onSeedPointerDown);
+        list.appendChild(li);
+    });
+
+    // Store item height for shift transforms
+    requestAnimationFrame(() => {
+        const first = list.querySelector('.participant-item');
+        if (first) list.style.setProperty('--pi-h', `${first.offsetHeight}px`);
+    });
+}
+
+function _onSeedPointerDown(e) {
+    // Only drag from the handle
+    if (!e.target.closest('.participant-drag-handle')) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    const item     = e.currentTarget;
+    const srcIndex = parseInt(item.dataset.index);
+    const rect     = item.getBoundingClientRect();
+    const list     = document.getElementById('seeding-list');
+
+    const ghost = item.cloneNode(true);
+    ghost.id = 'participant-drag-ghost';
+    ghost.style.setProperty('--ghost-w', `${rect.width}px`);
+    ghost.style.top  = `${rect.top}px`;
+    ghost.style.left = `${rect.left}px`;
+    document.body.appendChild(ghost);
+
+    item.classList.add('is-dragging');
+
+    _participantDragState = {
+        srcIndex,
+        currentIndex: srcIndex,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+        ghost,
+        item,
+        list,
+    };
+
+    document.addEventListener('pointermove', _onSeedPointerMove);
+    document.addEventListener('pointerup',   _onSeedPointerUp);
+}
+
+function _onSeedPointerMove(e) {
+    if (!_participantDragState) return;
+    const { ghost, offsetX, offsetY, srcIndex, list } = _participantDragState;
+
+    ghost.style.left = `${e.clientX - offsetX}px`;
+    ghost.style.top  = `${e.clientY - offsetY}px`;
+
+    const items = [...list.querySelectorAll('.participant-item:not(.is-dragging)')];
+    let newIndex = srcIndex;
+
+    for (let i = 0; i < items.length; i++) {
+        const r    = items[i].getBoundingClientRect();
+        const midY = r.top + r.height / 2;
+        const idx  = parseInt(items[i].dataset.index);
+        if (e.clientY > midY) {
+            newIndex = idx >= srcIndex ? idx : idx + 1;
+        }
+    }
+    newIndex = Math.max(0, Math.min(newIndex, list.querySelectorAll('.participant-item').length - 1));
+
+    if (newIndex !== _participantDragState.currentIndex) {
+        _participantDragState.currentIndex = newIndex;
+        _applyShifts(list, srcIndex, newIndex);
+    }
+}
+
+function _applyShifts(list, srcIndex, targetIndex) {
+    list.querySelectorAll('.participant-item').forEach(item => {
+        const idx = parseInt(item.dataset.index);
+        if (idx === srcIndex) return;
+        item.classList.remove('shift-up', 'shift-down');
+        if (srcIndex < targetIndex && idx > srcIndex && idx <= targetIndex)
+            item.classList.add('shift-up');
+        else if (srcIndex > targetIndex && idx >= targetIndex && idx < srcIndex)
+            item.classList.add('shift-down');
+    });
+}
+
+async function _onSeedPointerUp() {
+    if (!_participantDragState) return;
+    document.removeEventListener('pointermove', _onSeedPointerMove);
+    document.removeEventListener('pointerup',   _onSeedPointerUp);
+
+    const { srcIndex, currentIndex, ghost, item, list } = _participantDragState;
+    _participantDragState = null;
+
+    ghost.remove();
+    item.classList.remove('is-dragging');
+    list.querySelectorAll('.participant-item').forEach(el =>
+        el.classList.remove('shift-up', 'shift-down'));
+
+    if (srcIndex === currentIndex) return;
+
+    const wrap = document.getElementById('participants-list-wrap');
+    const moved = wrap._entrants.splice(srcIndex, 1)[0];
+    wrap._entrants.splice(currentIndex, 0, moved);
+
+    // Re-render immediately so seeds update visually
+    const checkedIn = wrap._checkedIn || [];
+    const dqs       = wrap._dqs       || [];
+    const showCI    = wrap._showCI    || false;
+    _rebuildSeedingList(wrap, checkedIn, dqs, showCI);
+
+    await _syncAllSeeds(wrap._entrants);
+}
+
+async function _syncAllSeeds(entrants) {
+    const statusEl = document.getElementById('seeding-save-status');
+    if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)'; }
+    try {
+        for (let i = 0; i < entrants.length; i++) {
+            const e = entrants[i];
+            if (e.challonge_id == null) continue;
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/seed`, {
+                challonge_id: e.challonge_id,
+                seed:         i + 1,
+            });
+        }
+        if (statusEl) { statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--green)'; }
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+    } catch (err) {
+        if (statusEl) { statusEl.textContent = `Save failed: ${err.message}`; statusEl.style.color = 'var(--red)'; }
+        showToast(`Seeding save failed: ${err.message}`, 'error');
+    }
+}
+
+// ── Plain table (Swiss / Swiss Filter) ───────────────────────────────────────
+
+function renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI) {
+    wrap.innerHTML = `<table class="data-table">
+        <thead><tr><th>#</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="players-tbody"></tbody>
+    </table>`;
+
+    const tbody = document.getElementById('players-tbody');
     tbody.innerHTML = entrants.map((e, i) => {
         const isDQ = dqs.includes(e.discord_id);
         const isCI = checkedIn.includes(e.discord_id);
@@ -289,12 +494,48 @@ function renderPlayers(entrants, checkedIn, dqs, state) {
             ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer(${e.discord_id})">Un-DQ</button>`
             : `<button class="btn btn-danger btn-sm" onclick="dqPlayer(${e.discord_id},'${nameEsc}')">DQ</button>`;
         return `<tr>
-            <td style="color:var(--text-muted);font-size:12px">${i+1}</td>
+            <td style="color:var(--text-muted);font-size:12px">${i + 1}</td>
             <td><strong>${escapeHtml(e.name)}</strong></td>
             <td>${statusTag}</td>
             <td>${dqBtn}</td>
         </tr>`;
     }).join('');
+}
+
+function buildSeedCell(e) {
+    if (e.challonge_id == null) {
+        return `<span style="color:var(--text-muted);font-size:12px">—</span>`;
+    }
+    const seed = e.seed ?? '';
+    return `<div style="display:flex;align-items:center;gap:6px">
+        <input
+            type="number" min="1" value="${seed}"
+            data-challonge="${e.challonge_id}" data-discord="${e.discord_id}"
+            class="field-input seed-input"
+            style="width:60px;padding:4px 7px;font-size:12px;text-align:center"
+            onchange="setSeed(this)"
+        >
+    </div>`;
+}
+
+async function setSeed(input) {
+    const newSeed     = parseInt(input.value, 10);
+    const challongeId = parseInt(input.dataset.challonge, 10);
+    if (!newSeed || newSeed < 1) { input.value = input.dataset.prev || ''; return; }
+    input.dataset.prev = input.value;
+    input.disabled = true;
+    try {
+        await api('POST', `/api/tournament/${TOURNAMENT_ID}/seed`, {
+            challonge_id: challongeId,
+            seed:         newSeed,
+        });
+        showToast('Seed updated', 'success');
+    } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
+        input.value = input.dataset.prev || '';
+    } finally {
+        input.disabled = false;
+    }
 }
 
 async function dqPlayer(discordId, name) {
