@@ -42,6 +42,21 @@ class LevelAPI:
         except httpx.RequestError as e:
             print(f"API Error: {e}")
             return None
+            
+    async def get_all_levels(self, tournament_legal: bool = None, mode: str = None):
+        try:
+            params = {}
+            if tournament_legal is not None:
+                params['tournament_legal'] = str(tournament_legal).lower()
+            if mode:
+                params['mode'] = mode
+            response = await self.client.get('/levels/', params=params)
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except httpx.RequestError as e:
+            print(f"API Error: {e}")
+            return []
 
 if __name__ == "__main__":
     t = LevelAPI()

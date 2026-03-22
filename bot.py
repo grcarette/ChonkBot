@@ -47,7 +47,7 @@ class ChonkBot(commands.Bot):
         self.guild = self.guilds[0]
         await self.th.initialize_active_events()
 
-        from web.seeding_server import start_server
+        from web.web_server import start_server
         from tournaments.challonge_handler import ChallongeHandler
         await start_server(challonge_handler_factory=ChallongeHandler, bot=self)
 

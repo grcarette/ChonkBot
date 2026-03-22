@@ -44,6 +44,12 @@ class ChallongeHandler:
         )
         pending_matches = [match for match in matches if match["state"] == "open"]
         return pending_matches
+        
+    async def get_all_matches(self, tournament_url):
+        matches = await asyncio.to_thread(
+            challonge.matches.index, tournament_url
+        )
+        return matches
 
     async def report_match(self, tournament_url, match_id, winner_id, is_dq=False):
         match = await asyncio.to_thread(
@@ -131,6 +137,7 @@ class ChallongeHandler:
             participant_id,
             seed=seed
         )
+
 
 
 async def main():

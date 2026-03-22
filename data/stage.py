@@ -13,7 +13,7 @@ class StageMethodsMixin:
         stages = await self.level_api.get_random_stages(number)
         return stages
 
-
-
+    async def get_all_levels(self, tournament_legal=None, mode=None):
+        return await self.level_api.get_all_levels(tournament_legal=tournament_legal, mode=mode)
     
     

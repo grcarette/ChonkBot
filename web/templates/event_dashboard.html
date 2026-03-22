@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>__TOURNAMENT_NAME__ — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-top">
+        <a href="/dashboard" class="back-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            All Events
+        </a>
+        <div class="tournament-title">__TOURNAMENT_NAME__</div>
+        <div id="sidebar-badge"></div>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-label">Overview</div>
+        <button class="nav-item active" data-section="overview">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Overview
+        </button>
+        <div class="nav-label">Management</div>
+        <button class="nav-item" data-section="players">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Players & DQs
+        </button>
+        <button class="nav-item" data-section="matches">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Matches
+        </button>
+        <button class="nav-item" data-section="results">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+            Results
+        </button>
+        <button class="nav-item" data-section="config">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.62 14.1M14.12 2.29A10 10 0 0 0 2.05 14.91M4.93 19.07a10 10 0 0 0 14.1 1.62M2.29 9.88A10 10 0 0 1 14.91 21.95"/></svg>
+            Config
+        </button>
+        <button class="nav-item" data-section="stagelist">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg>
+            Stagelist
+        </button>
+        <button class="nav-item" data-section="bracket">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Bracket
+        </button>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="user-row">
+            <div id="user-avatar-wrap"></div>
+            <span class="user-name">__USERNAME__</span>
+            <a href="/auth/logout" class="logout-btn" title="Sign out">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </a>
+        </div>
+    </div>
+</aside>
+
+<main class="main">
+    <div class="topbar">
+        <div>
+            <div class="page-title" id="topbar-title">Overview</div>
+            <div class="page-subtitle" id="topbar-sub">Loading...</div>
+        </div>
+        <div class="refresh-indicator"><div class="refresh-dot"></div><span>Live</span></div>
+    </div>
+
+    <div class="content">
+
+        <!-- OVERVIEW -->
+        <div class="section active" id="section-overview">
+            <div class="info-strip">
+                <div class="info-card"><div class="info-label">State</div><div class="info-value" id="stat-state">—</div></div>
+                <div class="info-card"><div class="info-label">Format</div><div class="info-value" id="stat-format">—</div></div>
+                <div class="info-card"><div class="info-label">Entrants</div><div class="info-value accent" id="stat-entrants">—</div></div>
+                <div class="info-card"><div class="info-label">Checked In</div><div class="info-value" id="stat-checkedin">—</div></div>
+                <div class="info-card"><div class="info-label">Active Lobbies</div><div class="info-value" id="stat-lobbies">—</div></div>
+            </div>
+            <div id="action-area"></div>
+            <div class="entrant-section">
+                <div class="entrant-header" id="entrant-toggle">
+                    <div class="entrant-header-left">
+                        <span class="entrant-header-title">Entrants</span>
+                        <span class="entrant-count-badge" id="entrant-badge">0</span>
+                    </div>
+                    <svg class="entrant-chevron" id="entrant-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+                <div class="entrant-body" id="entrant-body"><div class="empty-state">Loading...</div></div>
+            </div>
+        </div>
+
+        <!-- PLAYERS & DQs -->
+        <div class="section" id="section-players">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Players</span>
+                    <span id="players-count" style="font-size:12px;color:var(--text-muted)"></span>
+                </div>
+                <table class="data-table">
+                    <thead><tr><th>#</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="players-tbody"><tr><td colspan="4" class="empty-state">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- MATCHES -->
+        <div class="section" id="section-matches">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Active Lobbies</span>
+                    <span id="matches-count" style="font-size:12px;color:var(--text-muted)"></span>
+                </div>
+                <table class="data-table">
+                    <thead><tr><th>Lobby</th><th>Players</th><th>State</th><th>Actions</th></tr></thead>
+                    <tbody id="matches-tbody"><tr><td colspan="4" class="empty-state">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- RESULTS -->
+        <div class="section" id="section-results">
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Force Result</span></div>
+                <div style="padding:16px 18px;border-bottom:1px solid var(--border)">
+                    <p style="font-size:13px;color:var(--text-secondary)">Select a lobby and declare a winner. Use only for stuck matches.</p>
+                </div>
+                <div id="results-list"><div class="empty-state">No active lobbies.</div></div>
+            </div>
+        </div>
+
+        <!-- CONFIG -->
+        <div class="section" id="section-config">
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Tournament Details</span></div>
+                <div class="config-grid">
+                    <div class="field-group">
+                        <label class="field-label" for="cfg-name">Name</label>
+                        <input class="field-input" type="text" id="cfg-name" maxlength="80">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label" for="cfg-date">Date</label>
+                        <input class="field-input" type="text" id="cfg-date" placeholder="e.g. &lt;t:1700000000:F&gt;">
+                    </div>
+                </div>
+                <div class="config-save-row">
+                    <button class="btn btn-primary btn-sm" id="cfg-save-details">Save Changes</button>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Options</span></div>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Approved Registration</span><span class="toggle-desc">Registrations require TO approval</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-approved" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Randomised Stagelist</span><span class="toggle-desc">Stage order shuffled each match</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-random-stage" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Display Entrants</span><span class="toggle-desc">Show entrants on event-info embed</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-display-entrants" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <div class="config-save-row">
+                    <button class="btn btn-primary btn-sm" id="cfg-save-options">Save Options</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STAGELIST -->
+        <div class="section" id="section-stagelist">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Stages</span>
+                    <span id="stagelist-count" style="font-size:12px;color:var(--text-muted)"></span>
+                </div>
+                <div id="stagelist-grid"></div>
+                <div class="stage-add-bar">
+                    <input class="field-input" type="text" id="stagelist-input" placeholder="Stage code e.g. A1B2-C3D4, comma-separate multiple">
+                    <button class="btn btn-primary btn-sm" id="stagelist-add-btn">Add</button>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Browse Stages</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <select class="field-input" id="browser-mode-filter" style="width:auto;padding:5px 10px;font-size:12px">
+                            <option value="">All modes</option>
+                            <option value="party">Party</option>
+                            <option value="hns">HnS</option>
+                            <option value="prop_hunt">Prop Hunt</option>
+                        </select>
+                        <input class="field-input" type="text" id="browser-search" placeholder="Search by name..." style="width:160px;padding:5px 10px;font-size:12px">
+                        <span id="browser-count" style="font-size:12px;color:var(--text-muted)"></span>
+                        <button class="btn btn-primary btn-sm" id="browser-add-selected" disabled>
+                            Add Selected (<span id="browser-selected-count">0</span>)
+                        </button>
+                    </div>
+                </div>
+                <div id="browser-grid-wrap" style="padding:18px">
+                    <div class="stagelist-empty">Loading stages...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BRACKET -->
+        <div class="section" id="section-bracket">
+            <div id="bracket-wrap">
+                <div class="bracket-unavailable">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <p style="margin-top:8px">Loading bracket...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<!-- Confirm modal -->
+<div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-icon warning" id="modal-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div class="modal-title" id="modal-title">Are you sure?</div>
+            <div class="modal-desc"  id="modal-desc"></div>
+            <div class="modal-extra" id="modal-extra"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-cancel" id="modal-cancel">Cancel</button>
+            <button class="modal-confirm warning" id="modal-confirm">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Match drawer -->
+<div id="match-drawer" class="match-drawer" hidden>
+    <div class="match-drawer-inner">
+        <div class="match-drawer-header">
+            <div>
+                <div class="match-drawer-title" id="drawer-title">Match</div>
+                <div class="match-drawer-sub"   id="drawer-sub"></div>
+            </div>
+            <button class="drawer-close" id="drawer-close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="match-drawer-body" id="drawer-body"></div>
+    </div>
+</div>
+<div id="drawer-backdrop" hidden></div>
+
+<div id="toast"></div>
+
+<script>
+    const TOURNAMENT_ID = '__TOURNAMENT_ID__';
+    const USERNAME      = '__USERNAME__';
+    const AVATAR_URL    = '__AVATAR_URL__';
+</script>
+<script src="/static/js/utils.js"></script>
+<script src="/static/js/event-dashboard.js"></script>
+</body>
+</html>
