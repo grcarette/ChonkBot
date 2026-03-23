@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SECTION_META = {
         overview:  { title: 'Overview',      sub: 'Tournament status and controls' },
-        participants:{ title: 'Participants', sub: 'Manage entrants and disqualifications' },
+        players: { title: 'Participants', sub: 'Manage entrants and seeding' },
         matches:   { title: 'Matches',       sub: 'Active lobbies and match state' },
         results:   { title: 'Results',       sub: 'Force match results' },
         config:    { title: 'Configuration', sub: 'Tournament settings' },
@@ -92,13 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('browser-search').addEventListener('input', renderBrowser);
 
     // Start polling
-    const wrap = document.getElementById('participants-list-wrap');
-    if (wrap) {
-        wrap._checkedIn = data.checked_in || [];
-        wrap._dqs       = data.dqs        || [];
-        wrap._showCI    = ['checkin', 'active'].includes(data.state);
-    }
-    renderPlayers(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
     loadTournament();
     setInterval(loadTournament, 5000);
 });
@@ -133,7 +126,6 @@ async function loadTournament() {
         console.error(err);
     }
 }
-
 // ── Badge ─────────────────────────────────────────────────────────────────────
 
 function renderBadge(state) {
@@ -276,6 +268,7 @@ function renderActionArea(t) {
 // ── Participants ──────────────────────────────────────────────────────────────
 
 let _participantDragState = null;
+let _seedingSyncing       = false;
 
 function renderPlayers(entrants, checkedIn, dqs, state, format) {
     const wrap      = document.getElementById('participants-list-wrap');
@@ -287,11 +280,24 @@ function renderPlayers(entrants, checkedIn, dqs, state, format) {
 
     if (!entrants.length) {
         wrap.innerHTML = `<div class="empty-state">No entrants yet.</div>`;
+        wrap._entrants = null;
         return;
     }
 
     if (isBracket) {
-        renderSeedingList(wrap, entrants, checkedIn, dqs, showCI);
+        // Only do a full re-render if this is the first load or entrant count changed.
+        // Never overwrite the user's drag-ordered list from a poll.
+        const alreadyRendered = Array.isArray(wrap._entrants);
+        const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
+
+        if (!alreadyRendered || countChanged) {
+            const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
+            renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
+        }
+        // Always keep checkedIn/dqs/showCI fresh for post-drag re-renders
+        wrap._checkedIn = checkedIn;
+        wrap._dqs       = dqs;
+        wrap._showCI    = showCI;
     } else {
         renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI);
     }
@@ -395,7 +401,7 @@ function _onSeedPointerMove(e) {
     ghost.style.top  = `${e.clientY - offsetY}px`;
 
     const items = [...list.querySelectorAll('.participant-item:not(.is-dragging)')];
-    let newIndex = srcIndex;
+    let newIndex = 0;
 
     for (let i = 0; i < items.length; i++) {
         const r    = items[i].getBoundingClientRect();
@@ -454,6 +460,7 @@ async function _onSeedPointerUp() {
 }
 
 async function _syncAllSeeds(entrants) {
+    _seedingSyncing = true;
     const statusEl = document.getElementById('seeding-save-status');
     if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)'; }
     try {
@@ -466,8 +473,12 @@ async function _syncAllSeeds(entrants) {
             });
         }
         if (statusEl) { statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--green)'; }
-        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+        setTimeout(() => {
+            if (statusEl) statusEl.textContent = '';
+            _seedingSyncing = false; // re-allow polls to update the list
+        }, 2500);
     } catch (err) {
+        _seedingSyncing = false;
         if (statusEl) { statusEl.textContent = `Save failed: ${err.message}`; statusEl.style.color = 'var(--red)'; }
         showToast(`Seeding save failed: ${err.message}`, 'error');
     }

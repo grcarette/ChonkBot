@@ -326,7 +326,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
     position: relative; z-index: 1;
 }
 .participant-item:last-child { border-bottom: none; }
-.participant-item.is-dragging { opacity: 0; pointer-events: none; }
+.participant-item.is-dragging { opacity: 0; visibility: hidden; pointer-events: none; }
 .participant-item.shift-up   { transform: translateY(calc(-1 * (var(--pi-h) + 0px))); transition: transform 0.18s ease; }
 .participant-item.shift-down { transform: translateY(var(--pi-h)); transition: transform 0.18s ease; }
 .participant-drag-handle { color: var(--text-muted); cursor: grab; flex-shrink: 0; display: flex; }
