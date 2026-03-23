@@ -3,7 +3,7 @@ from .match_service import MatchService
 from formats import make_format
 from datetime import datetime
 
-from utils.channel_utils import CHANNEL_PERMISSIONS, create_channel
+from utils.channel_utils import CHANNEL_PERMISSIONS, NONDEFAULT_CHANNELS, STAFF_PERMISSIONS, CHANNEL_ORDER, create_channel
 from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
 from utils.discord_preset_colors import get_random_color
 from utils.get_bracket_link import get_bracket_link
@@ -88,8 +88,7 @@ class TournamentManager:
         self.format = make_format(self)
         await self.format.on_initialize()
 
-        self.tc = TournamentControl(self)
-        await self.tc.initialize_controls()
+        self.tc = None  # TournamentControl removed — web dashboard handles all controls
 
         active_lobbies = await self.bot.dh.get_active_lobbies(self.tournament['_id'])
         for lobby in active_lobbies:
@@ -117,14 +116,13 @@ class TournamentManager:
             elif lobby['state'] == 'reporting':
                 self.bot.add_view(MatchReportButton(match_lobby))
 
-        tournament = await self.get_tournament()  # ← re-fetch so state checks are current
+        tournament = await self.get_tournament()
 
         if tournament['state'] == 'initialize':
             await self.progress_tournament()
         if tournament['state'] == 'setup':
             pass
         elif tournament['state'] == 'registration':
-            self.bot.add_view(RegisterControlView(self))
             self.bot.add_view(RegisterControlView(self))
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
@@ -170,7 +168,6 @@ class TournamentManager:
         if next_state:
             for task in pre_transition_tasks:
                 await task
-            await self.tc.update_tournament_state(next_state)
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
 
     # ─── Stages ───────────────────────────────────────────────────────────────
@@ -189,77 +186,156 @@ class TournamentManager:
     # ─── Publishing ───────────────────────────────────────────────────────────
 
     async def publish_tournament(self):
-        if self.debug:
-            return
-        guild = self.bot.guilds[0]
-        category = self.get_tournament_category()
-        for channel in category.channels:
-            if channel.name in CHANNEL_PERMISSIONS:
-                permissions = CHANNEL_PERMISSIONS[channel.name]
-                if permissions != 'private':
-                    overwrite = channel.overwrites_for(guild.default_role)
-                    overwrite.view_channel = not overwrite.view_channel
-                    await channel.set_permissions(guild.default_role, overwrite=overwrite)
+        tournament = await self.get_tournament()
+        guild      = self.bot.guilds[0]
+        hide       = self.debug  # debug tournaments stay hidden
+
+        organizer_role  = await guild.create_role(name=f"{tournament['name']} TO")
+        tournament_role = await guild.create_role(name=f"{tournament['name']}")
+        self.organizer_role = organizer_role
+
+        for user_id in tournament['organizers']:
+            member = discord.utils.get(guild.members, id=user_id)
+            if member:
+                await member.add_roles(organizer_role)
+
+        category_overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            organizer_role:     discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                manage_messages=True,
+                embed_links=True,
+                attach_files=True,
+                read_message_history=True,
+                add_reactions=True,
+                use_external_emojis=True,
+            ),
+        }
+        tournament_category = await guild.create_category(
+            tournament['name'], overwrites=category_overwrites
+        )
+        await self.bot.dh.add_category_to_tournament(tournament['name'], tournament_category.id)
+        self.tournament['category_id'] = tournament_category.id
+
+        PUBLISH_CHANNELS = [
+            ('event-info',     'read_only', True),
+            ('event-updates',  'read_only', True),
+            ('register',       'read_only', False),  # always hidden until open_registration
+            ('event-chat',     'open',      True),
+            ('organizer-chat', 'private',   False),  # always private
+        ]
+
+        for channel_name, perm_type, public in PUBLISH_CHANNELS:
+            # Debug tournaments keep everything hidden
+            visible = public and not hide
+
+            overwrites = {organizer_role: STAFF_PERMISSIONS}
+            if perm_type == 'read_only':
+                overwrites[guild.default_role] = discord.PermissionOverwrite(
+                    view_channel=visible,
+                    send_messages=False,
+                    read_message_history=True,
+                    add_reactions=True,
+                    use_external_emojis=True,
+                )
+            elif perm_type == 'open':
+                overwrites[guild.default_role] = discord.PermissionOverwrite(
+                    view_channel=visible,
+                    send_messages=True,
+                    embed_links=True,
+                    attach_files=True,
+                    read_message_history=True,
+                    add_reactions=True,
+                    use_external_emojis=True,
+                )
+            elif perm_type == 'private':
+                overwrites[guild.default_role] = discord.PermissionOverwrite(
+                    view_channel=False,
+                )
+            await guild.create_text_channel(
+                channel_name, category=tournament_category, overwrites=overwrites
+            )
+        await self.post_event_info()
+
+        for i, name in enumerate(['event-info', 'event-updates', 'event-chat', 'organizer-chat']):
+            ch = discord.utils.get(tournament_category.channels, name=name)
+            if ch:
+                await ch.edit(position=i)
+        await self.sync_channel_order()
 
     # ─── Registration ─────────────────────────────────────────────────────────
+
+    async def set_registration_visibility(self, visible: bool):
+        if self.debug:
+            return
+        channel = await self.get_channel('register')
+        if not channel:
+            return
+        await channel.set_permissions(
+            self.guild.default_role,
+            view_channel=visible,
+            send_messages=False,
+            read_message_history=True,
+            add_reactions=True,
+            use_external_emojis=True,
+        )
 
     async def open_registration(self):
         tournament = await self.get_tournament()
 
         if self.debug:
-            default_debug_players = 8
-            for i in range(default_debug_players):
+            for i in range(8):
                 try:
                     await self.register_player(i)
                 except Exception as e:
                     print(f"[open_registration] Failed to register debug player {i}: {e}")
 
         if tournament['state'] == 'registration':
-            guild = self.bot.guild
-            tournament_category = self.get_tournament_category()
             register_channel = await self.get_channel('register')
-            hide_channel = True if self.debug else False
-
-            if not register_channel:
-                register_channel = await create_channel(
+            if register_channel:
+                history = [msg async for msg in register_channel.history(limit=1)]
+                if not history:
+                    view  = RegisterControlView(self)
+                    embed = discord.Embed(
+                        title=f"Register for {self.tournament['name']}",
+                        color=discord.Color.green()
+                    )
+                    await register_channel.send(embed=embed, view=view)
+                await self.set_registration_visibility(True)
+            else:
+                guild               = self.bot.guild
+                tournament_category = self.get_tournament_category()
+                register_channel    = await create_channel(
                     guild=guild,
                     tournament_category=tournament_category,
-                    hide_channel=hide_channel,
+                    hide_channel=False,
                     channel_name='register',
                     channel_overwrites=CHANNEL_PERMISSIONS['register'],
                     organizer_role=self.organizer_role
                 )
-                await register_channel.edit(position=DEFAULT_CHANNEL_POSITION)
-                view = RegisterControlView(self)
+                view  = RegisterControlView(self)
                 embed = discord.Embed(
                     title=f"Register for {self.tournament['name']}",
                     color=discord.Color.green()
                 )
                 await register_channel.send(embed=embed, view=view)
-            else:
-                await self.toggle_registration_visibility()
+
         elif tournament['state'] == 'checkin':
             self.checkin_view.register_button.disabled = False
             await self.checkin_message.edit(view=self.checkin_view)
 
         await self.bot.dh.open_registration(tournament['_id'])
+        await self.sync_channel_order()
 
     async def close_registration(self):
         tournament = await self.get_tournament()
         if tournament['state'] == 'registration':
-            await self.toggle_registration_visibility()
+            await self.set_registration_visibility(False)
         elif tournament['state'] == 'checkin':
             self.checkin_view.register_button.disabled = True
             await self.checkin_message.edit(view=self.checkin_view)
         await self.bot.dh.close_registration(tournament['_id'])
-
-    async def toggle_registration_visibility(self):
-        if self.debug:
-            return
-        channel = await self.get_channel('register')
-        overwrite = channel.overwrites_for(self.guild.default_role)
-        overwrite.view_channel = not overwrite.view_channel
-        await channel.set_permissions(self.guild.default_role, overwrite=overwrite)
 
     async def create_registration_approval(self, user_id, interaction):
         allowed = await self.format.on_registration_gate(user_id, interaction)
@@ -275,18 +351,18 @@ class TournamentManager:
             )
             return
 
-        if self.tournament['config']['approved_registration']:
-            user = discord.utils.get(self.bot.guild.members, id=user_id)
-            approval_channel = await self.get_channel('registration-approval')
-            embed = discord.Embed(title=user.name, color=get_random_color())
-            view = RegistrationApprovalView(self, user_id)
-            await approval_channel.send(embed=embed, view=view)
-            message_content = f"Your registration for {self.tournament['name']} is awaiting TO approval"
-        else:
-            await self.register_player(user_id)
-            message_content = f"You are now registered for {self.tournament['name']}"
+        requests = await self.bot.dh.get_registration_requests(self.tournament['_id'])
+        if user_id in requests:
+            await interaction.followup.send(
+                "Your registration is already awaiting approval.", ephemeral=True
+            )
+            return
 
-        await interaction.followup.send(message_content, ephemeral=True)
+        await self.bot.dh.add_registration_request(self.tournament['_id'], user_id)
+        await interaction.followup.send(
+            f"Your registration for {self.tournament['name']} is awaiting TO approval.",
+            ephemeral=True
+        )
 
     async def register_player(self, user_id):
         already_registered = await self.bot.dh.get_registration_status(
@@ -294,6 +370,11 @@ class TournamentManager:
         )
         if already_registered:
             return False
+
+        tournament = await self.get_tournament()
+        if tournament.get('config', {}).get('approved_registration'):
+            await self.bot.dh.add_registration_request(tournament['_id'], user_id)
+            return 'pending'
 
         guild = self.guild
         discord_user = discord.utils.get(guild.members, id=user_id)
@@ -308,14 +389,17 @@ class TournamentManager:
         user = await self.bot.dh.get_user(user_id=user_id)
 
         await self.format.on_player_register(user_id, user)
-        if self.tc:
-            await self.tc.tid.update_entrants()
         return True
 
     async def unregister_player(self, user_id):
         tournament = await self.get_tournament()
-        print(f"[unregister_player] called for user_id={user_id}, in entrants: {str(user_id) in tournament.get('entrants', {})}")
-        if f'{user_id}' not in tournament.get('entrants', {}):
+        entrants = tournament.get('entrants', [])
+        if isinstance(entrants, dict):
+            entrant_ids = [int(k) for k in entrants.keys()]
+        else:
+            entrant_ids = [e['discord_id'] for e in entrants]
+
+        if int(user_id) not in entrant_ids:
             return
 
         guild = self.guild
@@ -324,9 +408,30 @@ class TournamentManager:
         if discord_user and tournament_role:
             await discord_user.remove_roles(tournament_role)
 
-        await self.format.on_player_unregister(user_id)           # ← move this up
-        await self.bot.dh.unregister_player(tournament['_id'], user_id)  # ← now after
-        await self.tc.tid.update_entrants()
+        await self.format.on_player_unregister(user_id)
+        await self.bot.dh.unregister_player(tournament['_id'], user_id)
+
+    async def register_player_direct(self, user_id):
+        """Register a player directly, bypassing the approval check. Used by web approval flow."""
+        already_registered = await self.bot.dh.get_registration_status(
+            self.tournament['_id'], user_id
+        )
+        if already_registered:
+            return False
+
+        discord_user   = discord.utils.get(self.guild.members, id=user_id)
+        tournament_role = discord.utils.get(self.guild.roles, name=self.tournament['name'])
+
+        if not self.debug:
+            if discord_user and tournament_role:
+                await discord_user.add_roles(tournament_role)
+            await self.bot.dh.register_user(discord_user)
+        else:
+            await self.bot.dh.register_user(user_id, debug=True)
+
+        user = await self.bot.dh.get_user(user_id=user_id)
+        await self.format.on_player_register(user_id, user)
+        return True
 
     # ─── Check-in ─────────────────────────────────────────────────────────────
 
@@ -416,7 +521,7 @@ class TournamentManager:
     # ─── Tournament start ─────────────────────────────────────────────────────
 
     async def start_tournament(self):
-        self.banner_filepath = await self.tc.generate_banner()
+        self.banner_filepath = await self.generate_banner()
         tournament = await self.get_tournament()
 
         if self.debug:
@@ -831,7 +936,8 @@ class TournamentManager:
 
     async def delete_tournament(self, kwargs=None):
         tournament = await self.get_tournament()
-        await self.remove_tournament_from_discord()
+        if tournament.get('category_id'):
+            await self.remove_tournament_from_discord()
         if tournament['state'] == 'finished':
             return False
         for lobby in self.lobbies:
@@ -842,6 +948,9 @@ class TournamentManager:
 
     async def remove_tournament_from_discord(self):
         tournament = await self.get_tournament()
+        if not tournament.get('category_id'):
+            return
+
         guild = self.bot.guild
         tournament_category = self.get_tournament_category()
 
@@ -850,7 +959,7 @@ class TournamentManager:
                 try:
                     await channel.delete()
                 except discord.NotFound:
-                    pass 
+                    pass
             await tournament_category.delete()
 
         tournament_role = discord.utils.get(guild.roles, name=f"{tournament['name']}")
@@ -1131,3 +1240,131 @@ class TournamentManager:
         # Update tournament state and tear down Discord
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'finished')
         await self.finalize_tournament()
+
+    async def post_event_info(self):
+        """Post or update the event-info embed."""
+        tournament = await self.get_tournament()
+        channel    = await self.get_channel('event-info')
+        if not channel:
+            return
+
+        if 'color' in tournament.get('config', {}):
+            from utils.color_utils import discord_color_from_hex
+            color = discord_color_from_hex(tournament['config']['color'])
+        else:
+            color = discord.Color.blue()
+
+        organizer_list = []
+        for user_id in tournament['organizers']:
+            member = discord.utils.get(self.guild.members, id=user_id)
+            if member:
+                organizer_list.append(member.mention)
+        organizer_str = '\n-'.join(organizer_list) if organizer_list else 'N/A'
+
+        description = (
+            f"**Date:** {tournament.get('date', 'TBA')}\n"
+            f"**Format:** {tournament.get('format', '')}\n"
+            f"**TO's:**\n-{organizer_str}\n"
+        )
+
+        if tournament.get('config', {}).get('display_entrants'):
+            entrants = tournament.get('entrants', {})
+            if entrants:
+                names = []
+                for i, discord_id_str in enumerate(entrants.keys(), start=1):
+                    user = await self.bot.dh.get_user(user_id=int(discord_id_str))
+                    name = user['name'] if user else f'Unknown ({discord_id_str})'
+                    names.append(f"{i}. {name}")
+                description += f"\n**Entrants ({len(entrants)}):**\n" + '\n'.join(names)
+
+        embed = discord.Embed(title=tournament['name'], description=description, color=color)
+
+        # Find existing bot message to edit, or post new one
+        bot_id = self.bot.id
+        existing = None
+        async for msg in channel.history(limit=20, oldest_first=True):
+            if msg.author.id == bot_id and msg.embeds:
+                existing = msg
+                break
+
+        if existing:
+            await existing.edit(embed=embed)
+        else:
+            await channel.send(embed=embed)
+
+
+    async def publish_stagelist(self):
+        from utils.embed_utils import create_stage_embed
+        tournament = await self.get_tournament()
+        if not tournament.get('stagelist'):
+            return
+
+        # Get or create the stagelist channel
+        stagelist_channel = await self.get_channel('stagelist')
+        if not stagelist_channel:
+            guild               = self.bot.guilds[0]
+            tournament_category = self.get_tournament_category()
+            stagelist_channel   = await guild.create_text_channel(
+                'stagelist',
+                category=tournament_category,
+                overwrites={
+                    guild.default_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=False,
+                        read_message_history=True,
+                    ),
+                    self.organizer_role: STAFF_PERMISSIONS,
+                }
+            )
+        await stagelist_channel.purge(limit=None)
+
+        for stage_code in tournament['stagelist']:
+            stage = await self.bot.dh.get_stage(code=stage_code)
+            if stage:
+                embed = await create_stage_embed(stage)
+                await stagelist_channel.send(embed=embed)
+
+        await self.bot.dh.edit_tournament_config(
+            self.tournament['_id'], stagelist_published=True
+        )
+        await self.sync_channel_order()
+
+    async def generate_banner(self):
+        """Generate the stage banner image for use at tournament start."""
+        from handlers.ban_graphic_generator import StageBannerGenerator
+        tournament      = await self.get_tournament()
+        sbg             = StageBannerGenerator()
+        stage_list_data = []
+
+        for map_code in tournament['stagelist']:
+            stage = await self.bot.dh.get_stage(code=map_code)
+            if stage:
+                stage_list_data.append(stage)
+
+        while len(stage_list_data) < 5:
+            random_stages = await self.bot.dh.get_random_stages(1)
+            if random_stages:
+                stage_list_data.append(random_stages[0])
+
+        filepath = await sbg.generate_banner(stage_list_data, tournament)
+        return filepath
+
+    async def sync_channel_order(self):
+        """Reorder channels in the tournament category to match CHANNEL_ORDER, only moving what's necessary."""
+        tournament_category = self.get_tournament_category()
+        if not tournament_category:
+            return
+
+        channels = {ch.name: ch for ch in tournament_category.channels}
+
+        # Build the desired order using only channels that currently exist
+        desired = [channels[name] for name in CHANNEL_ORDER if name in channels]
+
+        # Find the base position offset (where this category's channels start)
+        base_position = min(ch.position for ch in desired) if desired else 0
+
+        # Only edit channels that are already out of position
+        for i, ch in enumerate(desired):
+            expected = base_position + i
+            if ch.position != expected:
+                await ch.edit(position=expected)

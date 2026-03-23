@@ -14,18 +14,11 @@ STAFF_PERMISSIONS = discord.PermissionOverwrite(
 )
 
 CHANNEL_PERMISSIONS = {
-    'event-info': 'read_only',
-    'event-updates': 'read_only',
-    'stagelist': 'read_only',
-    'event-chat': 'open',
-    'questions': 'open',
-    'register': 'read_only',
-    'organizer-chat': 'private',
-    'bot-control': 'private',
-    'check-in': 'read_only',
-    'match-calling': 'private',
-    'active-matches': 'private',
-    'registration-approval': 'private',
+    'event-info':      'read_only',
+    'event-updates':   'read_only',
+    'register':        'read_only',
+    'event-chat':      'open',
+    'organizer-chat':  'private',
 }
 
 NONDEFAULT_CHANNELS = [
@@ -33,7 +26,17 @@ NONDEFAULT_CHANNELS = [
     'check-in',
     'match-calling',
     'active-matches',
-    'registration-approval'
+    'registration-approval',
+]
+
+CHANNEL_ORDER = [
+    'check-in',
+    'register',
+    'event-info',
+    'event-updates',
+    'stagelist',
+    'event-chat',
+    'organizer-chat',
 ]
 
 async def create_channel(guild, tournament_category, hide_channel, channel_name, channel_overwrites, organizer_role=None):

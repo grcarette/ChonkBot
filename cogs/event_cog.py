@@ -23,20 +23,6 @@ class EventCog(commands.Cog, name="event"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="create_tournament", description="Create a new tournament")
-    @app_commands.checks.has_role("Event Organizer")
-    async def create_tournament(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="Setup Tournament",
-            description="Click the buttons below to configure your tournament.",
-            color=discord.Color.green()
-        )
-        await interaction.response.send_message(
-            embed=embed, 
-            view=TournamentSettingsView(interaction.user, self.bot),
-            ephemeral=True
-        )
-
     @app_commands.command(name="reset_lobby", description="Reset a match lobby to the reporting phase")
     @app_commands.checks.has_role("Event Organizer")
     async def reset_lobby(self, interaction: discord.Interaction):
@@ -103,43 +89,6 @@ class EventCog(commands.Cog, name="event"):
         )
         await match_lobby.initialize_match()
         await interaction.followup.send("Test lobby created.")
-
-    @app_commands.command(name="test_tournament", description="Create a test tournament (invisible to users)")
-    @app_commands.checks.has_role("Event Organizer")
-    async def test_tournament(
-        self,
-        interaction: discord.Interaction,
-        format: typing.Literal['swiss', 'de'] = 'swiss',
-    ):
-        await interaction.response.defer(ephemeral=True)
-
-        if format == 'de':
-            tournament_format = 'double elimination'
-            name = 'test tournament de'
-        else:
-            tournament_format = 'swiss'
-            name = 'test tournament'
-
-        tournament_data = {
-            'name': name,
-            'date': discord.utils.utcnow(),
-            'organizer': interaction.user.id,
-            'format': tournament_format,
-            'approved_registration': False,
-            'randomized_stagelist': True,
-            'display_entrants': True,
-            'round_limit': 2,  # only used for swiss
-            'debug': True,
-        }
-
-        existing = await self.bot.dh.get_tournament(name=name)
-        if existing:
-            await self.bot.dh.delete_tournament(existing['_id'])
-
-        await self.bot.th.set_up_tournament(tournament_data)
-        await interaction.followup.send(
-            f"Test **{tournament_format}** tournament created.", ephemeral=True
-        )
 
     @app_commands.command(name="register_role", description="Register all players with the tournament role")
     @app_commands.checks.has_role("Event Organizer")

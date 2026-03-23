@@ -43,16 +43,18 @@ class ChonkBot(commands.Bot):
         self.tree.copy_global_to(guild=GUILD)
         await self.tree.sync(guild=GUILD)
 
-    async def on_ready(self):
-        self.guild = self.guilds[0]
-        await self.th.initialize_active_events()
-
+        # Start web server early — doesn't need guild or Discord to be ready
         from web.web_server import start_server
         from tournaments.challonge_handler import ChallongeHandler
         await start_server(challonge_handler_factory=ChallongeHandler, bot=self)
+        print("Web server started")
 
+    async def on_ready(self):
+        self.guild = self.guilds[0]
+        await self.th.initialize_active_events()
+        await self.dh.delete_debug_users()
         print("Bot initialized")
-
+        
     async def load_cogs(self):
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):

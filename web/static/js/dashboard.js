@@ -33,7 +33,6 @@ async function loadTournaments() {
     try {
         const data = await api('GET', '/api/tournaments');
         renderTournaments(data.tournaments);
-        renderStats(data);
     } catch (err) {
         document.getElementById('tournament-list-wrap').innerHTML =
             `<div class="empty-state"><p>Failed to load tournaments.<br>${escapeHtml(err.message)}</p></div>`;
@@ -104,98 +103,120 @@ function renderTournaments(tournaments) {
 // ── Create Event modal ─────────────────────────────────────────────────────────
 
 function initCreateModal() {
-    const backdrop   = document.getElementById('modal-backdrop');
-    const btnOpen    = document.getElementById('btn-create-event');
-    const btnClose   = document.getElementById('modal-close');
-    const btnCancel  = document.getElementById('modal-cancel');
-    const btnSubmit  = document.getElementById('modal-submit');
-    const btnLabel   = btnSubmit.querySelector('.btn-label');
-    const btnSpinner = btnSubmit.querySelector('.btn-spinner');
-    const errBox     = document.getElementById('modal-error');
-    const fieldName  = document.getElementById('field-name');
-    const fieldDate  = document.getElementById('field-date');
-    const fieldRounds= document.getElementById('field-rounds');
-    const roundGroup = document.getElementById('round-limit-group');
-    const formatBtns = document.querySelectorAll('.format-btn');
+    const backdrop    = document.getElementById('modal-backdrop');
+    const btnOpen     = document.getElementById('btn-create-event');
+    const btnClose    = document.getElementById('modal-close');
+    const btnCancel   = document.getElementById('modal-cancel');
+    const btnBack     = document.getElementById('modal-back');
+    const btnSubmit   = document.getElementById('modal-submit');
+    const btnLabel    = btnSubmit.querySelector('.btn-label');
+    const btnSpinner  = btnSubmit.querySelector('.btn-spinner');
+    const errBox      = document.getElementById('modal-error');
+    const fieldName   = document.getElementById('field-name');
+    const fieldDate   = document.getElementById('field-date');
+    const fieldRounds = document.getElementById('field-rounds');
+    const roundGroup  = document.getElementById('round-limit-group');
+    const formatBtns  = document.querySelectorAll('.format-btn');
+    const step1        = document.getElementById('step-1');
+    const step2        = document.getElementById('step-2');
+    const step2Summary = document.getElementById('step2-summary');
+    const modalTitle   = document.getElementById('modal-title');
 
     let selectedFormat = null;
+    let currentStep    = 1;
 
     function openModal() {
-        fieldName.value  = '';
-        fieldDate.value  = '';
+        fieldName.value   = '';
+        fieldDate.value   = '';
         fieldRounds.value = 8;
-        document.getElementById('opt-approved').checked       = false;
-        document.getElementById('opt-random-stage').checked   = false;
+        document.getElementById('opt-approved').checked         = false;
+        document.getElementById('opt-random-stage').checked     = false;
         document.getElementById('opt-display-entrants').checked = false;
-        document.getElementById('opt-debug').checked          = false;
+        document.getElementById('opt-debug').checked            = false;
         selectedFormat = null;
         formatBtns.forEach(b => b.classList.remove('selected'));
-        roundGroup.hidden    = true;
-        errBox.hidden        = true;
-        errBox.textContent   = '';
-        btnSubmit.disabled   = true;
-        backdrop.hidden      = false;
+        errBox.hidden       = true;
+        errBox.textContent  = '';
+        roundGroup.hidden   = true;
+        goToStep(1);
+        backdrop.hidden = false;
         fieldName.focus();
     }
 
-    function checkReady() {
-        btnSubmit.disabled = !(fieldName.value.trim() && selectedFormat);
+    function goToStep(n) {
+        currentStep  = n;
+        step1.hidden = n !== 1;
+        step2.hidden = n !== 2;
+        btnBack.hidden = n !== 2;
+
+        if (n === 1) {
+            modalTitle.textContent = 'Create Event';
+            btnLabel.textContent   = 'Continue';
+            checkStep1Ready();
+        } else {
+            console.log('selectedFormat at goToStep(2):', JSON.stringify(selectedFormat));
+            const isSwiss = selectedFormat === 'swiss' || selectedFormat === 'swiss filter';
+            console.log('isSwiss:', isSwiss, 'roundGroup.hidden will be set to:', !isSwiss);
+            roundGroup.hidden      = !isSwiss;
+            modalTitle.textContent = 'Configuration';
+            btnLabel.textContent   = 'Create Tournament';
+            btnSubmit.style.opacity = '';
+            btnSubmit.style.cursor  = '';
+            step2Summary.textContent =
+                `${fieldName.value.trim()} · ${selectedFormat}` +
+                (fieldDate.value.trim() ? ` · ${fieldDate.value.trim()}` : '');
+        }
+    }
+
+    function checkStep1Ready() {
+        if (currentStep === 1) {
+            const ready = !!(fieldName.value.trim() && selectedFormat);
+            btnSubmit.style.opacity  = ready ? '' : '0.4';
+            btnSubmit.style.cursor   = ready ? '' : 'not-allowed';
+        }
     }
 
     btnOpen.addEventListener('click', openModal);
     btnClose.addEventListener('click', closeModal);
     btnCancel.addEventListener('click', closeModal);
+    btnBack.addEventListener('click', () => goToStep(1));
     backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+    fieldName.addEventListener('input', checkStep1Ready);
 
     formatBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             formatBtns.forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             selectedFormat = btn.dataset.value;
-            roundGroup.hidden = !(selectedFormat === 'swiss' || selectedFormat === 'swiss filter');
-            checkReady();
+            checkStep1Ready();
         });
     });
 
-    fieldName.addEventListener('input', checkReady);
-
-    document.getElementById('rounds-dec').addEventListener('click', () => {
-        const v = parseInt(fieldRounds.value, 10);
-        if (v > 1) fieldRounds.value = v - 1;
-    });
-    document.getElementById('rounds-inc').addEventListener('click', () => {
-        const v = parseInt(fieldRounds.value, 10);
-        if (v < 99) fieldRounds.value = v + 1;
-    });
-
     btnSubmit.addEventListener('click', async () => {
-        const name = fieldName.value.trim();
-        if (!name || !selectedFormat) return;
+        console.log('btn clicked, step:', currentStep, 'name:', fieldName.value.trim(), 'format:', selectedFormat);
+        if (currentStep === 1) {
+            if (!fieldName.value.trim() || !selectedFormat) return;
+            goToStep(2);
+            return;
+        }
 
-        btnSubmit.disabled = true;
+        const isSwiss = selectedFormat === 'swiss' || selectedFormat === 'swiss filter';
         btnLabel.hidden    = true;
         btnSpinner.hidden  = false;
+        btnSubmit.disabled = true;
         errBox.hidden      = true;
 
-        const payload = {
-            name,
-            date:                  fieldDate.value.trim(),
-            format:                selectedFormat,
-            approved_registration: document.getElementById('opt-approved').checked,
-            randomized_stagelist:  document.getElementById('opt-random-stage').checked,
-            display_entrants:      document.getElementById('opt-display-entrants').checked,
-            round_limit:           parseInt(fieldRounds.value, 10) || 8,
-            debug:                 document.getElementById('opt-debug').checked,
-        };
-
         try {
-            const res  = await fetch('/api/tournaments', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(payload),
+            await api('POST', '/api/tournaments', {
+                name:                  fieldName.value.trim(),
+                date:                  fieldDate.value.trim(),
+                format:                selectedFormat,
+                approved_registration: document.getElementById('opt-approved').checked,
+                randomized_stagelist:  document.getElementById('opt-random-stage').checked,
+                display_entrants:      document.getElementById('opt-display-entrants').checked,
+                debug:                 document.getElementById('opt-debug').checked,
+                round_limit:           isSwiss ? parseInt(fieldRounds.value) || 8 : 8,
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
             closeModal();
             await loadTournaments();
         } catch (err) {

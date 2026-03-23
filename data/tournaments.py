@@ -20,7 +20,7 @@ class TournamentMethodsMixin:
             'date': tournament['date'],
             'organizers': [tournament['organizer']],
             'format': tournament['format'],
-            'state': 'initialize',
+            'state': tournament.get('state', 'setup'),
             'config': config_data,
             'stagelist': [],
             'entrants': {},
@@ -305,3 +305,35 @@ class TournamentMethodsMixin:
             }
         }
         result = await self.tournament_collection.update_one(query, update)
+
+    async def add_registration_request(self, tournament_id, discord_id: int):
+        await self.tournament_collection.update_one(
+            {'_id': ObjectId(tournament_id)},
+            {'$addToSet': {'registration_requests': discord_id}}
+        )
+
+    async def remove_registration_request(self, tournament_id, discord_id: int):
+        await self.tournament_collection.update_one(
+            {'_id': ObjectId(tournament_id)},
+            {'$pull': {'registration_requests': discord_id}}
+        )
+
+    async def get_registration_requests(self, tournament_id):
+        tournament = await self.tournament_collection.find_one(
+            {'_id': ObjectId(tournament_id)},
+            projection={'registration_requests': 1}
+        )
+        return tournament.get('registration_requests', []) if tournament else []
+
+    async def update_entrant_seed(self, tournament_id, discord_id: int, seed: int):
+        await self.tournament_collection.update_one(
+            {'_id': ObjectId(str(tournament_id))},
+            {'$set': {f'seeds.{discord_id}': seed}}
+        )
+
+    async def update_all_seeds(self, tournament_id, seeds: dict):
+        """Update all seeds at once. seeds is {discord_id: seed_number}."""
+        await self.tournament_collection.update_one(
+            {'_id': ObjectId(str(tournament_id))},
+            {'$set': {'seeds': {str(k): v for k, v in seeds.items()}}}
+        )

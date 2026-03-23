@@ -24,10 +24,6 @@
             Overview
         </button>
         <div class="nav-label">Management</div>
-        <button class="nav-item" data-section="players">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Participants
-        </button>
         <button class="nav-item" data-section="matches">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             Matches
@@ -73,36 +69,53 @@
 
         <!-- OVERVIEW -->
         <div class="section active" id="section-overview">
-            <div class="info-strip">
-                <div class="info-card"><div class="info-label">State</div><div class="info-value" id="stat-state">—</div></div>
-                <div class="info-card"><div class="info-label">Format</div><div class="info-value" id="stat-format">—</div></div>
-                <div class="info-card"><div class="info-label">Entrants</div><div class="info-value accent" id="stat-entrants">—</div></div>
-                <div class="info-card"><div class="info-label">Checked In</div><div class="info-value" id="stat-checkedin">—</div></div>
-                <div class="info-card"><div class="info-label">Active Lobbies</div><div class="info-value" id="stat-lobbies">—</div></div>
-            </div>
-            <div id="action-area"></div>
-            <div class="entrant-section">
-                <div class="entrant-header" id="entrant-toggle">
-                    <div class="entrant-header-left">
-                        <span class="entrant-header-title">Entrants</span>
-                        <span class="entrant-count-badge" id="entrant-badge">0</span>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start">
+
+                <!-- Left column: stats + actions -->
+                <div style="min-width:0">
+                    <div class="info-strip" style="grid-template-columns:repeat(5,minmax(0,150px))">
+                        <div class="info-card"><div class="info-label">State</div><div class="info-value" id="stat-state">—</div></div>
+                        <div class="info-card"><div class="info-label">Format</div><div class="info-value" id="stat-format">—</div></div>
+                        <div class="info-card"><div class="info-label">Entrants</div><div class="info-value accent" id="stat-entrants">—</div></div>
+                        <div class="info-card"><div class="info-label">Checked In</div><div class="info-value" id="stat-checkedin">—</div></div>
+                        <div class="info-card"><div class="info-label">Active Lobbies</div><div class="info-value" id="stat-lobbies">—</div></div>
                     </div>
-                    <svg class="entrant-chevron" id="entrant-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    <div id="action-area" style="max-width:calc(5 * 150px + 4 * 12px)"></div>
+
+                    <!-- Registration requests -->
+                    <div id="registration-requests-section" hidden>
+                        <div class="panel" style="margin-top:4px;max-width:calc(5 * 150px + 4 * 12px)">
+                            <div class="panel-header">
+                                <span class="panel-title">Pending Approval</span>
+                                <span id="requests-count" class="entrant-count-badge">0</span>
+                            </div>
+                            <div id="requests-list"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="entrant-body" id="entrant-body"><div class="empty-state">Loading...</div></div>
-            </div>
-        </div>
-        
-        <!-- PARTICIPANTS -->
-        <div class="section" id="section-players">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-title">Participants</span>
-                    <span id="players-count" style="font-size:12px;color:var(--text-muted)"></span>
+                <!-- Right column: participants -->
+                <div>
+                    <div class="panel" style="max-height:calc(100vh - 220px);display:flex;flex-direction:column">
+                        <div class="panel-header">
+                            <span class="panel-title">Participants</span>
+                            <span id="overview-players-count" style="font-size:12px;color:var(--text-muted)"></span>
+                        </div>
+                        <div id="overview-participants-wrap" style="overflow-y:auto;flex:1">
+                            <div class="empty-state">Loading...</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;margin-top:10px">
+                        <button class="btn btn-secondary" id="btn-randomize-seeds" style="flex:1;justify-content:center">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                            Randomize Seeds
+                        </button>
+                        <button class="btn btn-secondary" id="btn-seed-by-rank" style="flex:1;justify-content:center">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                            Seed by Rank
+                        </button>
+                    </div>
                 </div>
-                <div id="participants-list-wrap">
-                    <div class="empty-state">Loading...</div>
-                </div>
+
             </div>
         </div>
 
@@ -165,6 +178,18 @@
                 </label>
                 <div class="config-save-row">
                     <button class="btn btn-primary btn-sm" id="cfg-save-options">Save Options</button>
+                </div>
+            </div>
+            <div class="panel" style="border-color:rgba(237,66,69,.3);margin-top:8px">
+                <div class="panel-header">
+                    <span class="panel-title" style="color:var(--red)">Danger Zone</span>
+                </div>
+                <div style="padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:3px">Delete Tournament</div>
+                        <div style="font-size:12px;color:var(--text-muted)">Permanently delete this tournament and all associated data. This cannot be undone.</div>
+                    </div>
+                    <button class="btn btn-danger btn-sm" id="btn-delete-tournament" style="flex-shrink:0">Delete</button>
                 </div>
             </div>
         </div>

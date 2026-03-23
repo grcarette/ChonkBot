@@ -15,6 +15,8 @@ from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
 from ui.match_report import MatchReportButton
 
+from formats import make_format
+
 from tournaments.match_lobby import MatchLobby
 from tournaments.tournament_manager import TournamentManager
 
@@ -32,68 +34,37 @@ class TournamentHandler():
     async def initialize_active_events(self):
         active_events = await self.bot.dh.get_active_events()
         for event in active_events:
+            if not event.get('category_id'):
+                tm = TournamentManager(self.bot, event)
+                tm.format = make_format(tm)
+                tm.tc = None
+                self.tournaments[event['_id']] = tm
+                continue
             await self.initialize_event(event)
             
     async def initialize_event(self, event):
-        tournament_manager = TournamentManager(self.bot, event) 
+        tournament_manager = TournamentManager(self.bot, event)
         self.tournaments[event['_id']] = tournament_manager
+        if not event.get('category_id'):
+            tournament_manager.format = make_format(tournament_manager)
+            tournament_manager.tc = None
+            return tournament_manager
         await tournament_manager.initialize_event()
         return tournament_manager
 
-    async def set_up_tournament(self, tournament):
-        guild = self.bot.guilds[0]
+    async def create_tournament_record(self, tournament):
         tournament = await self.bot.dh.create_tournament(tournament)
         if not tournament:
             return False
         await self.add_stages_tournament(tournament)
-        
-        organizer_role = await guild.create_role(name=f"{tournament['name']} TO")
-        tournament_role = await guild.create_role(name=f"{tournament['name']}")
-        
-        for user_id in tournament['organizers']:
-            tournament_organizer = discord.utils.get(guild.members, id=user_id)
-            await tournament_organizer.add_roles(organizer_role)
-        
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            organizer_role: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_messages=True,
-                embed_links=True,
-                attach_files=True,
-                read_message_history=True,
-                add_reactions=True,
-                use_external_emojis=True
-            )
-        }
 
-        tournament_category = await guild.create_category(
-            f"{tournament['name']}", 
-            overwrites=overwrites
-        )
-        await self.bot.dh.add_category_to_tournament(tournament['name'], tournament_category.id)
-        
-        channel_dict = {}
-        channels = [channel for channel in CHANNEL_PERMISSIONS if channel not in NONDEFAULT_CHANNELS]
-        
-        if tournament['config']['approved_registration'] == True:
-            channels.append('registration-approval')
-            
-        for channel in channels:
-            channel_dict[f'{channel}'] = await create_channel(
-                guild=guild, 
-                tournament_category=tournament_category, 
-                hide_channel=True, 
-                channel_name=f'{channel}', 
-                channel_overwrites=CHANNEL_PERMISSIONS[f'{channel}'],
-                organizer_role=organizer_role
-            )
-        
-        tournament = await self.bot.dh.get_tournament(name=tournament['name'])
+        tm = TournamentManager(self.bot, tournament)
+        tm.format = make_format(tm)
+        await tm.format.on_initialize()
+        tm.tc = None
+        self.tournaments[tournament['_id']] = tm
 
-        tournament_manager = await self.initialize_event(tournament)
-        return True
+        return tournament
         
     async def get_tournament_channel(self, tournament_manager, name):
         tournament_category = tournament_manager.get_tournament_category()

@@ -32,8 +32,15 @@ class RegisterControlView(discord.ui.View):
 
         if player_registered:
             await interaction.followup.send("You are already registered.", ephemeral=True)
+            return
+
+        result = await self.tm.register_player(user_id)
+        if result == 'pending':
+            await interaction.followup.send(
+                f"Your registration for {self.tm.tournament['name']} is awaiting TO approval.",
+                ephemeral=True
+            )
         else:
-            await self.tm.register_player(user_id)
             await interaction.followup.send(
                 f"You are now registered for {self.tm.tournament['name']}.", ephemeral=True
             )

@@ -45,14 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Entrant collapsible
-    let entrantOpen = false;
-    document.getElementById('entrant-toggle').addEventListener('click', () => {
-        entrantOpen = !entrantOpen;
-        document.getElementById('entrant-body').classList.toggle('open', entrantOpen);
-        document.getElementById('entrant-chevron').classList.toggle('open', entrantOpen);
-    });
-
     // Drawer close
     document.getElementById('drawer-close').addEventListener('click', closeDrawer);
     document.getElementById('drawer-backdrop').addEventListener('click', closeDrawer);
@@ -79,6 +71,49 @@ document.addEventListener('DOMContentLoaded', () => {
             display_entrants:      document.getElementById('cfg-display-entrants').checked,
         });
     };
+    document.getElementById('btn-delete-tournament').onclick = async () => {
+        const tournament = await api('GET', `/api/tournament/${TOURNAMENT_ID}`);
+        const name = tournament.name;
+
+        const extraHtml = `
+            <div style="margin-top:12px">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">
+                    Type <strong style="color:var(--text-primary)">${escapeHtml(name)}</strong> to confirm:
+                </div>
+                <input class="field-input" id="delete-confirm-input" placeholder="${escapeHtml(name)}" autocomplete="off" style="width:100%">
+                <div id="delete-confirm-error" style="font-size:12px;color:var(--red);margin-top:6px;display:none">Name does not match.</div>
+            </div>`;
+
+        // Show the modal
+        document.getElementById('modal-title').textContent  = 'Delete Tournament?';
+        document.getElementById('modal-desc').textContent   = 'This will permanently delete the tournament and all associated data.';
+        document.getElementById('modal-extra').innerHTML    = extraHtml;
+        document.getElementById('modal-icon').className     = 'modal-icon danger';
+        const confirmBtn = document.getElementById('modal-confirm');
+        confirmBtn.className = 'modal-confirm danger';
+        document.getElementById('modal-backdrop').hidden = false;
+
+        document.getElementById('delete-confirm-input').focus();
+
+        await new Promise(resolve => {
+            confirmBtn.onclick = () => {
+                const typed = document.getElementById('delete-confirm-input').value.trim();
+                if (typed !== name) {
+                    document.getElementById('delete-confirm-error').style.display = '';
+                    return;
+                }
+                document.getElementById('modal-backdrop').hidden = true;
+                document.getElementById('modal-extra').innerHTML = '';
+                resolve(true);
+            };
+            document.getElementById('modal-cancel').onclick = () => {
+                closeModal();
+                resolve(false);
+            };
+        });
+
+        await doAction('delete_tournament');
+    };
 
     // Stagelist add by code
     document.getElementById('stagelist-add-btn').addEventListener('click', addStageByCode);
@@ -91,6 +126,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('browser-mode-filter').addEventListener('change', loadBrowser);
     document.getElementById('browser-search').addEventListener('input', renderBrowser);
 
+    document.getElementById('btn-randomize-seeds').addEventListener('click', async () => {
+        if (await showConfirm('Randomize Seeds?', 'This will randomly shuffle all current seeds.'))
+            await doAction('randomize_seeds');
+    });
+
+    document.getElementById('btn-seed-by-rank').addEventListener('click', async () => {
+        if (await showConfirm('Seed by Rank?', 'This will overwrite all current seeds with UCH Ranked elo order, highest elo = seed 1.'))
+            await doAction('seed_by_rank');
+    });
+
     // Start polling
     loadTournament();
     setInterval(loadTournament, 5000);
@@ -98,10 +143,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Core action ───────────────────────────────────────────────────────────────
 
+let _forceRefreshSeeds = false;
+
 async function doAction(action, extra = {}) {
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action, ...extra });
+        if (action === 'delete_tournament') {
+            window.location.href = '/dashboard';
+            return;
+        }
         showToast('Done', 'success');
+        if (['seed_by_rank', 'randomize_seeds'].includes(action)) {
+            _forceRefreshSeeds = true;
+        }
         await loadTournament();
     } catch (err) {
         showToast(err.message, 'error');
@@ -116,11 +170,11 @@ async function loadTournament() {
         renderBadge(data.state);
         renderStats(data);
         renderActionArea(data);
-        renderEntrantsCollapsible(data.entrants || [], data.checked_in || [], data.dqs || [], data.state);
-        renderPlayers(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
         renderMatches(data.lobbies || []);
         renderResults(data.lobbies || []);
         populateConfig(data);
+        renderOverviewParticipants(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
+        renderRegistrationRequests(data.registration_requests || [], data.config);
     } catch (err) {
         document.getElementById('topbar-sub').textContent = 'Failed to load';
         console.error(err);
@@ -183,44 +237,66 @@ function renderActionArea(t) {
         };
 
     } else if (state === 'registration') {
+        const stagelistReady = t.stagelist_published;
         area.innerHTML = `<div class="action-panel"><div class="action-panel-title">Registration</div>
             <div class="action-row">
                 <button class="btn ${registration_open ? 'btn-toggle-on' : 'btn-toggle-off'}" id="btn-toggle-reg">
-                    ${registration_open ? 'Registration Open' : 'Registration Closed'}
+                    ${registration_open ? 'Close Registration' : 'Open Registration'}
+                </button>
+                <button class="btn btn-primary" id="btn-publish-stagelist">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    ${stagelistReady ? '✓ Stagelist Published' : 'Publish Stagelist'}
                 </button>
                 <button class="btn btn-primary" id="btn-start-checkin">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     Start Check-in
                 </button>
-            </div></div>`;
+            </div>
+        </div>`;
         document.getElementById('btn-toggle-reg').onclick = () =>
             doAction(registration_open ? 'close_registration' : 'open_registration');
         document.getElementById('btn-start-checkin').onclick = async () => {
             if (await showConfirm('Start Check-in?', 'Registration will be locked and players asked to check in.'))
                 await doAction('progress');
         };
+        document.getElementById('btn-publish-stagelist').onclick = async () => {
+            if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
+                await doAction('publish_stagelist');
+        };
 
     } else if (state === 'checkin') {
+        const stagelistReady = t.stagelist_published;
         area.innerHTML = `<div class="action-panel"><div class="action-panel-title">Check-in</div>
             <div class="action-row">
                 <button class="btn ${registration_open ? 'btn-toggle-on' : 'btn-toggle-off'}" id="btn-toggle-reg">
-                    ${registration_open ? 'Registration Open' : 'Registration Closed'}
+                    ${registration_open ? 'Close Registration' : 'Open Registration'}
                 </button>
                 <button class="btn btn-secondary" id="btn-ping">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     Ping Check-in
                 </button>
-                <button class="btn btn-success" id="btn-start-tournament">
+                <button class="btn btn-primary" id="btn-publish-stagelist">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    ${stagelistReady ? '✓ Stagelist Published' : 'Publish Stagelist'}
+                </button>
+                <button class="btn btn-success" id="btn-start-tournament" ${!stagelistReady ? 'disabled title="Publish the stagelist first"' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Start Tournament
                 </button>
-            </div></div>`;
+            </div>
+            ${!stagelistReady ? `<p style="font-size:12px;color:var(--yellow);margin-top:8px">⚠ Stagelist must be published before starting the tournament.</p>` : ''}
+        </div>`;
         document.getElementById('btn-toggle-reg').onclick = () =>
             doAction(registration_open ? 'close_registration' : 'open_registration');
         document.getElementById('btn-ping').onclick = () => doAction('ping_checkin');
         document.getElementById('btn-start-tournament').onclick = async () => {
+            if (!stagelistReady) return;
             if (await showConfirm('Start Tournament?', 'Players who have not checked in will be removed. This cannot be undone.'))
                 await doAction('progress');
+        };
+        document.getElementById('btn-publish-stagelist').onclick = async () => {
+            if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
+                await doAction('publish_stagelist');
         };
 
     } else if (state === 'active') {
@@ -236,17 +312,28 @@ function renderActionArea(t) {
             ? `<button class="btn btn-success" id="btn-next-round">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 Start Round ${t.swiss.current_round + 1}
-               </button>` : '';
+            </button>` : '';
         area.innerHTML = `${roundHtml}<div class="action-panel"><div class="action-panel-title">Controls</div>
             <div class="action-row">
                 ${nextBtn}
                 <button class="btn btn-danger" id="btn-end">End Tournament</button>
-            </div></div>`;
+            </div>
+            <div class="action-row" style="margin-top:10px">
+                <button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Publish Stagelist to Discord
+                </button>
+            </div>
+        </div>`;
         if (isSwiss && t.swiss?.round_ready)
             document.getElementById('btn-next-round').onclick = () => doAction('next_round');
         document.getElementById('btn-end').onclick = async () => {
             if (await showConfirm('End Tournament?', 'All open matches will be closed and the tournament moved to finished state.', 'danger'))
                 await doAction('progress');
+        };
+        document.getElementById('btn-publish-stagelist').onclick = async () => {
+            if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
+                await doAction('publish_stagelist');
         };
 
     } else if (state === 'finished') {
@@ -272,7 +359,7 @@ let _seedingSyncing       = false;
 
 function renderPlayers(entrants, checkedIn, dqs, state, format) {
     const wrap      = document.getElementById('participants-list-wrap');
-    const isBracket = format === 'single elimination' || format === 'double elimination';
+    const isBracket = format === 'single elimination' || format === 'double elimination' || format === 'swiss filter';
     const showCI    = ['checkin', 'active'].includes(state);
 
     document.getElementById('players-count').textContent =
@@ -306,17 +393,16 @@ function renderPlayers(entrants, checkedIn, dqs, state, format) {
 // ── Drag-and-drop seeding list (DE/SE only) ───────────────────────────────────
 
 function renderSeedingList(wrap, entrants, checkedIn, dqs, showCI) {
-    // entrants already arrive sorted by seed from the server
-    wrap._entrants = [...entrants]; // keep a mutable copy for drag ops
+    wrap._entrants = [...entrants];
 
-    wrap.innerHTML = `<ul id="seeding-list"></ul>
-        <div id="seeding-save-status" style="height:24px;text-align:center;font-size:12px;padding:6px 0;color:var(--text-muted)"></div>`;
+    wrap.innerHTML = `<ul class="seeding-list"></ul>
+        <div class="seeding-save-status" style="height:24px;text-align:center;font-size:12px;padding:6px 0;color:var(--text-muted)"></div>`;
 
     _rebuildSeedingList(wrap, checkedIn, dqs, showCI);
 }
 
 function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
-    const list     = document.getElementById('seeding-list');
+    const list     = wrap.querySelector('.seeding-list');
     const entrants = wrap._entrants;
     list.innerHTML = '';
 
@@ -344,6 +430,10 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
                 </svg>
             </span>
             <span class="participant-seed">${i + 1}</span>
+            ${e.avatar_url
+                ? `<img src="${escapeHtml(e.avatar_url)}" class="participant-avatar" alt="">`
+                : `<div class="participant-avatar-placeholder">${escapeHtml((e.name || '?')[0])}</div>`
+            }
             <span class="participant-name">${escapeHtml(e.name)}</span>
             <span class="participant-tags">${tag}</span>
             <span class="participant-actions">${dqBtn}</span>`;
@@ -352,7 +442,6 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
         list.appendChild(li);
     });
 
-    // Store item height for shift transforms
     requestAnimationFrame(() => {
         const first = list.querySelector('.participant-item');
         if (first) list.style.setProperty('--pi-h', `${first.offsetHeight}px`);
@@ -360,7 +449,6 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
 }
 
 function _onSeedPointerDown(e) {
-    // Only drag from the handle
     if (!e.target.closest('.participant-drag-handle')) return;
     if (e.button !== 0) return;
     e.preventDefault();
@@ -368,7 +456,8 @@ function _onSeedPointerDown(e) {
     const item     = e.currentTarget;
     const srcIndex = parseInt(item.dataset.index);
     const rect     = item.getBoundingClientRect();
-    const list     = document.getElementById('seeding-list');
+    const list     = item.closest('.seeding-list');
+    const wrap     = list.parentElement;
 
     const ghost = item.cloneNode(true);
     ghost.id = 'participant-drag-ghost';
@@ -387,6 +476,7 @@ function _onSeedPointerDown(e) {
         ghost,
         item,
         list,
+        wrap,
     };
 
     document.addEventListener('pointermove', _onSeedPointerMove);
@@ -436,7 +526,7 @@ async function _onSeedPointerUp() {
     document.removeEventListener('pointermove', _onSeedPointerMove);
     document.removeEventListener('pointerup',   _onSeedPointerUp);
 
-    const { srcIndex, currentIndex, ghost, item, list } = _participantDragState;
+    const { srcIndex, currentIndex, ghost, item, list, wrap } = _participantDragState;
     _participantDragState = null;
 
     ghost.remove();
@@ -446,36 +536,37 @@ async function _onSeedPointerUp() {
 
     if (srcIndex === currentIndex) return;
 
-    const wrap = document.getElementById('participants-list-wrap');
     const moved = wrap._entrants.splice(srcIndex, 1)[0];
     wrap._entrants.splice(currentIndex, 0, moved);
 
-    // Re-render immediately so seeds update visually
     const checkedIn = wrap._checkedIn || [];
     const dqs       = wrap._dqs       || [];
     const showCI    = wrap._showCI    || false;
     _rebuildSeedingList(wrap, checkedIn, dqs, showCI);
 
-    await _syncAllSeeds(wrap._entrants);
+    await _syncAllSeeds(wrap._entrants, wrap);
 }
 
-async function _syncAllSeeds(entrants) {
+async function _syncAllSeeds(entrants, wrap) {
     _seedingSyncing = true;
-    const statusEl = document.getElementById('seeding-save-status');
+    console.log('[seeding] syncing seeds:', entrants.map((e, i) => ({
+        name:       e.name,
+        discord_id: e.discord_id,
+        seed:       i + 1,
+    })));
+    const statusEl = wrap.querySelector('.seeding-save-status');
     if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)'; }
     try {
-        for (let i = 0; i < entrants.length; i++) {
-            const e = entrants[i];
-            if (e.challonge_id == null) continue;
-            await api('POST', `/api/tournament/${TOURNAMENT_ID}/seed`, {
-                challonge_id: e.challonge_id,
-                seed:         i + 1,
-            });
-        }
+        const seeds = entrants.map((e, i) => ({
+            discord_id:   e.discord_id,
+            challonge_id: e.challonge_id ?? null,
+            seed:         i + 1,
+        }));
+        await api('POST', `/api/tournament/${TOURNAMENT_ID}/seed`, { seeds });
         if (statusEl) { statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--green)'; }
         setTimeout(() => {
             if (statusEl) statusEl.textContent = '';
-            _seedingSyncing = false; // re-allow polls to update the list
+            _seedingSyncing = false;
         }, 2500);
     } catch (err) {
         _seedingSyncing = false;
@@ -1073,4 +1164,87 @@ async function addSelectedStages() {
         updateBrowserAddButton();
         await loadStagelist();
     } catch (err) { showToast(err.message, 'error'); }
+}
+function renderRegistrationRequests(requests, config) {
+    const section = document.getElementById('registration-requests-section');
+    if (!section) return;
+
+    // Only show if approved_registration is on and there are pending requests
+    if (!config?.approved_registration || !requests?.length) {
+        section.hidden = true;
+        return;
+    }
+
+    section.hidden = false;
+    document.getElementById('requests-count').textContent = requests.length;
+
+    const list = document.getElementById('requests-list');
+    list.innerHTML = requests.map(r => `
+        <div class="request-row">
+            <div class="request-player">
+                ${r.avatar_url
+                    ? `<img src="${escapeHtml(r.avatar_url)}" class="request-avatar" alt="">`
+                    : `<div class="request-avatar-placeholder">${escapeHtml(r.name[0] || '?')}</div>`
+                }
+                <span class="request-name">${escapeHtml(r.name)}</span>
+            </div>
+            <div class="request-actions">
+                <button class="btn btn-success btn-sm" onclick="approveRegistration('${escapeHtml(r.discord_id)}')">Approve</button>
+                <button class="btn btn-danger btn-sm" onclick="denyRegistration('${escapeHtml(r.discord_id)}', '${escapeHtml(r.name)}')">Deny</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function approveRegistration(discordId) {
+    await doAction('approve_registration', { discord_id: discordId });
+}
+
+async function denyRegistration(discordId, name) {
+    const extra = `...`;
+    if (await showConfirm('Deny Registration?', `Deny registration for <strong>${escapeHtml(name)}</strong>?`, 'danger', extra)) {
+        const reason = document.getElementById('deny-reason')?.value?.trim() || '';
+        await doAction('deny_registration', { discord_id: discordId, reason });
+    }
+}
+
+function renderOverviewParticipants(entrants, checkedIn, dqs, state, format, forceRefresh = false) {
+    const wrap    = document.getElementById('overview-participants-wrap');
+    const countEl = document.getElementById('overview-players-count');
+    if (!wrap) return;
+
+    countEl.textContent = `${entrants.length} entrant${entrants.length !== 1 ? 's' : ''}`;
+
+    if (!entrants.length) {
+        wrap.innerHTML = '<div class="empty-state">No entrants yet.</div>';
+        wrap._entrants = null;
+        return;
+    }
+
+    const isBracket = format === 'single elimination' || format === 'double elimination' || format === 'swiss filter';
+    const showCI    = ['checkin', 'active'].includes(state);
+
+    if (isBracket) {
+        const alreadyRendered = Array.isArray(wrap._entrants);
+        const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
+        if (!alreadyRendered || countChanged || _forceRefreshSeeds) {
+            const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
+            renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
+            _forceRefreshSeeds = false;
+        }
+        wrap._checkedIn = checkedIn;
+        wrap._dqs       = dqs;
+        wrap._showCI    = showCI;
+    } else {
+        wrap.innerHTML = entrants.map((e, i) => `
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border)">
+                <span style="width:22px;text-align:right;color:var(--text-muted);font-size:11px;font-weight:600">${i + 1}</span>
+                ${e.avatar_url
+                    ? `<img src="${escapeHtml(e.avatar_url)}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="">`
+                    : `<div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${escapeHtml((e.name||'?')[0])}</div>`
+                }
+                <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(e.name)}</span>
+            </div>`
+        ).join('');
+    }
 }
