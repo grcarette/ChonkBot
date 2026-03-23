@@ -43,14 +43,8 @@ class BotControlView(discord.ui.View):
         self.remove_disqualify_button = discord.ui.Button(
             label=f"Un-Disqualify Player {INDICATOR_EMOJIS['green_check']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-remove_disqualify_player"
         )
-        self.toggle_autocall_button = ToggleButton(
-            label=f"Auto Match-Calling", style=discord.ButtonStyle.primary, on_toggle=self.toggle_autocall, custom_id=f"{name}-toggle_autocall"
-        )
         self.ping_checkin_button = discord.ui.Button(
             label=f"Ping Check-in {INDICATOR_EMOJIS['bell']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-ping_checkin"
-        )
-        self.refresh_match_calls_button = discord.ui.Button(
-            label=f"Refresh Match Calls {INDICATOR_EMOJIS['rotating_arrows']}", style=discord.ButtonStyle.primary, custom_id=f"{name}-refresh_match_calls"
         )
         self.seeding_button = discord.ui.Button(
             label=f"Change Seeding {INDICATOR_EMOJIS['seed']}", style=discord.ButtonStyle.secondary, custom_id=f"{name}-seeding"
@@ -75,7 +69,6 @@ class BotControlView(discord.ui.View):
         self.disqualify_player_button.callback = self.disqualify_player
         self.remove_disqualify_button.callback = self.remove_disqualify_player
         self.ping_checkin_button.callback = self.ping_checkin
-        self.refresh_match_calls_button.callback = self.refresh_match_calls
         self.open_reg_button.callback = self.open_registration
         self.close_reg_button.callback = self.close_registration
         self.next_round_button.callback = self.start_next_round
@@ -98,19 +91,10 @@ class BotControlView(discord.ui.View):
         return {
             'seeding':             self.seeding_button,
             'reset':               self.reset_button,
-            'autocall':            self.toggle_autocall_button,
-            'refresh_match_calls': self.refresh_match_calls_button,
             'round_button':        self.next_round_button,
         }
 
     # ─── Callbacks ────────────────────────────────────────────────────────────
-
-    async def toggle_autocall(self, interaction: discord.Interaction, state):
-        await self.tm.toggle_autocall(state)
-
-    async def refresh_match_calls(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        await self.tm.refresh_match_calls()
 
     async def publish_tournament(self, interaction: discord.Interaction):
         tournament = await self.tm.get_tournament()

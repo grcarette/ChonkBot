@@ -325,3 +325,9 @@ class LobbyMethodsMixin:
         }
         lobbies = await self.lobby_collection.find(query).to_list(None)
         return lobbies
+
+    async def get_all_lobbies(self, tournament_id):
+        query = {
+            'tournament': ObjectId(tournament_id),
+        }
+        return await self.lobby_collection.find(query).to_list(None)

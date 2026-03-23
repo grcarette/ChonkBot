@@ -179,7 +179,6 @@ class BaseFormat:
             'seeding'             — Challonge seeding tool
             'reset'               — Reset tournament
             'autocall'            — Toggle auto match-calling
-            'refresh_match_calls' — Manually refresh match calls
             'round_button'        — Start next Swiss round
 
         Default implementation covers DE/SE.
@@ -190,22 +189,8 @@ class BaseFormat:
         elif state == 'checkin':
             return ['autocall', 'seeding']
         elif state == 'active':
-            return ['autocall', 'refresh_match_calls', 'reset']
+            return ['autocall', 'reset']
         return []
-
-    @property
-    def needs_match_call_refresh(self) -> bool:
-        """
-        Whether TournamentManager should call refresh_match_calls() after
-        on_match_calling_loop completes. True for DE/SE, False for Swiss.
-        Default: True.
-        """
-        return True
-
-    @property
-    def needs_match_call_refresh(self) -> bool:
-        """DE/SE: True. Swiss: False."""
-        return True
 
     @property
     def supports_reset(self) -> bool:

@@ -1,6 +1,7 @@
 import os
 import secrets
 import discord
+import asyncio
 from datetime import datetime, timezone, timedelta
 from aiohttp import web
 from utils.validate_stagecode import validate_stagecode
@@ -461,6 +462,12 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'deny_registration',
         'seed_by_rank',
         'randomize_seeds',
+        'revert_tournament',
+        'call_match', 
+        'hold_match', 
+        'call_all_matches', 
+        'set_autocall',
+        'start_held_match',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -533,7 +540,14 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     {'error': 'Lobby not found in memory — bot may have restarted'},
                     status=404
                 )
-            await match_lobby.force_advance(target_state, winner_id=winner_id)
+
+            if target_state == 'winner':
+                # Update DB immediately so dashboard reflects finished state right away,
+                # then fire the rest of the chain in the background
+                await match_lobby.dh.update_lobby_state(match_id, 'finished')
+                asyncio.create_task(match_lobby.force_advance(target_state, winner_id=winner_id))
+            else:
+                await match_lobby.force_advance(target_state, winner_id=winner_id)
 
         elif action == 'update_config':
             updates = {}
@@ -626,6 +640,50 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
             seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
             await bot.dh.update_all_seeds(tournament['_id'], seeds)
+        elif action == 'revert_tournament':
+            need_tm()
+            await tm.revert_tournament()
+        elif action == 'call_match':
+            need_tm()
+            match_id = body.get('match_id')
+            if match_id is None:
+                return web.json_response({'error': 'match_id is required'}, status=400)
+            pending = await tm.get_pending_matches()
+            match_data = next((m for m in pending if m['match_id'] == match_id), None)
+            if not match_data:
+                return web.json_response({'error': 'Match not found or already called'}, status=400)
+            await tm.call_match(match_data)
+
+        elif action == 'hold_match':
+            need_tm()
+            match_id = body.get('match_id')
+            if match_id is None:
+                return web.json_response({'error': 'match_id is required'}, status=400)
+            pending = await tm.get_pending_matches()
+            match_data = next((m for m in pending if m['match_id'] == match_id), None)
+            if not match_data:
+                return web.json_response({'error': 'Match not found or already called'}, status=400)
+            await tm.call_match(match_data, hold_match=True)
+
+        elif action == 'call_all_matches':
+            need_tm()
+            await tm.call_matches()
+
+        elif action == 'set_autocall':
+            need_tm()
+            enabled = bool(body.get('enabled', False))
+            tm.autocall_matches = enabled
+            if enabled:
+                await tm.call_matches()
+        elif action == 'start_held_match':
+            need_tm()
+            match_id = body.get('match_id')
+            if match_id is None:
+                return web.json_response({'error': 'match_id is required'}, status=400)
+            match_lobby = tm.lobbies.get(match_id)
+            if not match_lobby:
+                return web.json_response({'error': 'Lobby not found'}, status=404)
+            await match_lobby.start_match()
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:
@@ -796,7 +854,7 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         return web.json_response({'error': f'Challonge error: {str(e)}'}, status=502)
 
     # Build lobby state lookup keyed by match_id
-    raw_lobbies = await bot.dh.get_active_lobbies(tournament['_id'])
+    raw_lobbies = await bot.dh.get_all_lobbies(tournament['_id'])
     lobby_by_match = {}
     for l in (raw_lobbies or []):
         mid = l.get('match_id')
@@ -937,6 +995,39 @@ async def handle_browse_stages(request: web.Request) -> web.Response:
 
     return web.json_response({'stages': result})
 
+@require_auth
+async def handle_get_pending_matches(request: web.Request) -> web.Response:
+    """Return all Challonge matches that haven't been called yet."""
+    tournament_id = request.match_info['tournament_id']
+    bot           = request.app['bot']
+
+    tournament = await bot.dh.get_tournament_by_id(tournament_id)
+    if not tournament:
+        return web.json_response({'error': 'Tournament not found'}, status=404)
+
+    tm = bot.th.tournaments.get(tournament['_id'])
+    if not tm:
+        return web.json_response({'error': 'Tournament manager not loaded'}, status=500)
+
+    try:
+        pending = await tm.get_pending_matches()
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+
+    result = []
+    for m in pending:
+        p1 = await bot.dh.get_user(user_id=m['player_1'])
+        p2 = await bot.dh.get_user(user_id=m['player_2'])
+        result.append({
+            'match_id':  m['match_id'],
+            'round':     m['round'],
+            'bracket':   m['bracket'],
+            'p1_name':   p1['name'] if p1 else str(m['player_1']),
+            'p2_name':   p2['name'] if p2 else str(m['player_2']),
+        })
+
+    return web.json_response({'pending': result})
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 def create_app(challonge_handler_factory, bot) -> web.Application:
@@ -965,6 +1056,7 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get('/api/tournament/{tournament_id}/stagelist', handle_get_stagelist)
     app.router.add_get('/api/stages/browse', handle_browse_stages)
     app.router.add_post('/api/tournament/{tournament_id}/seed', handle_set_seed)
+    app.router.add_get('/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
 
     # Seeding
     app.router.add_get( '/seeding',          handle_seeding_page)

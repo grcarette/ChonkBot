@@ -188,24 +188,40 @@ class MatchLobby:
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
     
     async def end_reporting(self, winner_id, is_dq=False):
+        import time
+        t0 = time.perf_counter()
+
+        await self.dh.update_lobby_state(self.match_id, 'finished')
+        print(f"[timing] update_lobby_state: {time.perf_counter()-t0:.3f}s")
+
         await self.report_match(winner_id, is_dq)
+        print(f"[timing] report_match: {time.perf_counter()-t0:.3f}s")
+
         lobby = await self.get_lobby()
         if self.num_winners == len(lobby['results']):
-            await self.dh.update_lobby_state(self.match_id, 'finished')
             await self.dh.end_match(self.match_id)
+            print(f"[timing] end_match: {time.perf_counter()-t0:.3f}s")
 
             loser_id = next(p for p in self.players if p != winner_id)
 
             if self.match_service:
                 await self.match_service.record_result(winner_id, loser_id, is_dq)
+                print(f"[timing] record_result: {time.perf_counter()-t0:.3f}s")
             else:
                 await self.tournament_manager.report_match(self, is_dq)
+                print(f"[timing] report_match fallback: {time.perf_counter()-t0:.3f}s")
 
             await self.send_player_instructions()
+            print(f"[timing] send_player_instructions: {time.perf_counter()-t0:.3f}s")
+
             if is_dq:
                 await self.close_lobby()
+                print(f"[timing] close_lobby: {time.perf_counter()-t0:.3f}s")
         else:
             await self.start_match()
+            print(f"[timing] start_match (multi-game): {time.perf_counter()-t0:.3f}s")
+
+        print(f"[timing] end_reporting TOTAL: {time.perf_counter()-t0:.3f}s")
 
     async def report_match(self, winner_id, is_dq=False):
         lobby = await self.dh.report_match(self.match_id, winner_id)

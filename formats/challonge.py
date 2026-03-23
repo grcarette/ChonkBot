@@ -79,11 +79,9 @@ class ChallongeFormat(BaseFormat):
         await self.ch.start_tournament(tournament['challonge_data']['id'])
 
     async def on_result(self, result: dict, lobby) -> None:
-        """
-        Report the match result to Challonge, then either prompt the TO to end
-        the tournament (if Challonge says it's awaiting review) or call the
-        next round of matches.
-        """
+        import time
+        t0 = time.perf_counter()
+
         tournament = await self.tm.get_tournament()
         winner_user_id = str(result['winner_id'])
         challonge_winner_id = tournament['entrants'][winner_user_id]
@@ -94,13 +92,22 @@ class ChallongeFormat(BaseFormat):
             challonge_winner_id,
             result['is_dq'],
         )
+        print(f"[timing] challonge report_match: {time.perf_counter()-t0:.3f}s")
+
         status = await self.ch.check_tournament_status(tournament['challonge_data']['id'])
+        print(f"[timing] check_tournament_status: {time.perf_counter()-t0:.3f}s")
+
         await self.tm.close_prereqs(lobby)
+        print(f"[timing] close_prereqs: {time.perf_counter()-t0:.3f}s")
 
         if status == 'awaiting_review':
-            await self.tm.prompt_end_tournament()
+                await self.tm.prompt_end_tournament()
         else:
-            await self.tm.call_matches()
+            if getattr(self.tm, 'autocall_matches', False):
+                await self.tm.call_matches()
+        print(f"[timing] call_matches/prompt_end: {time.perf_counter()-t0:.3f}s")
+
+        print(f"[timing] on_result TOTAL: {time.perf_counter()-t0:.3f}s")
 
     async def on_tournament_end(self) -> None:
         """Finalize the Challonge bracket (locks it, prevents further edits)."""

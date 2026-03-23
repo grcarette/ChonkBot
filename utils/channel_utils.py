@@ -17,6 +17,7 @@ CHANNEL_PERMISSIONS = {
     'event-info':      'read_only',
     'event-updates':   'read_only',
     'register':        'read_only',
+    'check-in':        'read_only',
     'event-chat':      'open',
     'organizer-chat':  'private',
 }
@@ -24,7 +25,6 @@ CHANNEL_PERMISSIONS = {
 NONDEFAULT_CHANNELS = [
     'register',
     'check-in',
-    'match-calling',
     'active-matches',
     'registration-approval',
 ]

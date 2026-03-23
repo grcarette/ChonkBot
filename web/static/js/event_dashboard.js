@@ -147,6 +147,22 @@ let _forceRefreshSeeds = false;
 
 async function doAction(action, extra = {}) {
     try {
+        // Optimistic UI update for force advance winner
+        if (action === 'force_advance' && extra.target_state === 'winner') {
+            const container = document.getElementById('matches-section-wrap');
+            if (container) {
+                const matchRow = container.querySelector(`[data-match-id="${extra.match_id}"]`);
+                if (matchRow) {
+                    matchRow.classList.add('match-row-finished');
+                    const tag = matchRow.querySelector('.tag');
+                    if (tag) { tag.className = 'tag tag-done'; tag.textContent = 'Finished'; }
+                    const actions = matchRow.querySelector('.match-row-actions');
+                    if (actions) actions.innerHTML = '';
+                }
+            }
+        }
+
+        loadTournament();
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action, ...extra });
         if (action === 'delete_tournament') {
             window.location.href = '/dashboard';
@@ -159,6 +175,7 @@ async function doAction(action, extra = {}) {
         await loadTournament();
     } catch (err) {
         showToast(err.message, 'error');
+        await loadTournament();
     }
 }
 
@@ -170,11 +187,21 @@ async function loadTournament() {
         renderBadge(data.state);
         renderStats(data);
         renderActionArea(data);
-        renderMatches(data.lobbies || []);
         renderResults(data.lobbies || []);
         populateConfig(data);
         renderOverviewParticipants(data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
         renderRegistrationRequests(data.registration_requests || [], data.config);
+
+        let pending = [];
+        if (data.state === 'active' && data.format !== 'swiss' && data.format !== 'swiss filter') {
+            try {
+                const pm = await api('GET', `/api/tournament/${TOURNAMENT_ID}/pending_matches`);
+                pending = pm.pending || [];
+            } catch (e) {
+                console.warn('[pending_matches] fetch failed:', e.message);
+            }
+        }
+        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false);
     } catch (err) {
         document.getElementById('topbar-sub').textContent = 'Failed to load';
         console.error(err);
@@ -283,6 +310,10 @@ function renderActionArea(t) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Start Tournament
                 </button>
+                <button class="btn btn-danger" id="btn-revert-checkin">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.45"/></svg>
+                    Revert to Registration
+                </button>
             </div>
             ${!stagelistReady ? `<p style="font-size:12px;color:var(--yellow);margin-top:8px">⚠ Stagelist must be published before starting the tournament.</p>` : ''}
         </div>`;
@@ -297,6 +328,10 @@ function renderActionArea(t) {
         document.getElementById('btn-publish-stagelist').onclick = async () => {
             if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
+        };
+        document.getElementById('btn-revert-checkin').onclick = async () => {
+            if (await showConfirm('Revert to Registration?', 'The check-in channel will be removed and all check-in progress will be lost.', 'danger'))
+                await doAction('revert_tournament');
         };
 
     } else if (state === 'active') {
@@ -313,27 +348,94 @@ function renderActionArea(t) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 Start Round ${t.swiss.current_round + 1}
             </button>` : '';
-        area.innerHTML = `${roundHtml}<div class="action-panel"><div class="action-panel-title">Controls</div>
-            <div class="action-row">
-                ${nextBtn}
-                <button class="btn btn-danger" id="btn-end">End Tournament</button>
+
+        area.innerHTML = `
+            ${roundHtml}
+            <div class="action-panel">
+                <div class="action-panel-title">Controls</div>
+                <div class="action-row">
+                    ${nextBtn}
+                    <button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Publish Stagelist to Discord
+                    </button>
+                </div>
             </div>
-            <div class="action-row" style="margin-top:10px">
-                <button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Publish Stagelist to Discord
-                </button>
-            </div>
-        </div>`;
+            <div class="action-panel danger-zone-panel">
+                <div class="danger-zone-header" id="danger-zone-toggle">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span>Danger Zone</span>
+                    <svg class="danger-zone-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+                <div class="danger-zone-body" id="danger-zone-body" hidden>
+                    <div class="action-row" style="padding:14px 18px">
+                        <button class="btn btn-danger" id="btn-end">End Tournament</button>
+                        <button class="btn btn-danger" id="btn-revert-active">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.45"/></svg>
+                            Revert to Check-in
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+
         if (isSwiss && t.swiss?.round_ready)
             document.getElementById('btn-next-round').onclick = () => doAction('next_round');
+
+        document.getElementById('danger-zone-toggle').onclick = () => {
+            const body    = document.getElementById('danger-zone-body');
+            const chevron = document.querySelector('.danger-zone-chevron');
+            body.hidden   = !body.hidden;
+            chevron.style.transform = body.hidden ? '' : 'rotate(180deg)';
+        };
+
+        document.getElementById('btn-publish-stagelist').onclick = async () => {
+            if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
+                await doAction('publish_stagelist');
+        };
+
         document.getElementById('btn-end').onclick = async () => {
             if (await showConfirm('End Tournament?', 'All open matches will be closed and the tournament moved to finished state.', 'danger'))
                 await doAction('progress');
         };
-        document.getElementById('btn-publish-stagelist').onclick = async () => {
-            if (await showConfirm('Publish Stagelist?', 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
-                await doAction('publish_stagelist');
+
+        document.getElementById('btn-revert-active').onclick = async () => {
+            const extraHtml = `
+                <div style="margin-top:12px">
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">
+                        This will close all lobby channels and return the tournament to check-in.<br>
+                        Type <strong style="color:var(--text-primary)">revert</strong> to confirm:
+                    </div>
+                    <input class="field-input" id="revert-confirm-input" placeholder="revert" autocomplete="off" style="width:100%">
+                    <div id="revert-confirm-error" style="font-size:12px;color:var(--red);margin-top:6px;display:none">Text does not match.</div>
+                </div>`;
+
+            document.getElementById('modal-title').textContent  = 'Revert to Check-in?';
+            document.getElementById('modal-desc').textContent   = 'All active lobby channels will be deleted. This cannot be undone.';
+            document.getElementById('modal-extra').innerHTML    = extraHtml;
+            document.getElementById('modal-icon').className     = 'modal-icon danger';
+            const confirmBtn = document.getElementById('modal-confirm');
+            confirmBtn.className = 'modal-confirm danger';
+            document.getElementById('modal-backdrop').hidden = false;
+            document.getElementById('revert-confirm-input').focus();
+
+            const confirmed = await new Promise(resolve => {
+                confirmBtn.onclick = () => {
+                    const typed = document.getElementById('revert-confirm-input').value.trim().toLowerCase();
+                    if (typed !== 'revert') {
+                        document.getElementById('revert-confirm-error').style.display = '';
+                        return;
+                    }
+                    document.getElementById('modal-backdrop').hidden = true;
+                    document.getElementById('modal-extra').innerHTML = '';
+                    resolve(true);
+                };
+                document.getElementById('modal-cancel').onclick = () => {
+                    closeModal();
+                    resolve(false);
+                };
+            });
+
+            if (confirmed) await doAction('revert_tournament');
         };
 
     } else if (state === 'finished') {
@@ -658,28 +760,122 @@ const LOBBY_STATE_TAG = {
     reporting:  ['tag-active', 'Reporting'],
     held:       ['tag-stuck',  'Held'],
     initialize: ['tag-done',   'Init'],
+    finished:   ['tag-done',   'Finished'],
 };
 
-function renderMatches(lobbies) {
-    const tbody = document.getElementById('matches-tbody');
-    document.getElementById('matches-count').textContent = `${lobbies.length} active`;
-    if (!lobbies.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No active lobbies.</td></tr>`;
-        return;
+const FINISHED_LOBBY_STATES = new Set(['finished', 'closed']);
+const ACTIVE_LOBBY_STATES   = new Set(['initialize', 'checkin', 'stage_bans', 'reporting', 'held']);
+
+function renderMatches(lobbies, pending, autocall) {
+    const container  = document.getElementById('matches-section-wrap');
+    const activeLobbies   = lobbies.filter(l => ACTIVE_LOBBY_STATES.has(l.state));
+    const finishedLobbies = lobbies.filter(l => FINISHED_LOBBY_STATES.has(l.state));
+    const totalCount = (pending?.length ?? 0) + lobbies.length;
+    document.getElementById('matches-count').textContent = `${totalCount} total`;
+
+    // ── Toolbar ──
+    const hasPending = pending && pending.length > 0;
+    const autocallClass = autocall ? 'btn-toggle-on' : 'btn-toggle-off';
+    let html = `<div class="matches-toolbar">
+        <button class="btn ${autocallClass}" id="btn-autocall">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Auto Call: ${autocall ? 'On' : 'Off'}
+        </button>
+        <button class="btn btn-primary" id="btn-call-all" ${!hasPending ? 'disabled' : ''}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Call All${hasPending ? ` (${pending.length})` : ''}
+        </button>
+    </div>`;
+
+    // ── Pending ──
+    html += `<div class="matches-group-title">Pending${hasPending ? ` · ${pending.length}` : ''}</div>`;
+    if (hasPending) {
+        html += pending.map(m => {
+            const bracketTag = m.bracket
+                ? `<span class="tag tag-state" style="font-size:10px;padding:1px 5px">${escapeHtml(m.bracket)}</span>`
+                : '';
+            const roundLabel = `Rd ${Math.abs(m.round)}`;
+            return `<div class="match-row" data-match-id="${m.match_id}">
+                <div class="match-row-info">
+                    ${bracketTag}
+                    <span class="match-row-players">${escapeHtml(m.p1_name)} vs ${escapeHtml(m.p2_name)}</span>
+                    <span class="match-row-meta">${roundLabel}</span>
+                </div>
+                <div class="match-row-actions">
+                    <button class="btn btn-success btn-sm" id="call-btn-${m.match_id}" onclick="callMatchOnce(${m.match_id}, this)">Call</button>
+                    <button class="btn btn-secondary btn-sm" onclick="holdMatch(${m.match_id})">Hold</button>
+                </div>
+            </div>`;
+        }).join('');
+    } else {
+        html += `<div class="match-row-empty">No pending matches.</div>`;
     }
-    tbody.innerHTML = lobbies.map(l => {
-        const [tagCls, tagLabel] = LOBBY_STATE_TAG[l.state] || ['tag-done', l.state];
-        const players   = l.player_names.map(escapeHtml).join(' vs ');
-        const namesJson = JSON.stringify(l.player_names);
-        const idsJson   = JSON.stringify(l.player_ids);
-        return `<tr>
-            <td style="font-size:12px;color:var(--text-muted)">${escapeHtml(l.lobby_name || String(l.match_id))}</td>
-            <td>${players}</td>
-            <td><span class="tag ${tagCls}">${tagLabel}</span></td>
-            <td><button class="btn btn-secondary btn-sm"
-                onclick="openForceAdvance(${l.match_id},${namesJson},${idsJson})">Force Advance</button></td>
-        </tr>`;
-    }).join('');
+
+    // ── Active ──
+    html += `<div class="matches-group-title">Active · ${activeLobbies.length}</div>`;
+    if (activeLobbies.length) {
+        html += activeLobbies.map(l => {
+            const [tagCls, tagLabel] = LOBBY_STATE_TAG[l.state] || ['tag-done', l.state];
+            const players   = l.player_names.map(escapeHtml).join(' vs ');
+            const namesJson = JSON.stringify(l.player_names);
+            const idsJson   = JSON.stringify(l.player_ids);
+            const heldBtn   = l.state === 'held'
+                ? `<button class="btn btn-success btn-sm" onclick="startHeldMatch(${l.match_id})">Start Match</button>`
+                : '';
+            return `<div class="match-row" data-match-id="${l.match_id}">
+                <div class="match-row-info">
+                    <span class="match-row-players">${players}</span>
+                    <span class="match-row-meta">${escapeHtml(l.lobby_name || String(l.match_id))}</span>
+                    <span class="tag ${tagCls}">${tagLabel}</span>
+                </div>
+                <div class="match-row-actions">
+                    ${heldBtn}
+                    <button class="btn btn-secondary btn-sm" onclick='forceAdvanceMatch(${l.match_id},${namesJson},${idsJson})'>Force Advance</button>
+                </div>
+            </div>`;
+        }).join('');
+    } else {
+        html += `<div class="match-row-empty">No active lobbies.</div>`;
+    }
+
+    // ── Finished ──
+    html += `<div class="matches-group-title">Finished · ${finishedLobbies.length}</div>`;
+    if (finishedLobbies.length) {
+        html += finishedLobbies.map(l => {
+            const players = l.player_names.map(escapeHtml).join(' vs ');
+            return `<div class="match-row match-row-finished">
+                <div class="match-row-info">
+                    <span class="match-row-players">${players}</span>
+                    <span class="match-row-meta">${escapeHtml(l.lobby_name || String(l.match_id))}</span>
+                </div>
+                <span class="tag tag-done" style="flex-shrink:0">Done</span>
+            </div>`;
+        }).join('');
+    } else {
+        html += `<div class="match-row-empty">No finished matches yet.</div>`;
+    }
+
+    container.innerHTML = html;
+
+    document.getElementById('btn-autocall').onclick = async () => {
+        await doAction('set_autocall', { enabled: !autocall });
+    };
+    document.getElementById('btn-call-all').onclick = async () => {
+        if (!hasPending) return;
+        await doAction('call_all_matches');
+    };
+}
+
+async function callMatch(matchId) {
+    await doAction('call_match', { match_id: matchId });
+}
+
+async function holdMatch(matchId) {
+    await doAction('hold_match', { match_id: matchId });
+}
+
+async function startHeldMatch(matchId) {
+    await doAction('start_held_match', { match_id: matchId });
 }
 
 async function openForceAdvance(matchId, playerNames, playerIds) {
@@ -1165,6 +1361,7 @@ async function addSelectedStages() {
         await loadStagelist();
     } catch (err) { showToast(err.message, 'error'); }
 }
+
 function renderRegistrationRequests(requests, config) {
     const section = document.getElementById('registration-requests-section');
     if (!section) return;
@@ -1248,3 +1445,68 @@ function renderOverviewParticipants(entrants, checkedIn, dqs, state, format, for
         ).join('');
     }
 }
+let _pendingForceWinner = null;
+
+async function forceAdvanceMatch(matchId, playerNames, playerIds) {
+    _pendingForceWinner = null;
+
+    const btns = playerIds.map((id, i) =>
+        `<button class="player-pick-btn" id="pick-winner-${id}" onclick="selectForceWinner(${matchId},${id},'${escapeHtml(playerNames[i])}')">${escapeHtml(playerNames[i])}</button>`
+    ).join('');
+
+    document.getElementById('modal-title').textContent  = 'Force Advance';
+    document.getElementById('modal-desc').textContent   = 'Select the winner, then confirm.';
+    document.getElementById('modal-extra').innerHTML    = `
+        <div class="player-select-grid">${btns}</div>
+        <div id="force-winner-selected" style="margin-top:12px;font-size:13px;color:var(--text-muted);text-align:center">No winner selected</div>`;
+    document.getElementById('modal-icon').className     = 'modal-icon warning';
+    const confirmBtn = document.getElementById('modal-confirm');
+    confirmBtn.className  = 'modal-confirm warning';
+    confirmBtn.disabled   = true;
+    document.getElementById('modal-backdrop').hidden = false;
+
+    const confirmed = await new Promise(resolve => {
+        confirmBtn.onclick = () => {
+            document.getElementById('modal-backdrop').hidden = true;
+            document.getElementById('modal-extra').innerHTML = '';
+            confirmBtn.disabled = false;
+            resolve(true);
+        };
+        document.getElementById('modal-cancel').onclick = () => {
+            confirmBtn.disabled = false;
+            closeModal();
+            resolve(false);
+        };
+    });
+
+    if (confirmed && _pendingForceWinner) {
+        await doAction('force_advance', {
+            match_id:     _pendingForceWinner.matchId,
+            target_state: 'winner',
+            winner_id:    _pendingForceWinner.winnerId,
+        });
+    }
+}
+
+function selectForceWinner(matchId, winnerId, name) {
+    _pendingForceWinner = { matchId, winnerId };
+    // Highlight selected
+    document.querySelectorAll('.player-pick-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById(`pick-winner-${winnerId}`)?.classList.add('selected');
+    document.getElementById('force-winner-selected').textContent   = `Winner: ${name}`;
+    document.getElementById('force-winner-selected').style.color   = 'var(--green)';
+    document.getElementById('modal-confirm').disabled = false;
+}
+
+async function submitMatchForceWinner(matchId, winnerId) {
+    document.getElementById('modal-confirm').style.display = '';
+    closeModal();
+    await doAction('force_advance', { match_id: matchId, target_state: 'winner', winner_id: winnerId });
+}
+
+async function callMatchOnce(matchId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Calling...';
+    await doAction('call_match', { match_id: matchId });
+}
+

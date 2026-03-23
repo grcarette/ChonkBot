@@ -9,7 +9,6 @@ from utils.embed_utils import create_stage_embed
 from ui.bot_control import BotControlView
 from ui.register_control import RegisterControlView
 from ui.tournament_checkin import TournamentCheckinView
-from ui.match_call import MatchCallView
 from ui.confirmation import ConfirmationView
 from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
@@ -127,14 +126,3 @@ class TournamentHandler():
         guild = self.bot.guilds[0]
         category = discord.utils.get(guild.categories, id=category_id)
         return category
-
-
-            
-        
-
-        
-        
-        
-       
-        
-        

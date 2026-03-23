@@ -337,3 +337,8 @@ class TournamentMethodsMixin:
             {'_id': ObjectId(str(tournament_id))},
             {'$set': {'seeds': {str(k): v for k, v in seeds.items()}}}
         )
+
+    async def clear_checkin(self, tournament_id):
+        query  = {'_id': ObjectId(tournament_id)}
+        update = {'$set': {'checked_in': []}}
+        await self.tournament_collection.update_one(query, update)

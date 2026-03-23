@@ -9,7 +9,6 @@ from utils.discord_preset_colors import get_random_color
 from utils.get_bracket_link import get_bracket_link
 from utils.validate_stagecode import validate_stagecode
 
-from ui.match_call import MatchCallView
 from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
 from ui.match_report import MatchReportButton
@@ -44,10 +43,9 @@ class TournamentManager:
         self.ch = ChallongeHandler()
         self.guild = self.bot.guild
         self.lobbies = {}
-        self.match_calls = {}
         self.bot_control = None
         self.tournament_reset = False
-        self.autocall_matches = False
+        self.called_match_ids = set()
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
         self.format = None
@@ -107,6 +105,8 @@ class TournamentManager:
                 match_service=None,
             )
             self.lobbies[lobby['match_id']] = match_lobby
+            # Track already-called matches so call_matches() won't re-call them
+            self.called_match_ids.add(lobby['match_id'])
             if lobby['state'] == 'initialized':
                 pass
             elif lobby['state'] == 'checkin':
@@ -127,7 +127,7 @@ class TournamentManager:
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
         elif tournament['state'] == 'active':
-            if self.format and not self.format.needs_match_call_refresh:
+            if self.format:
                 self.bot.add_view(SwissActiveRegisterView(self))
             await self.start_tournament_loop()
         elif tournament['state'] == 'finished':
@@ -568,18 +568,6 @@ class TournamentManager:
                         self.guild.default_role, overwrite=overwrite
                     )
 
-        tournament_category = self.get_tournament_category()
-        matchcall_channel = discord.utils.get(tournament_category.channels, name='match-calling')
-        if not matchcall_channel:
-            await create_channel(
-                guild=self.bot.guild,
-                tournament_category=self.get_tournament_category(),
-                hide_channel=True,
-                channel_name='match-calling',
-                channel_overwrites=CHANNEL_PERMISSIONS['match-calling'],
-                organizer_role=self.organizer_role
-            )
-
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
         await self.send_instruction_message()
         await self.format.on_tournament_start()
@@ -612,42 +600,62 @@ class TournamentManager:
 
     async def start_tournament_loop(self):
         await self.format.on_match_calling_loop()
-        if self.format.needs_match_call_refresh:
-            await self.refresh_match_calls()
-        self.start_checkin_reminder_loop() 
+        self.start_checkin_reminder_loop()
 
     # ─── Match calling ────────────────────────────────────────────────────────
+    # Matches are called automatically on tournament start and after each result.
+    # The web dashboard exposes pending matches and can trigger call_match /
+    # hold_match via POST /api/tournament/{id}/action with action='call_match'
+    # or 'hold_match', passing match_id in the request body.
 
-    async def refresh_match_calls(self):
-        await self.purge_match_calls()
-        await self.call_matches()
+    async def get_pending_matches(self) -> list[dict]:
+        """
+        Return all pending Challonge matches that have not yet been called.
+        Used by the web API to display uncalled matches on the dashboard.
+        """
+        tournament = await self.get_tournament()
+
+        raw_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
+        result = []
+
+        for match in raw_matches:
+            try:
+                match_data = await self.parse_match_data(match)
+            except Exception as e:
+                continue
+            if match_data is None:
+                continue
+            match_exists = await self.bot.dh.find_match(match_data['match_id'])
+            if not match_exists and match_data['match_id'] not in self.called_match_ids:
+                result.append(match_data)
+
+        return result
 
     async def call_matches(self):
-            tournament = await self.get_tournament()
-            pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
-            for match in pending_matches:
-                if self.tournament_reset:
-                    await self.purge_match_calls()
-                    return
+        """
+        Call all currently pending matches. Only triggered explicitly
+        from the web dashboard (Call All button or Auto Call).
+        """
+        tournament = await self.get_tournament()
+        pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
+        for match in pending_matches:
+            if self.tournament_reset:
+                return
+            try:
+                match_data = await self.parse_match_data(match)
+            except Exception as e:
+                print(f"[call_matches] Error parsing match {match.get('id')}: {e}")
+                await self._alert_unresolvable_match(match, str(e))
+                continue
+            if match_data is None:
+                await self._alert_unresolvable_match(match)
+                continue
+            if match_data['match_id'] not in self.called_match_ids:
                 try:
-                    match_data = await self.parse_match_data(match)
+                    await self.call_match(match_data)
                 except Exception as e:
-                    print(f"[call_matches] Error parsing match {match.get('id')}: {e}")
+                    print(f"[call_matches] Failed to call match {match_data['match_id']}: {e}")
                     await self._alert_unresolvable_match(match, str(e))
-                    continue
-                if match_data is None:
-                    await self._alert_unresolvable_match(match)
-                    continue
-                match_exists = await self.bot.dh.find_match(match_data['match_id'])
-                if not match_exists and match_data['match_id'] not in self.match_calls:
-                    if self.autocall_matches:
-                        await self.call_match(match_data)
-                    else:
-                        await self.add_match_call(match_data)
-                else:
-                    if match_exists and match_data['match_id'] not in self.match_calls:
-                        if match_exists['state'] == 'held':
-                            await self.add_match_call(match_data, match_held=True)
 
     async def _alert_unresolvable_match(self, match, error: str = None):
         """
@@ -681,36 +689,6 @@ class TournamentManager:
         except Exception as e:
             print(f"[_alert_unresolvable_match] Failed to post alert: {e}")
 
-    async def add_match_call(self, match_data, match_held=False):
-        category = self.get_tournament_category()
-        channel = discord.utils.get(category.channels, name='match-calling')
-        tournament = await self.get_tournament()
-        player_1, player_2 = await self.get_players_from_match(match_data)
-
-        waiting_since = await self.bot.dh.get_lobby_time(match_data['prereq_matches'])
-        waiting_since = self.get_short_timestamp(waiting_since)
-
-        bracket = match_data['bracket']
-        if bracket == 'Winners':
-            color = discord.Color.green()
-            title = f"Winners Round {match_data['round']} - {player_1['name']} vs {player_2['name']}"
-        elif bracket == 'Losers':
-            color = discord.Color.red()
-            title = f"Losers Round {abs(match_data['round'])} - {player_1['name']} vs {player_2['name']}"
-        else:
-            color = discord.Color.blue()
-            title = f"Round {match_data['round']} - {player_1['name']} vs {player_2['name']}"
-
-        embed = discord.Embed(
-            title=title,
-            description=f"{waiting_since}",
-            color=color
-        )
-        match_call_view = MatchCallView(self, match_data, match_held)
-        match_call_message = await channel.send(embed=embed, view=match_call_view)
-        await match_call_view.add_message(match_call_message)
-        self.match_calls[match_data['match_id']] = match_call_message
-
     async def get_lobby_name(self, match_data):
         player_1, player_2 = await self.get_players_from_match(match_data)
         round = match_data['round']
@@ -725,6 +703,23 @@ class TournamentManager:
         return lobby_name
 
     async def call_match(self, match_data, hold_match=False):
+        """
+        Create a lobby channel for a match and initialize it.
+        Called automatically by call_matches(), or triggered from the web dashboard
+        via POST /api/tournament/{id}/action with action='call_match'.
+        """
+        # Hard guard: never create a lobby if one already exists for this match
+        if match_data['match_id'] in self.called_match_ids:
+            print(f"[call_match] Match {match_data['match_id']} already called, skipping.")
+            return
+        if await self.bot.dh.find_match(match_data['match_id']):
+            print(f"[call_match] Match {match_data['match_id']} already exists in DB, skipping.")
+            self.called_match_ids.add(match_data['match_id'])
+            return
+
+        # Add to called set immediately before any async work so concurrent calls are blocked
+        self.called_match_ids.add(match_data['match_id'])
+
         guild = self.guild
         tournament = await self.get_tournament()
         player_1, player_2 = await self.get_players_from_match(match_data)
@@ -757,8 +752,7 @@ class TournamentManager:
             match_service=service,
         )
         self.lobbies[match_data['match_id']] = match_lobby
-        if match_data['match_id'] in self.match_calls and not hold_match:
-            await self.match_calls[match_data['match_id']].delete()
+
         if player_1['user_id'] in tournament['dqs']:
             await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
         elif player_2['user_id'] in tournament['dqs']:
@@ -767,16 +761,11 @@ class TournamentManager:
             await match_lobby.initialize_match(hold_match)
 
     async def start_held_match(self, match_data):
+        """
+        Start a previously held match. Can be triggered from the web dashboard
+        via POST /api/tournament/{id}/action with action='start_held_match'.
+        """
         await self.lobbies[match_data['match_id']].start_match()
-        if match_data['match_id'] in self.match_calls:
-            await self.match_calls[match_data['match_id']].delete()
-
-    async def purge_match_calls(self):
-        tournament_category = self.get_tournament_category()
-        channel = discord.utils.get(tournament_category.channels, name='match-calling')
-        if channel:
-            await channel.purge(limit=None)
-        self.match_calls.clear()
 
     # ─── Result reporting ─────────────────────────────────────────────────────
 
@@ -799,20 +788,19 @@ class TournamentManager:
         await self.format.on_result(result, lobby)
 
     async def report_match_from_result(self, result):
-        """
-        Called by MatchService.on_complete. Looks up the lobby and delegates
-        to the format. This is the primary result path for all new matches.
-        """
         lobby = self.lobbies.get(result['match_id'])
         if lobby:
             await self.format.on_result(result, lobby)
+            # If autocall is on, call any newly available matches
+            if getattr(self, 'autocall_matches', False) and self.format.needs_match_call_refresh:
+                await self.call_matches()
 
     async def close_prereqs(self, lobby):
-            lobby_data = await lobby.get_lobby()
-            for match_id in lobby_data['prereq_matches']:
-                prereq_data = await self.bot.dh.get_lobby(match_id)
-                if prereq_data['state'] != 'closed':
-                    await self.lobbies[match_id].close_lobby()
+        lobby_data = await lobby.get_lobby()
+        for match_id in lobby_data['prereq_matches']:
+            prereq_data = await self.bot.dh.get_lobby(match_id)
+            if prereq_data['state'] != 'closed':
+                await self.lobbies[match_id].close_lobby()
 
     # ─── Reset ───────────────────────────────────────────────────────────────
 
@@ -837,7 +825,9 @@ class TournamentManager:
         await self.format.on_reset()
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'registration')
         await self.bot.dh.clear_lobbies(self.tournament['_id'])
-        await self.purge_match_calls()
+        if self.format and hasattr(self.format, 'on_reset'):
+            await self.format.on_reset()
+        self.called_match_ids.clear()
         await self.progress_tournament()
         self.tournament_reset = False
 
@@ -976,6 +966,15 @@ class TournamentManager:
         player_2_id = match_data['player_2']
         player_1 = await self.bot.dh.get_user(user_id=player_1_id)
         player_2 = await self.bot.dh.get_user(user_id=player_2_id)
+
+        # In debug mode, synthesize a fake user if the DB doc is missing.
+        # This handles stale tournaments where debug users were never persisted.
+        if self.debug:
+            if player_1 is None:
+                player_1 = {'user_id': player_1_id, 'name': f'Debug User {player_1_id}'}
+            if player_2 is None:
+                player_2 = {'user_id': player_2_id, 'name': f'Debug User {player_2_id}'}
+
         if player_1 is None or player_2 is None:
             raise ValueError(
                 f"[get_players_from_match] Could not find users: "
@@ -1047,11 +1046,6 @@ class TournamentManager:
         base_url = os.getenv('WEB_BASE_URL', 'http://localhost:8080').strip()
         return f"{base_url}/seeding?token={token}"
 
-    # ─── Autocall ────────────────────────────────────────────────────────────
-
-    async def toggle_autocall(self, state):
-        self.autocall_matches = state
-
     # ─── Utilities ───────────────────────────────────────────────────────────
 
     async def get_tournament(self):
@@ -1084,11 +1078,11 @@ class TournamentManager:
 
     def start_checkin_reminder_loop(self):
         self._checkin_reminded = set()
-        self._checkin_autodqd = set()      # ← add this line
+        self._checkin_autodqd = set()
         self._checkin_reminder_task = asyncio.create_task(
             self._checkin_reminder_loop()
         )
- 
+
     async def _checkin_reminder_loop(self):
         """
         Every CHECKIN_POLL_INTERVAL seconds, query the DB for lobbies in 'checkin'
@@ -1101,7 +1095,7 @@ class TournamentManager:
                 await self._send_checkin_reminders()
             except Exception as e:
                 print(f"[checkin_reminder_loop] Unexpected error: {e}")
- 
+
     async def _send_checkin_reminders(self):
         if self.debug:
             return
@@ -1149,7 +1143,7 @@ class TournamentManager:
                     self._checkin_reminded.add(key)
                 except discord.Forbidden:
                     self._checkin_reminded.add(key)
- 
+
     def stop_checkin_reminder_loop(self):
         task = getattr(self, '_checkin_reminder_task', None)
         if task and not task.done():
@@ -1222,22 +1216,15 @@ class TournamentManager:
         Force-end a Swiss tournament: close lobbies, post results, finalize.
         Called by /end_swiss_tournament via ConfirmationView.
         """
-        # Mark the swiss event as finished
         swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
         if swiss_event:
             await self.bot.dh.update_swiss_state(swiss_event['_id'], 'finished')
 
-        # Stop the manager from running
         if hasattr(self.format, 'manager'):
             self.format.manager.running = False
 
-        # Close all lobbies and fire on_tournament_end (posts standings to match-calling)
         await self.end_tournament()
-
-        # Post final results to the results channel
         await self.post_final_results()
-
-        # Update tournament state and tear down Discord
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'finished')
         await self.finalize_tournament()
 
@@ -1279,7 +1266,6 @@ class TournamentManager:
 
         embed = discord.Embed(title=tournament['name'], description=description, color=color)
 
-        # Find existing bot message to edit, or post new one
         bot_id = self.bot.id
         existing = None
         async for msg in channel.history(limit=20, oldest_first=True):
@@ -1292,14 +1278,12 @@ class TournamentManager:
         else:
             await channel.send(embed=embed)
 
-
     async def publish_stagelist(self):
         from utils.embed_utils import create_stage_embed
         tournament = await self.get_tournament()
         if not tournament.get('stagelist'):
             return
 
-        # Get or create the stagelist channel
         stagelist_channel = await self.get_channel('stagelist')
         if not stagelist_channel:
             guild               = self.bot.guilds[0]
@@ -1357,14 +1341,64 @@ class TournamentManager:
 
         channels = {ch.name: ch for ch in tournament_category.channels}
 
-        # Build the desired order using only channels that currently exist
         desired = [channels[name] for name in CHANNEL_ORDER if name in channels]
 
-        # Find the base position offset (where this category's channels start)
         base_position = min(ch.position for ch in desired) if desired else 0
 
-        # Only edit channels that are already out of position
         for i, ch in enumerate(desired):
             expected = base_position + i
             if ch.position != expected:
                 await ch.edit(position=expected)
+
+    async def revert_tournament(self):
+            """
+            Revert the tournament one step back.
+            checkin → registration: delete check-in channel, clear checked_in, re-open registration.
+            active  → checkin: only if no matches have been reported. Close lobby channels,
+                            clear lobbies, restore check-in channel.
+            """
+            tournament = await self.get_tournament()
+            state = tournament['state']
+
+            if state == 'checkin':
+                # Delete the check-in channel
+                checkin_channel = await self.get_channel('check-in')
+                if checkin_channel:
+                    await checkin_channel.delete()
+
+                # Clear all check-in data
+                await self.bot.dh.clear_checkin(tournament['_id'])
+
+                # Restore registration channel visibility and re-post the register view
+                register_channel = await self.get_channel('register')
+                if register_channel:
+                    history = [msg async for msg in register_channel.history(limit=1)]
+                    if not history:
+                        view  = RegisterControlView(self)
+                        embed = discord.Embed(
+                            title=f"Register for {self.tournament['name']}",
+                            color=discord.Color.green()
+                        )
+                        await register_channel.send(embed=embed, view=view)
+                    await self.set_registration_visibility(True)
+
+                await self.bot.dh.open_registration(tournament['_id'])
+                await self.bot.dh.update_tournament_state(self.tournament['_id'], 'registration')
+
+            elif state == 'active':
+                self.stop_checkin_reminder_loop()
+
+                for lobby in self.lobbies.values():
+                    await lobby.delete_lobby()
+                self.lobbies.clear()
+                self.called_match_ids.clear()
+                await self.bot.dh.clear_lobbies(self.tournament['_id'])
+
+                if self.format and hasattr(self.format, 'on_reset'):
+                    await self.format.on_reset()
+
+                await self.start_checkin()
+                await self.bot.dh.update_tournament_state(self.tournament['_id'], 'checkin')
+
+            else:
+                raise ValueError(f'Cannot revert from state: {state!r}')
