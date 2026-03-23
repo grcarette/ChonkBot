@@ -606,29 +606,26 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             await bot.dh.update_all_seeds(tournament['_id'], seeds)
 
         elif action == 'seed_by_rank':
-            import asyncio
-            entrant_ids = list(tournament.get('entrants', {}).keys())
-            print(f"[seed_by_rank] fetching elo for {len(entrant_ids)} players concurrently")
+            entrant_ids = set(int(did) for did in tournament.get('entrants', {}).keys())
 
-            async def fetch_elo(discord_id_str):
-                discord_id = int(discord_id_str)
+            leaderboard = await bot.uchranked_api.get_leaderboard(10000)
+
+            elo_map = {}
+            for p in leaderboard:
                 try:
-                    player = await bot.uchranked_api.get_player(discord_id)
-                    elo = player['elo'] if player and player.get('found') else 0
-                    print(f"[seed_by_rank] {discord_id} → elo {elo}")
-                except Exception as e:
-                    print(f"[seed_by_rank] {discord_id} → error: {e}")
-                    elo = 0
-                return discord_id, elo
+                    discord_id = int(p['discord_id'])
+                    if discord_id in entrant_ids:
+                        elo_map[discord_id] = p['elo']
+                except (ValueError, TypeError, KeyError):
+                    continue
 
-            results    = await asyncio.gather(*[fetch_elo(did) for did in entrant_ids], return_exceptions=True)
-            print(f"[seed_by_rank] results: {results}")
-            elo_map    = {r[0]: r[1] for r in results if isinstance(r, tuple)}
+            for discord_id in entrant_ids:
+                if discord_id not in elo_map:
+                    elo_map[discord_id] = 0
+
             sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
             seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
-            print(f"[seed_by_rank] saving seeds: {seeds}")
             await bot.dh.update_all_seeds(tournament['_id'], seeds)
-            print(f"[seed_by_rank] done")
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:
