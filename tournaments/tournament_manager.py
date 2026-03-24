@@ -411,7 +411,7 @@ class TournamentManager:
 
         await self.format.on_player_register(user_id, user)
         if tournament.get('config', {}).get('display_entrants'):
-            await self.post_event_info()
+            await self.edit_event_info()
         return True
         return True
 
@@ -435,7 +435,7 @@ class TournamentManager:
         await self.format.on_player_unregister(user_id)
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
         if tournament.get('config', {}).get('display_entrants'):
-            await self.post_event_info()
+            await self.edit_event_info()
 
     async def register_player_direct(self, user_id):
         """Register a player directly, bypassing the approval check. Used by web approval flow."""
@@ -458,7 +458,7 @@ class TournamentManager:
         user = await self.bot.dh.get_user(user_id=user_id)
         await self.format.on_player_register(user_id, user)
         if (await self.get_tournament()).get('config', {}).get('display_entrants'):
-            await self.post_event_info()
+            await self.edit_event_info()
         return True
         return True
 
@@ -1356,12 +1356,9 @@ class TournamentManager:
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'finished')
         await self.finalize_tournament()
 
-    async def post_event_info(self):
-        """Post or update the event-info embed."""
+    async def _build_event_info_embed(self):
+        """Build and return (embed, view, banner_file) for the event-info message."""
         tournament = await self.get_tournament()
-        channel    = await self.get_channel('event-info')
-        if not channel:
-            return
 
         if 'color' in tournament.get('config', {}):
             from utils.color_utils import discord_color_from_hex
@@ -1432,7 +1429,6 @@ class TournamentManager:
 
         if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
             from utils.get_bracket_link import get_bracket_link
-            from ui.link_view import LinkView
             from utils.emojis import INDICATOR_EMOJIS
             bracket_link = await get_bracket_link(tournament['challonge_data']['url'])
             view = discord.ui.View()
@@ -1457,32 +1453,21 @@ class TournamentManager:
 
         # ── Build embed ───────────────────────────────────────────────────────────
         embed = discord.Embed(color=color)
-
         embed.title = tournament['name']
         if banner_image_url:
             embed.set_image(url=banner_image_url)
 
-        # Inline fields: Date, Format, TOs on one row
-        embed.add_field(
-            name='Date',
-            value=tournament.get('date', 'TBA'),
-            inline=True
-        )
+        embed.add_field(name='Date', value=tournament.get('date', 'TBA'), inline=True)
         fmt_display = tournament.get('format', '').replace('_', ' ').title()
         if tournament.get('format') == 'swiss':
             fmt_display += f" ({tournament.get('round_limit', 8)} rounds)"
-        embed.add_field(
-            name='Format',
-            value=fmt_display,
-            inline=True
-        )
+        embed.add_field(name='Format', value=fmt_display, inline=True)
         embed.add_field(
             name="TO's",
             value='\n'.join(organizer_list) if organizer_list else 'N/A',
             inline=True
         )
 
-        # Entrants as full-width field
         if entrant_list:
             names = '\n'.join(f"{i+1}. {e['name']}" for i, e in enumerate(entrant_list))
             embed.add_field(
@@ -1491,25 +1476,46 @@ class TournamentManager:
                 inline=False
             )
 
-        # ── Find or create the message ────────────────────────────────────────────
-        bot_id   = self.bot.user.id
+        return embed, view, banner_file
+
+    async def post_event_info(self):
+        """Send a fresh event-info message. Call on tournament creation or banner change."""
+        channel = await self.get_channel('event-info')
+        if not channel:
+            return
+        embed, view, banner_file = await self._build_event_info_embed()
+        if banner_file:
+            await channel.send(file=banner_file, embed=embed, view=view)
+        else:
+            await channel.send(embed=embed, view=view)
+
+    async def edit_event_info(self):
+        """Edit the existing event-info message in place. Call on registration/seed changes."""
+        channel = await self.get_channel('event-info')
+        if not channel:
+            return
+        embed, view, banner_file = await self._build_event_info_embed()
+
+        bot_id = self.bot.user.id
         existing = None
         async for msg in channel.history(limit=20, oldest_first=True):
             if msg.author.id == bot_id and (msg.embeds or msg.attachments):
                 existing = msg
                 break
 
-        if existing:
-            if banner_file:
-                await existing.delete()
-                await channel.send(file=banner_file, embed=embed, view=view)
-            else:
-                await existing.edit(embed=embed, view=view)
-        else:
-            if banner_file:
-                await channel.send(file=banner_file, embed=embed, view=view)
-            else:
-                await channel.send(embed=embed, view=view)
+        if not existing:
+            # Fallback: no message found, post fresh
+            await self.post_event_info()
+            return
+
+        # Reuse the existing CDN URL for the banner so we can edit without re-uploading
+        if banner_file:
+            for att in existing.attachments:
+                if att.filename == 'banner.jpg':
+                    embed.set_image(url=att.url)
+                    break
+
+        await existing.edit(embed=embed, view=view)
 
     async def publish_stagelist(self):
         from utils.embed_utils import create_stage_embed

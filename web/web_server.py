@@ -738,10 +738,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             if updates:
                 await bot.dh.edit_tournament_config(tournament['_id'], **updates)
                 if tm and 'config.display_entrants' in updates:
-                    await tm.post_event_info()
+                    await tm.edit_event_info()
         elif action == 'refresh_event_info':
             need_tm()
-            await tm.post_event_info()
+            await tm.edit_event_info()
         elif action == 'toggle_hold_when_ready':
             need_tm()
             match_id = body.get('match_id')
