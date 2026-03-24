@@ -48,6 +48,7 @@ class TournamentManager:
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
         self.format = None
+        self.hold_when_ready: set[int] = set()
 
     # ─── Ranked API helper ────────────────────────────────────────────────────
 
@@ -818,12 +819,16 @@ class TournamentManager:
                 )
                 self.lobbies[match_data['match_id']] = match_lobby
 
+                should_hold = hold_match or (match_data['match_id'] in self.hold_when_ready)
+                self.hold_when_ready.discard(match_data['match_id'])
+
                 if player_1['user_id'] in tournament['dqs']:
                     await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
                 elif player_2['user_id'] in tournament['dqs']:
                     await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
                 else:
-                    await match_lobby.initialize_match(hold_match)
+                    await match_lobby.initialize_match(should_hold)
+                    
             except Exception as e:
                 print(f"[call_match] Background lobby creation failed for match {match_data['match_id']}: {e}")
                 self.lobbies.pop(match_data['match_id'], None)
@@ -837,6 +842,18 @@ class TournamentManager:
         via POST /api/tournament/{id}/action with action='start_held_match'.
         """
         await self.lobbies[match_data['match_id']].start_match()
+
+    def toggle_hold_when_ready(self, match_id: int) -> bool:
+        """
+        Toggle the hold-when-ready flag for a match.
+        Returns True if the match is now flagged, False if unflagged.
+        """
+        if match_id in self.hold_when_ready:
+            self.hold_when_ready.discard(match_id)
+            return False
+        else:
+            self.hold_when_ready.add(match_id)
+            return True
 
     # ─── Result reporting ─────────────────────────────────────────────────────
 

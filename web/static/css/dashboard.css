@@ -393,5 +393,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
     justify-content: center;
     flex-shrink: 0;
 }
+.lobby-tag-hold {
+    background: rgba(250, 166, 26, 0.15);
+    color: var(--yellow);
+    border: 1px solid rgba(250, 166, 26, 0.3);
+}
 
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -492,6 +492,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'post_results',
         'update_config',
         'refresh_event_info',
+        'toggle_hold_when_ready',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -737,6 +738,13 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         elif action == 'refresh_event_info':
             need_tm()
             await tm.post_event_info()
+        elif action == 'toggle_hold_when_ready':
+            need_tm()
+            match_id = body.get('match_id')
+            if match_id is None:
+                return web.json_response({'error': 'match_id is required'}, status=400)
+            is_flagged = tm.toggle_hold_when_ready(match_id)
+            return web.json_response({'ok': True, 'flagged': is_flagged})
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:
@@ -918,6 +926,11 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         if mid is not None:
             lobby_by_match[mid] = l
 
+    hold_when_ready = set()
+    tm = bot.th.tournaments.get(tournament['_id'])
+    if tm:
+        hold_when_ready = getattr(tm, 'hold_when_ready', set())
+
     def player_name(challonge_pid):
         if challonge_pid is None:
             return None
@@ -929,7 +942,7 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
     def player_discord_id(challonge_pid):
         if challonge_pid is None:
             return None
-        return challonge_to_discord.get(int(challonge_pid))
+        return str(challonge_to_discord.get(int(challonge_pid)))
 
     def player_avatar(challonge_pid):
         if challonge_pid is None:
@@ -985,6 +998,7 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
             'picked_stage':      picked_stage,
             'prereq_ids':        prereq_ids,
             'has_lobby':         lobby is not None,
+            'hold_when_ready':   match_id in hold_when_ready,
         })
 
     matches.sort(key=lambda m: (

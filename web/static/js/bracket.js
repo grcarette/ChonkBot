@@ -150,13 +150,15 @@ function matchCardStateClass(m) {
 }
 
 function lobbyTagClass(m) {
-    if (m.state === 'complete') return 'lobby-tag-complete';
-    if (!m.has_lobby)           return 'lobby-tag-pending';
+    if (m.state === 'complete')       return 'lobby-tag-complete';
+    if (m.hold_when_ready)            return 'lobby-tag-hold';
+    if (!m.has_lobby)                 return 'lobby-tag-pending';
     return `lobby-tag-${m.lobby_state || 'pending'}`;
 }
 
 function lobbyTagLabel(m) {
     if (m.state === 'complete') return 'Done';
+    if (m.hold_when_ready)      return 'Hold ★';
     if (!m.has_lobby)           return 'Waiting';
     return (m.lobby_state || 'pending').replace(/_/g, ' ');
 }
@@ -259,7 +261,15 @@ function populateDrawer(m) {
 
     if (m.state === 'pending' && !m.has_lobby) {
         actionsHtml = `<div><div class="drawer-section-title">Actions</div>
-            <p style="font-size:12px;color:var(--text-muted)">Waiting for prerequisite matches.</p>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+                Waiting for prerequisite matches.
+            </p>
+            <div class="drawer-action-row">
+                <button class="btn ${m.hold_when_ready ? 'btn-toggle-on' : 'btn-secondary'} btn-sm"
+                    id="drawer-btn-hold-when-ready">
+                    ${m.hold_when_ready ? '★ Hold When Ready' : '☆ Hold When Ready'}
+                </button>
+            </div>
         </div>`;
 
     } else if (m.state === 'open' && !m.has_lobby) {
@@ -381,6 +391,25 @@ function populateDrawer(m) {
     $('drawer-btn-dq2')?.addEventListener('click', () => drawerDQ(p2i, m.p2_name || ''));
     $('drawer-btn-reset-match')?.addEventListener('click', () => drawerResetMatch(m.match_id));
     $('drawer-btn-reset-lobby')?.addEventListener('click', () => drawerResetLobby(m.match_id));
+    $('drawer-btn-hold-when-ready')?.addEventListener('click', async () => {
+        try {
+            const res = await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+                action:   'toggle_hold_when_ready',
+                match_id: m.match_id,
+            });
+            // Update the local bracketData so the card re-renders correctly
+            // without a full bracket reload
+            const match = bracketData?.matches?.find(bm => bm.match_id === m.match_id);
+            if (match) match.hold_when_ready = res.flagged;
+            m.hold_when_ready = res.flagged;
+            // Re-render the card and repopulate the drawer to reflect new state
+            renderBracket(bracketData);
+            populateDrawer(m);
+            showToast(res.flagged ? 'Will hold when ready' : 'Hold removed', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
 }
 
 // ── Drawer action handlers ────────────────────────────────────────────────────
