@@ -159,6 +159,25 @@ class BaseFormat:
         """
         pass
 
+    async def get_pending_matches(self) -> list[dict]:
+        """
+        Return pending matches not yet called as lobbies.
+        Challonge formats query Challonge. Swiss returns [] (matches are created by pairing cycle).
+        """
+        return []
+
+    async def call_match(self, match_data: dict, hold_match: bool = False) -> None:
+        """Create and initialize a lobby for a specific match. Challonge formats only."""
+        pass
+
+    async def call_matches(self) -> None:
+        """Call all pending uncalled matches. Challonge formats only."""
+        pass
+
+    def toggle_hold_when_ready(self, match_id: int) -> bool:
+        """Toggle hold-when-ready for a match. Returns new state. Challonge formats only."""
+        return False
+
     async def on_match_calling_loop(self) -> None:
         """
         Called by TournamentManager.start_tournament_loop after the tournament

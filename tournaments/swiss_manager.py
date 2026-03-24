@@ -32,8 +32,6 @@ class SwissManager:
         self.running = True
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         await self.dh.update_swiss_state(swiss_event['_id'], 'active')
-        await self.tm.tc.bc.enable_next_round_button()
-
     # ─── Main pairing cycle ───────────────────────────────────────────────────
 
     async def run_pairing_cycle(self):
@@ -126,7 +124,7 @@ class SwissManager:
         await self.post_round_complete(swiss_event)
 
     async def post_round_complete(self, swiss_event):
-        """Post full standings to event-updates and enable the Next Round button."""
+        """Post full standings to event-updates. The web dashboard handles enabling the next round button."""
         event_update_channel = await self.tm.get_channel('event-updates')
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
@@ -140,8 +138,6 @@ class SwissManager:
                 color=discord.Color.blue()
             )
             await event_update_channel.send(embed=embed)
-
-        await self.tm.tc.bc.enable_next_round_button()
 
     # ─── Match calling ────────────────────────────────────────────────────────
 
@@ -199,6 +195,7 @@ class SwissManager:
             guild=self.guild,
             bracket=None,
             match_service=service,
+            round=current_round,
         )
         self.tm.lobbies[match_id] = match_lobby
         await match_lobby.initialize_match()
@@ -317,7 +314,7 @@ class SwissManager:
             )
             await event_update_channel.send(embed=embed)
 
-        await self.tm.prompt_end_tournament()
+        await self.tm.progress_tournament()
 
     async def randomize_stagelist(self):
         """Replace the tournament stagelist with a fresh random set and regenerate the banner."""
@@ -338,7 +335,7 @@ class SwissManager:
         await self.dh.add_stages_to_tournament(tournament['_id'], stage_codes)
 
         # Regenerate the banner
-        self.tm.banner_filepath = await self.tm.tc.generate_banner()
+        self.tm.banner_filepath = await self.tm.generate_banner()
 
         # Update the stagelist channel
-        await self.tm.tc.refresh_stagelist()
+        await self.tm.publish_stagelist()

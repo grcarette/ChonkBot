@@ -1,5 +1,7 @@
 # formats/swiss.py
 
+import discord
+
 from formats.base import BaseFormat
 from tournaments.swiss_manager import SwissManager
 
@@ -14,6 +16,7 @@ class SwissFormat(BaseFormat):
     - UCH Ranked account gate for registration
     - Match result recording and UCH Ranked API reporting
     - Final standings posting
+    - Force-end flow
 
     Match calling and round management are delegated to SwissManager,
     which this format owns as a private implementation detail.
@@ -22,8 +25,6 @@ class SwissFormat(BaseFormat):
     def __init__(self, tm):
         super().__init__(tm)
         self.manager = SwissManager(tm)
-        # Keep tm.swiss_manager in sync — TournamentManager still references
-        # it in start_tournament_loop until step 7 removes it entirely.
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ class SwissFormat(BaseFormat):
     async def on_tournament_start(self) -> None:
         """
         Backfill any debug players who registered before the swiss event existed,
-        then enable the Start Round button via SwissManager.start().
+        then start the SwissManager.
         """
         if self.tm.debug:
             await self._backfill_debug_players()
@@ -80,12 +81,6 @@ class SwissFormat(BaseFormat):
         Record the match result in the swiss event, report to the UCH Ranked API
         (non-DQ, non-debug matches only), then notify SwissManager so it can
         check whether the round is complete.
-
-        API flow:
-        1. report_match  — submits the result, returns a match_id
-        2. accept_match  — called for both winner and loser to confirm
-           The winner confirm finalizes the match; the loser confirm may return
-           a 500 if the match is already finalized, which is expected and ignored.
         """
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
@@ -108,6 +103,72 @@ class SwissFormat(BaseFormat):
             result['winner_id'],
             result['loser_id'],
         )
+
+    async def on_tournament_end(self) -> None:
+        """Post final standings to the results channel."""
+        if not self.tm.debug:
+            await self.tm.post_final_results()
+
+    async def on_tournament_delete(self) -> None:
+        """Swiss has no external bracket to clean up."""
+        pass
+
+    async def on_match_calling_loop(self) -> None:
+        """SwissManager.start() handles everything — nothing to do here."""
+        pass
+
+    # ─── Force-end flow ───────────────────────────────────────────────────────
+
+    async def force_end_tournament(self, kwargs=None) -> None:
+        """
+        Force-end a Swiss tournament: close lobbies, post results, finalize.
+        Called by /end_swiss_tournament via ConfirmationView.
+        """
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        if swiss_event:
+            await self.dh.update_swiss_state(swiss_event['_id'], 'finished')
+
+        self.manager.running = False
+
+        await self.tm.end_tournament()
+        await self.tm.post_final_results()
+        await self.dh.update_tournament_state(self.tm.tournament['_id'], 'finished')
+        await self.tm.finalize_tournament()
+
+    # ─── Optional overrides ───────────────────────────────────────────────────
+
+    async def on_registration_gate(self, user_id: int, interaction) -> bool:
+        """
+        Require a UCH Ranked account to register for Swiss events.
+        In debug mode this gate is skipped entirely.
+        """
+        if self.tm.debug:
+            return True
+        ranked_player = await self.tm.get_ranked_player(user_id)
+        if not ranked_player:
+            await interaction.response.send_message(
+                "You need a UCH Ranked account to participate in this event. "
+                "You can sign up at <https://uchranked.com>.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    # ─── Properties ───────────────────────────────────────────────────────────
+
+    @property
+    def needs_match_call_refresh(self) -> bool:
+        return False
+
+    @property
+    def supports_reset(self) -> bool:
+        return False
+
+    @property
+    def shows_bracket_link(self) -> bool:
+        return False
+
+    # ─── Private helpers ──────────────────────────────────────────────────────
 
     async def _report_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
         try:
@@ -133,7 +194,7 @@ class SwissFormat(BaseFormat):
             try:
                 await self.tm.bot.uchranked_api.accept_match(loser_id, match_id)
             except Exception:
-                pass  # expected/ignored
+                pass  # loser confirm failure is expected/ignored
 
         except Exception as e:
             await self._alert_ranked_api_failure(winner_id, loser_id, str(e))
@@ -141,7 +202,7 @@ class SwissFormat(BaseFormat):
     async def _alert_ranked_api_failure(self, winner_id: int, loser_id: int, error: str = None) -> None:
         print(f"[Swiss] UCH Ranked API failure: winner={winner_id} loser={loser_id} error={error}")
         try:
-            channel = await self.tm.get_channel('bot-control')
+            channel = await self.tm.get_channel('event-updates')
             if channel:
                 embed = discord.Embed(
                     title="⚠️ UCH Ranked API Failure",
@@ -158,63 +219,6 @@ class SwissFormat(BaseFormat):
                 await channel.send(embed=embed)
         except Exception as e:
             print(f"[Swiss] Failed to send API failure alert: {e}")
-
-    async def on_tournament_end(self) -> None:
-        """Post final standings to the results channel."""
-        if not self.tm.debug:
-            await self.tm.post_final_results()
-
-    async def on_tournament_delete(self) -> None:
-        """Swiss has no external bracket to clean up."""
-        pass
-
-    # ─── Optional overrides ───────────────────────────────────────────────────
-
-    async def on_registration_gate(self, user_id: int, interaction) -> bool:
-        """
-        Require a UCH Ranked account to register for Swiss events.
-        In debug mode this gate is skipped entirely.
-        Returns True to allow registration, False to block.
-        """
-        if self.tm.debug:
-            return True
-        ranked_player = await self.tm.get_ranked_player(user_id)
-        if not ranked_player:
-            await interaction.response.send_message(
-                "You need a UCH Ranked account to participate in this event. "
-                "You can sign up at <https://uchranked.com>.",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    async def on_match_calling_loop(self) -> None:
-        """
-        SwissManager.start() already enabled the round button before this is
-        called, so there's nothing left to do here.
-        """
-        pass
-
-    async def get_active_buttons(self, state: str) -> list[str]:
-        """Swiss shows the round button when active, nothing else."""
-        if state == 'active':
-            return ['round_button']
-        return []
-
-    @property
-    def needs_match_call_refresh(self) -> bool:
-        # Swiss drives its own pairing — TM should not call refresh_match_calls
-        return False
-
-    @property
-    def supports_reset(self) -> bool:
-        return False
-
-    @property
-    def shows_bracket_link(self) -> bool:
-        return False
-
-    # ─── Private helpers ──────────────────────────────────────────────────────
 
     async def _backfill_debug_players(self) -> None:
         """

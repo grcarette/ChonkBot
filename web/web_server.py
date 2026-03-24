@@ -96,9 +96,9 @@ async def handle_get_participants(request: web.Request) -> web.Response:
                 if member:
                     avatar_url = str(member.display_avatar.url)
             result.append({
-                'id':        p['id'],
-                'name':      p['name'],
-                'seed':      p.get('seed'),
+                'id':         p['id'],
+                'name':       p['name'],
+                'seed':       p.get('seed'),
                 'avatar_url': avatar_url,
             })
 
@@ -180,8 +180,8 @@ async def handle_get_tournaments(request: web.Request) -> web.Response:
             'lobby_count':       lobby_count,
             'registration_open': t.get('registration_open', False),
             'debug':             t.get('debug', False),
-            'banner_url': t.get('banner_url'),
-            'logo_url':   t.get('logo_url'),
+            'banner_url':        t.get('banner_url'),
+            'logo_url':          t.get('logo_url'),
         })
 
     STATE_ORDER = {'active': 0, 'checkin': 1, 'registration': 2, 'setup': 3, 'initialize': 4}
@@ -379,6 +379,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'state':        l.get('state', ''),
             'player_names': player_names,
             'player_ids':   player_ids,
+            'round':        l.get('round'),
         })
 
     # ── Stagelist ─────────────────────────────────────────────────────────────
@@ -418,6 +419,11 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'round_ready':       round_ready,
         }
 
+    # ── autocall / hold_when_ready (Challonge formats only) ──────────────────
+
+    tm = bot.th.tournaments.get(tournament['_id'])
+    autocall_matches = getattr(tm.format, 'autocall_matches', False) if tm and tm.format else False
+
     # ── Registration requests ─────────────────────────────────────────────────
 
     registration_requests = []
@@ -440,12 +446,13 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'checkin_count':         len(tournament.get('checked_in', [])),
         'lobby_count':           len(lobbies),
         'entrants':              entrants,
-        'checked_in': [str(x) for x in tournament.get('checked_in', [])],
-        'dqs':        [str(x) for x in tournament.get('dqs', [])],
+        'checked_in':            [str(x) for x in tournament.get('checked_in', [])],
+        'dqs':                   [str(x) for x in tournament.get('dqs', [])],
         'lobbies':               lobbies,
         'stagelist':             stagelist,
         'config':                tournament.get('config', {}),
         'swiss':                 swiss_data,
+        'autocall_matches':      autocall_matches,
         'debug':                 tournament.get('debug', False),
         'stagelist_published':   tournament.get('stagelist_published', False),
         'registration_requests': registration_requests,
@@ -488,14 +495,13 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'seed_by_rank',
         'randomize_seeds',
         'revert_tournament',
-        'call_match', 
-        'hold_match', 
-        'call_all_matches', 
+        'call_match',
+        'hold_match',
+        'call_all_matches',
         'set_autocall',
         'start_held_match',
         'reset_lobby',
         'post_results',
-        'update_config',
         'refresh_event_info',
         'toggle_hold_when_ready',
         'unpublish_tournament',
@@ -533,7 +539,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             need_tm()
             if fmt not in ('swiss', 'swiss filter'):
                 return web.json_response({'error': 'next_round is only valid for Swiss'}, status=400)
-            if not hasattr(tm, 'format') or not tm.format:
+            if not tm.format:
                 return web.json_response({'error': 'Format not initialised'}, status=500)
             await tm.format.manager.run_pairing_cycle()
 
@@ -592,26 +598,25 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     updates[f'config.{key}'] = bool(body[key])
             if updates:
                 await bot.dh.edit_tournament_config(tournament['_id'], **updates)
+                if tm and 'config.display_entrants' in updates:
+                    await tm.edit_event_info()
+
         elif action == 'delete_tournament':
             need_tm()
             await tm.delete_tournament()
             return web.json_response({'ok': True})
+
         elif action == 'publish_stagelist':
             need_tm()
             await tm.publish_stagelist()
+
         elif action == 'approve_registration':
             need_tm()
             discord_id = int(body.get('discord_id', 0))
             if not discord_id:
                 return web.json_response({'error': 'discord_id is required'}, status=400)
-            
-            # Remove from requests first
             await bot.dh.remove_registration_request(tournament['_id'], discord_id)
-            
-            # Register directly, bypassing the approval check
             await tm.register_player_direct(discord_id)
-            
-            # DM the player
             member = bot.guild.get_member(discord_id)
             if member:
                 try:
@@ -623,6 +628,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     await member.send(embed=embed)
                 except discord.Forbidden:
                     pass
+
         elif action == 'deny_registration':
             need_tm()
             discord_id = int(body.get('discord_id', 0))
@@ -630,17 +636,19 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             if not discord_id:
                 return web.json_response({'error': 'discord_id is required'}, status=400)
             await bot.dh.remove_registration_request(tournament['_id'], discord_id)
-            # DM the player
             member = bot.guild.get_member(discord_id)
             if member:
                 try:
                     desc = f"Your registration for **{tournament['name']}** has been denied."
                     if reason:
                         desc += f"\n**Reason:** {reason}"
-                    embed = discord.Embed(title='Registration Denied', description=desc, color=discord.Color.red())
+                    embed = discord.Embed(
+                        title='Registration Denied', description=desc, color=discord.Color.red()
+                    )
                     await member.send(embed=embed)
                 except discord.Forbidden:
                     pass
+
         elif action == 'randomize_seeds':
             import random
             entrant_ids = list(tournament.get('entrants', {}).keys())
@@ -650,9 +658,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
         elif action == 'seed_by_rank':
             entrant_ids = set(int(did) for did in tournament.get('entrants', {}).keys())
-
             leaderboard = await bot.uchranked_api.get_leaderboard(10000)
-
             elo_map = {}
             for p in leaderboard:
                 try:
@@ -661,49 +667,52 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                         elo_map[discord_id] = p['elo']
                 except (ValueError, TypeError, KeyError):
                     continue
-
             for discord_id in entrant_ids:
                 if discord_id not in elo_map:
                     elo_map[discord_id] = 0
-
             sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
             seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
             await bot.dh.update_all_seeds(tournament['_id'], seeds)
+
         elif action == 'revert_tournament':
             need_tm()
             await tm.revert_tournament()
+
         elif action == 'call_match':
             need_tm()
             match_id = body.get('match_id')
             if match_id is None:
                 return web.json_response({'error': 'match_id is required'}, status=400)
-            pending = await tm.get_pending_matches()
+            pending    = await tm.format.get_pending_matches()
             match_data = next((m for m in pending if m['match_id'] == match_id), None)
             if not match_data:
                 return web.json_response({'error': 'Match not found or already called'}, status=400)
-            await tm.call_match(match_data)
+            await tm.format.call_match(match_data)
 
         elif action == 'hold_match':
             need_tm()
             match_id = body.get('match_id')
             if match_id is None:
                 return web.json_response({'error': 'match_id is required'}, status=400)
-            pending = await tm.get_pending_matches()
+            pending    = await tm.format.get_pending_matches()
             match_data = next((m for m in pending if m['match_id'] == match_id), None)
             if not match_data:
                 return web.json_response({'error': 'Match not found or already called'}, status=400)
-            await tm.call_match(match_data, hold_match=True)
+            await tm.format.call_match(match_data, hold_match=True)
 
         elif action == 'call_all_matches':
             need_tm()
-            await tm.call_matches()
+            await tm.format.call_matches()
 
         elif action == 'set_autocall':
             need_tm()
             enabled = bool(body.get('enabled', False))
-            tm.autocall_matches = enabled
+            if not hasattr(tm.format, 'autocall_matches'):
+                return web.json_response({'error': 'autocall not supported for this format'}, status=400)
+            tm.format.autocall_matches = enabled
             if enabled:
-                await tm.call_matches()
+                await tm.format.call_matches()
+
         elif action == 'start_held_match':
             need_tm()
             match_id = body.get('match_id')
@@ -713,46 +722,40 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             if not match_lobby:
                 return web.json_response({'error': 'Lobby not found'}, status=404)
             await match_lobby.start_match()
+
         elif action == 'reset_lobby':
             need_tm()
             match_id = body.get('match_id')
             if match_id is None:
                 return web.json_response({'error': 'match_id is required'}, status=400)
             await tm.reset_lobby_to_active(match_id)
-            tm.invalidate_pending_cache()
+            # invalidate_pending_cache now lives on the format
+            if hasattr(tm.format, 'invalidate_pending_cache'):
+                tm.format.invalidate_pending_cache()
+
         elif action == 'post_results':
             need_tm()
             await tm.post_final_results()
-        elif action == 'update_config':
-            updates = {}
-            if 'name' in body:
-                name = body['name'].strip()
-                if not name:
-                    return web.json_response({'error': 'Name cannot be empty'}, status=400)
-                updates['name'] = name
-            if 'date' in body:
-                updates['date'] = body['date'].strip()
-            for key in ('approved_registration', 'randomized_stagelist', 'display_entrants'):
-                if key in body:
-                    updates[f'config.{key}'] = bool(body[key])
-            if updates:
-                await bot.dh.edit_tournament_config(tournament['_id'], **updates)
-                if tm and 'config.display_entrants' in updates:
-                    await tm.edit_event_info()
+
         elif action == 'refresh_event_info':
             need_tm()
             await tm.edit_event_info()
+
         elif action == 'toggle_hold_when_ready':
             need_tm()
             match_id = body.get('match_id')
             if match_id is None:
                 return web.json_response({'error': 'match_id is required'}, status=400)
-            is_flagged = tm.toggle_hold_when_ready(match_id)
+            if not hasattr(tm.format, 'toggle_hold_when_ready'):
+                return web.json_response({'error': 'hold_when_ready not supported for this format'}, status=400)
+            is_flagged = tm.format.toggle_hold_when_ready(match_id)
             return web.json_response({'ok': True, 'flagged': is_flagged})
+
         elif action == 'unpublish_tournament':
             need_tm()
             await tm.remove_tournament_from_discord()
             await bot.dh.unpublish_tournament(tournament['_id'])
+
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:
@@ -813,6 +816,7 @@ async def handle_remove_stage(request: web.Request) -> web.Response:
     await bot.dh.remove_stage_from_tournament(tournament['_id'], code)
     return web.json_response({'ok': True})
 
+
 @require_auth
 async def handle_set_seed(request: web.Request) -> web.Response:
     """Update entrant seeds — Challonge or native depending on tournament type."""
@@ -837,7 +841,6 @@ async def handle_set_seed(request: web.Request) -> web.Response:
         return web.json_response({'error': 'Seeding only available for DE/SE/Swiss Filter'}, status=400)
 
     if 'challonge_data' in tournament:
-        # Challonge-backed — update seeds via Challonge API
         try:
             ch = bot.th.tournaments.get(tournament['_id'])
             ch_handler = (
@@ -868,6 +871,7 @@ async def handle_set_seed(request: web.Request) -> web.Response:
 
     return web.json_response({'ok': True})
 
+
 @require_auth
 async def handle_get_bracket(request: web.Request) -> web.Response:
     """
@@ -896,24 +900,20 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
 
     challonge_url = tournament['challonge_data']['url']
 
-    # Build challonge_id → discord_id lookup
     challonge_to_discord = {
         int(challonge_id): int(discord_id)
         for discord_id, challonge_id in tournament.get('entrants', {}).items()
     }
 
-    # Bulk fetch all entrant user docs
     entrant_ids = [int(d) for d in tournament.get('entrants', {}).keys()]
     user_map    = await bot.dh.get_users_bulk(entrant_ids)
 
-    # Build discord_id → name and avatar lookups
     discord_to_name   = {}
     discord_to_avatar = {}
     for discord_id_int, user in user_map.items():
         discord_to_name[discord_id_int]   = user['name']
         discord_to_avatar[discord_id_int] = user.get('avatar_url')
 
-    # Fetch all matches from Challonge
     try:
         ch = bot.th.tournaments.get(tournament['_id'])
         if ch and hasattr(ch, 'format') and ch.format and hasattr(ch.format, 'ch'):
@@ -926,7 +926,6 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({'error': f'Challonge error: {str(e)}'}, status=502)
 
-    # Build lobby state lookup keyed by match_id
     raw_lobbies = await bot.dh.get_all_lobbies(tournament['_id'])
     lobby_by_match = {}
     for l in (raw_lobbies or []):
@@ -934,10 +933,9 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         if mid is not None:
             lobby_by_match[mid] = l
 
-    hold_when_ready = set()
+    # hold_when_ready now lives on the format
     tm = bot.th.tournaments.get(tournament['_id'])
-    if tm:
-        hold_when_ready = getattr(tm, 'hold_when_ready', set())
+    hold_when_ready = getattr(tm.format, 'hold_when_ready', set()) if tm and tm.format else set()
 
     def player_name(challonge_pid):
         if challonge_pid is None:
@@ -1019,6 +1017,7 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         'matches': matches,
     })
 
+
 @require_auth
 async def handle_get_stagelist(request: web.Request) -> web.Response:
     """Return full stage objects for a tournament's stagelist."""
@@ -1035,28 +1034,27 @@ async def handle_get_stagelist(request: web.Request) -> web.Response:
 
     stages = await bot.dh.get_stages_from_list(codes)
     if not stages:
-        # fall back to individual lookups
         stages = []
         for code in codes:
             s = await bot.dh.get_stage(code=code)
             if s:
                 stages.append(s)
 
-    # Preserve the order from the tournament's stagelist
     stage_map = {s['code']: s for s in (stages or [])}
     ordered = []
     for code in codes:
         s = stage_map.get(code)
         ordered.append({
-            'code':               code,
-            'name':               s.get('name', code) if s else code,
-            'imgur_url':          s.get('imgur_url', '') if s else '',
-            'mode':               s.get('mode', '') if s else '',
-            'tournament_legal':   s.get('tournament_legal', True) if s else True,
-            'creators':           s.get('creators', []) if s else [],
+            'code':             code,
+            'name':             s.get('name', code) if s else code,
+            'imgur_url':        s.get('imgur_url', '') if s else '',
+            'mode':             s.get('mode', '') if s else '',
+            'tournament_legal': s.get('tournament_legal', True) if s else True,
+            'creators':         s.get('creators', []) if s else [],
         })
 
     return web.json_response({'stages': ordered})
+
 
 @require_auth
 async def handle_browse_stages(request: web.Request) -> web.Response:
@@ -1069,19 +1067,20 @@ async def handle_browse_stages(request: web.Request) -> web.Response:
     result = []
     for s in (stages or []):
         result.append({
-            'code':           s.get('code', ''),
-            'name':           s.get('name', ''),
-            'imgur_url':      s.get('imgur_url', ''),
-            'mode':           s.get('mode', ''),
+            'code':             s.get('code', ''),
+            'name':             s.get('name', ''),
+            'imgur_url':        s.get('imgur_url', ''),
+            'mode':             s.get('mode', ''),
             'tournament_legal': s.get('tournament_legal', True),
-            'creators':       s.get('creators', []),
+            'creators':         s.get('creators', []),
         })
 
     return web.json_response({'stages': result})
 
+
 @require_auth
 async def handle_get_pending_matches(request: web.Request) -> web.Response:
-    """Return all Challonge matches that haven't been called yet."""
+    """Return all pending matches that haven't been called yet (Challonge formats only)."""
     tournament_id = request.match_info['tournament_id']
     bot           = request.app['bot']
 
@@ -1094,26 +1093,29 @@ async def handle_get_pending_matches(request: web.Request) -> web.Response:
         return web.json_response({'error': 'Tournament manager not loaded'}, status=500)
 
     try:
-        pending = await tm.get_pending_matches()
+        pending = await tm.format.get_pending_matches()
     except Exception as e:
         return web.json_response({'error': str(e)}, status=500)
 
-    all_player_ids = list({m['player_1'] for m in pending} | {m['player_2'] for m in pending})
+    all_player_ids = list(
+        {m['player_1_id'] for m in pending} | {m['player_2_id'] for m in pending}
+    )
     user_map = await bot.dh.get_users_bulk(all_player_ids)
 
     result = []
     for m in pending:
-        p1 = user_map.get(m['player_1'])
-        p2 = user_map.get(m['player_2'])
+        p1 = user_map.get(m['player_1_id'])
+        p2 = user_map.get(m['player_2_id'])
         result.append({
             'match_id': m['match_id'],
             'round':    m['round'],
             'bracket':  m['bracket'],
-            'p1_name':  p1['name'] if p1 else str(m['player_1']),
-            'p2_name':  p2['name'] if p2 else str(m['player_2']),
+            'p1_name':  p1['name'] if p1 else str(m['player_1_id']),
+            'p2_name':  p2['name'] if p2 else str(m['player_2_id']),
         })
 
     return web.json_response({'pending': result})
+
 
 @require_auth
 async def handle_upload_image(request: web.Request) -> web.Response:
@@ -1135,7 +1137,6 @@ async def handle_upload_image(request: web.Request) -> web.Response:
         if not field or field.name != 'image':
             return web.json_response({'error': 'No image field in request'}, status=400)
 
-        # Read raw bytes
         data = b''
         while True:
             chunk = await field.read_chunk()
@@ -1146,19 +1147,16 @@ async def handle_upload_image(request: web.Request) -> web.Response:
         if not data:
             return web.json_response({'error': 'Empty file'}, status=400)
 
-        # Validate it's an image and resize/compress with Pillow
         try:
             from PIL import Image
             import io
             img = Image.open(io.BytesIO(data))
             img.verify()
-            img = Image.open(io.BytesIO(data))  # re-open after verify
+            img = Image.open(io.BytesIO(data))
 
-            # Resize to reasonable max dimensions
             max_dims = (1920, 480) if image_type == 'banner' else (512, 512)
             img.thumbnail(max_dims, Image.LANCZOS)
 
-            # Convert to RGB (handles PNG with alpha etc.)
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
 
@@ -1168,13 +1166,10 @@ async def handle_upload_image(request: web.Request) -> web.Response:
         except Exception as e:
             return web.json_response({'error': f'Invalid image: {e}'}, status=400)
 
-        # Save to disk
         upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', f'{image_type}s')
         filepath   = os.path.join(upload_dir, f'{tournament_id}.jpg')
         with open(filepath, 'wb') as f:
             f.write(data)
-
-        # Store the URL path in the tournament document
 
         clean_path = f'/static/uploads/{image_type}s/{tournament_id}.jpg'
         await bot.dh.update_tournament_image_path(tournament['_id'], image_type, clean_path)
@@ -1207,6 +1202,7 @@ async def handle_delete_image(request: web.Request) -> web.Response:
     )
     return web.json_response({'ok': True})
 
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 def create_app(challonge_handler_factory, bot) -> web.Application:
@@ -1228,28 +1224,27 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_delete('/api/tournament/{tournament_id}/upload/{image_type}', handle_delete_image)
 
     # Event dashboard
-    app.router.add_get(   '/dashboard/{tournament_id}', handle_event_dashboard)
-    app.router.add_get(   '/api/tournament/{tournament_id}', handle_get_tournament)
-    app.router.add_post(  '/api/tournament/{tournament_id}/action', handle_tournament_action)
-    app.router.add_post(  '/api/tournament/{tournament_id}/stages', handle_add_stages)
+    app.router.add_get(   '/dashboard/{tournament_id}',              handle_event_dashboard)
+    app.router.add_get(   '/api/tournament/{tournament_id}',          handle_get_tournament)
+    app.router.add_post(  '/api/tournament/{tournament_id}/action',   handle_tournament_action)
+    app.router.add_post(  '/api/tournament/{tournament_id}/stages',   handle_add_stages)
     app.router.add_delete('/api/tournament/{tournament_id}/stages/{code}', handle_remove_stage)
-    app.router.add_get('/api/tournament/{tournament_id}/bracket', handle_get_bracket)
-    app.router.add_get('/api/tournament/{tournament_id}/stagelist', handle_get_stagelist)
-    app.router.add_get('/api/stages/browse', handle_browse_stages)
-    app.router.add_post('/api/tournament/{tournament_id}/seed', handle_set_seed)
-    app.router.add_get('/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
+    app.router.add_get(   '/api/tournament/{tournament_id}/bracket',  handle_get_bracket)
+    app.router.add_get(   '/api/tournament/{tournament_id}/stagelist', handle_get_stagelist)
+    app.router.add_get(   '/api/stages/browse',                       handle_browse_stages)
+    app.router.add_post(  '/api/tournament/{tournament_id}/seed',     handle_set_seed)
+    app.router.add_get(   '/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
 
     # Seeding
-    app.router.add_get( '/seeding',          handle_seeding_page)
-    app.router.add_get( '/api/participants',  handle_get_participants)
-    app.router.add_post('/api/seed',          handle_update_seed)
+    app.router.add_get( '/seeding',         handle_seeding_page)
+    app.router.add_get( '/api/participants', handle_get_participants)
+    app.router.add_post('/api/seed',         handle_update_seed)
 
     assets_path = os.path.join(os.path.dirname(__file__), '..', 'assets')
     app.router.add_static('/assets', path=assets_path, name='assets')
 
     static_path = os.path.join(os.path.dirname(__file__), 'static')
     app.router.add_static('/static', path=static_path, name='static')
-
 
     return app
 
