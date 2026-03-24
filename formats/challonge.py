@@ -101,11 +101,12 @@ class ChallongeFormat(BaseFormat):
         print(f"[timing] close_prereqs: {time.perf_counter()-t0:.3f}s")
 
         if status == 'awaiting_review':
-                await self.tm.prompt_end_tournament()
+            await self.tm.bot.dh.update_tournament_state(self.tm.tournament['_id'], 'finished')
+            self.tm.invalidate_pending_cache()
         else:
             if getattr(self.tm, 'autocall_matches', False):
                 await self.tm.call_matches()
-        print(f"[timing] call_matches/prompt_end: {time.perf_counter()-t0:.3f}s")
+        print(f"[timing] call_matches/finish: {time.perf_counter()-t0:.3f}s")
 
         print(f"[timing] on_result TOTAL: {time.perf_counter()-t0:.3f}s")
 

@@ -342,3 +342,10 @@ class TournamentMethodsMixin:
         query  = {'_id': ObjectId(tournament_id)}
         update = {'$set': {'checked_in': []}}
         await self.tournament_collection.update_one(query, update)
+
+    async def clear_registration_requests(self, tournament_id):
+        """Remove all pending registration requests for a tournament."""
+        await self.tournament_collection.update_one(
+            {'_id': ObjectId(tournament_id)},
+            {'$set': {'registration_requests': []}}
+        )

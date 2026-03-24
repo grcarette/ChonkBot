@@ -331,3 +331,13 @@ class LobbyMethodsMixin:
             'tournament': ObjectId(tournament_id),
         }
         return await self.lobby_collection.find(query).to_list(None)
+        
+    async def find_matches_bulk(self, match_ids: list[int]) -> set[int]:
+        """Return the set of match_ids that already exist in the lobby collection."""
+        if not match_ids:
+            return set()
+        docs = await self.lobby_collection.find(
+            {'match_id': {'$in': match_ids}},
+            {'match_id': 1}
+        ).to_list(None)
+        return {d['match_id'] for d in docs}

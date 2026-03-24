@@ -90,3 +90,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === backdrop) closeModal();
     });
 });
+
+// ── Dev timing ────────────────────────────────────────────────────────────────
+
+const _timing = {
+    _marks: {},
+    start(label) {
+        this._marks[label] = performance.now();
+        console.log(`[t] ▶ ${label}`);
+    },
+    end(label) {
+        const start = this._marks[label];
+        if (start == null) { console.warn(`[t] no start for: ${label}`); return; }
+        const ms = (performance.now() - start).toFixed(1);
+        delete this._marks[label];
+        console.log(`[t] ✓ ${label} — ${ms}ms`);
+        return parseFloat(ms);
+    },
+    mark(label) {
+        console.log(`[t] · ${label} — ${performance.now().toFixed(1)}ms since page load`);
+    },
+};

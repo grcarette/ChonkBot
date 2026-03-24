@@ -12,8 +12,12 @@ class MatchReportView(discord.ui.View):
         
     async def setup(self):
         for user_id in self.lobby.remaining_players:
-            player = await self.lobby.dh.get_user(user_id=user_id)
-            self.players[user_id] = player['name']
+            player = await self.lobby.dh.get_user(user_id=int(user_id))
+            if player is None:
+                print(f"[MatchReportView] Could not find user {user_id} in DB")
+                self.players[int(user_id)] = str(user_id)
+            else:
+                self.players[int(user_id)] = player['name']
         
         options = []
         for player_id in self.players.keys():
