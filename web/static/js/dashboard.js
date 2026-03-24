@@ -134,6 +134,9 @@ function initCreateModal() {
     const step2        = document.getElementById('step-2');
     const step2Summary = document.getElementById('step2-summary');
     const modalTitle   = document.getElementById('modal-title');
+    const rankedRow    = document.getElementById('opt-ranked-row');
+
+    const RANKED_COMPATIBLE = ['swiss', 'double elimination', 'single elimination', 'swiss filter'];
 
     let selectedFormat = null;
     let currentStep    = 1;
@@ -145,7 +148,9 @@ function initCreateModal() {
         document.getElementById('opt-approved').checked         = false;
         document.getElementById('opt-random-stage').checked     = false;
         document.getElementById('opt-display-entrants').checked = false;
+        document.getElementById('opt-ranked').checked           = false;
         document.getElementById('opt-debug').checked            = false;
+        if (rankedRow) rankedRow.hidden = true;
         selectedFormat = null;
         formatBtns.forEach(b => b.classList.remove('selected'));
         errBox.hidden       = true;
@@ -167,9 +172,7 @@ function initCreateModal() {
             btnLabel.textContent   = 'Continue';
             checkStep1Ready();
         } else {
-            console.log('selectedFormat at goToStep(2):', JSON.stringify(selectedFormat));
             const isSwiss = selectedFormat === 'swiss' || selectedFormat === 'swiss filter';
-            console.log('isSwiss:', isSwiss, 'roundGroup.hidden will be set to:', !isSwiss);
             roundGroup.hidden      = !isSwiss;
             modalTitle.textContent = 'Configuration';
             btnLabel.textContent   = 'Create Tournament';
@@ -201,12 +204,12 @@ function initCreateModal() {
             formatBtns.forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             selectedFormat = btn.dataset.value;
+            if (rankedRow) rankedRow.hidden = !RANKED_COMPATIBLE.includes(selectedFormat);
             checkStep1Ready();
         });
     });
 
     btnSubmit.addEventListener('click', async () => {
-        console.log('btn clicked, step:', currentStep, 'name:', fieldName.value.trim(), 'format:', selectedFormat);
         if (currentStep === 1) {
             if (!fieldName.value.trim() || !selectedFormat) return;
             goToStep(2);
@@ -227,6 +230,7 @@ function initCreateModal() {
                 approved_registration: document.getElementById('opt-approved').checked,
                 randomized_stagelist:  document.getElementById('opt-random-stage').checked,
                 display_entrants:      document.getElementById('opt-display-entrants').checked,
+                ranked_reporting:      document.getElementById('opt-ranked').checked,
                 debug:                 document.getElementById('opt-debug').checked,
                 round_limit:           isSwiss ? parseInt(fieldRounds.value) || 8 : 8,
             });

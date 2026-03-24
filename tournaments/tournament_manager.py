@@ -73,6 +73,58 @@ class TournamentManager:
             }
         return await self.bot.uchranked_api.get_player(user_id)
 
+    @property
+    def is_ranked(self) -> bool:
+        """True if this tournament should report results to UCH Ranked."""
+        return bool(self.tournament.get('config', {}).get('ranked_reporting', False))
+
+    async def report_result_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
+        """Report a match result to UCH Ranked. Called by format flush logic."""
+        try:
+            result = await self.bot.uchranked_api.report_match(
+                player1_id=winner_id,
+                player2_id=loser_id,
+                score='1-0',
+            )
+            if not result.get('success'):
+                await self._alert_ranked_api_failure(winner_id, loser_id, result.get('error'))
+                return
+
+            match_id = result.get('match_id')
+            if not match_id:
+                await self._alert_ranked_api_failure(winner_id, loser_id, "No match_id returned")
+                return
+
+            try:
+                await self.bot.uchranked_api.accept_match(winner_id, match_id)
+            except Exception as e:
+                print(f"[Ranked] Winner accept_match failed: {e}")
+            try:
+                await self.bot.uchranked_api.accept_match(loser_id, match_id)
+            except Exception:
+                pass
+
+        except Exception as e:
+            await self._alert_ranked_api_failure(winner_id, loser_id, str(e))
+
+    async def _alert_ranked_api_failure(self, winner_id: int, loser_id: int, error: str = None) -> None:
+        print(f"[Ranked] API failure: winner={winner_id} loser={loser_id} error={error}")
+        try:
+            channel = await self.get_channel('event-updates')
+            if channel:
+                embed = discord.Embed(
+                    title="⚠️ UCH Ranked API Failure",
+                    description=(
+                        f"Match result for <@{winner_id}> over <@{loser_id}> "
+                        f"**was not reported to UCH Ranked**.\n\n"
+                        + (f"**Error:** `{error}`" if error else "")
+                    ),
+                    color=discord.Color.red(),
+                )
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"[Ranked] Failed to send API failure alert: {e}")
+
     # ─── Initialization ───────────────────────────────────────────────────────
 
     async def initialize_event(self):
@@ -276,12 +328,13 @@ class TournamentManager:
         tournament = await self.get_tournament()
 
         if self.debug:
-            for i in range(8):
+            is_swiss = self.tournament.get('format', '') in ('swiss', 'swiss filter')
+            debug_player_count = 4 if is_swiss else 8
+            for i in range(debug_player_count):
                 try:
                     await self.register_player(i)
                 except Exception as e:
                     print(f"[open_registration] Failed to register debug player {i}: {e}")
-
         state = tournament['state']
 
         if state in ('setup', 'registration'):
@@ -385,6 +438,13 @@ class TournamentManager:
             return False
 
         tournament = await self.get_tournament()
+
+        # Ranked gate — applies to any ranked_reporting tournament, debug always bypasses
+        if self.is_ranked and not self.debug:
+            ranked_player = await self.get_ranked_player(user_id)
+            if not ranked_player:
+                return 'no_ranked_account'
+
         if tournament.get('config', {}).get('approved_registration'):
             await self.bot.dh.add_registration_request(tournament['_id'], user_id)
             return 'pending'
@@ -766,7 +826,10 @@ class TournamentManager:
             await self.post_final_results()
         await self.remove_tournament_from_discord()
         if self.debug:
-            await self.delete_tournament()
+            await self._cleanup_lobbies()
+            await self.format.on_tournament_delete()
+            await self.bot.dh.delete_tournament(tournament['_id'])
+            self.bot.th.tournaments.pop(tournament['_id'], None)
 
     async def post_final_results(self):
         channel = discord.utils.get(self.bot.guild.channels, id=RESULTS_CHANNEL_ID)
@@ -852,11 +915,17 @@ class TournamentManager:
             await self.remove_tournament_from_discord()
         if tournament['state'] == 'finished':
             return False
-        for lobby in self.lobbies:
-            await self.lobbies[lobby].delete_lobby()
+        await self._cleanup_lobbies()
         await self.format.on_tournament_delete()
         await self.bot.dh.delete_tournament(tournament['_id'])
         self.bot.th.tournaments.pop(tournament['_id'], None)
+
+    async def _cleanup_lobbies(self):
+        """Delete all in-memory lobbies and clear all lobby DB records for this tournament."""
+        for lobby in self.lobbies.values():
+            await lobby.delete_lobby()
+        self.lobbies.clear()
+        await self.bot.dh.clear_lobbies(self.tournament['_id'])
 
     async def remove_tournament_from_discord(self):
         tournament = await self.get_tournament()
@@ -1128,6 +1197,10 @@ class TournamentManager:
         if not tournament.get('stagelist'):
             return
 
+        view_channel = True
+        if self.debug:
+            view_channel = False
+
         stagelist_channel = await self.get_channel('stagelist')
         if not stagelist_channel:
             guild               = self.bot.guilds[0]
@@ -1137,7 +1210,7 @@ class TournamentManager:
                 category=tournament_category,
                 overwrites={
                     guild.default_role: discord.PermissionOverwrite(
-                        view_channel=True,
+                        view_channel=view_channel,
                         send_messages=False,
                         read_message_history=True,
                     ),
@@ -1225,8 +1298,7 @@ class TournamentManager:
         elif state == 'active':
             self.stop_checkin_reminder_loop()
 
-            for lobby in self.lobbies.values():
-                await lobby.delete_lobby()
+            await self._cleanup_lobbies()
             self.lobbies.clear()
             if hasattr(self.format, 'called_match_ids'):
                 self.format.called_match_ids.clear()

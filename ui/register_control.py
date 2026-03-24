@@ -35,7 +35,13 @@ class RegisterControlView(discord.ui.View):
             return
 
         result = await self.tm.register_player(user_id)
-        if result == 'pending':
+        if result == 'no_ranked_account':
+            await interaction.followup.send(
+                "You need a UCH Ranked account to participate in this event. "
+                "You can sign up at <https://uchranked.com>.",
+                ephemeral=True
+            )
+        elif result == 'pending':
             await interaction.followup.send(
                 f"Your registration for {self.tm.tournament['name']} is awaiting TO approval.",
                 ephemeral=True

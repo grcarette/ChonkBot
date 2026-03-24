@@ -14,6 +14,7 @@ class TournamentMethodsMixin:
             'approved_registration': tournament['approved_registration'],
             'randomized_stagelist': tournament['randomized_stagelist'],
             'display_entrants': tournament['display_entrants'],
+            'ranked_reporting': tournament.get('ranked_reporting', False)
         }
         tournament_doc = {
             'name': tournament['name'],

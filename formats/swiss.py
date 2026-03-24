@@ -13,23 +13,26 @@ class SwissFormat(BaseFormat):
     Owns:
     - Swiss event document creation and lifecycle
     - Player registration in the swiss event (with elo/tier assignment)
-    - UCH Ranked account gate for registration
-    - Match result recording and UCH Ranked API reporting
+    - Match result recording (deferred until next round start)
     - Final standings posting
     - Force-end flow
 
-    Match calling and round management are delegated to SwissManager,
-    which this format owns as a private implementation detail.
+    Ranked reporting and the UCH Ranked registration gate are handled by
+    TournamentManager based on the tournament's ranked_reporting config flag.
+
+    Match calling and round management are delegated to SwissManager.
     """
 
     def __init__(self, tm):
         super().__init__(tm)
         self.manager = SwissManager(tm)
+        self.pending_results: list[dict] = []
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     async def on_initialize(self) -> None:
-        """Create the swiss event document if it doesn't exist yet."""
+        """Create the swiss event document if it doesn't exist yet,
+        and rehydrate any pending results from finished lobbies."""
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
         if not swiss_event:
@@ -37,20 +40,46 @@ class SwissFormat(BaseFormat):
             await self.dh.create_swiss_event(tournament['_id'], round_limit)
         elif swiss_event.get('state') == 'active':
             self.manager.running = True
+            await self._rehydrate_pending_results(swiss_event)
+
+    async def _rehydrate_pending_results(self, swiss_event: dict) -> None:
+        """
+        On bot restart, reconstruct pending_results for Ranked API calls
+        that were deferred but not yet sent.
+        """
+        current_round = swiss_event.get('current_round', 0)
+        if current_round == 0:
+            return
+
+        if not self.tm.is_ranked:
+            return
+
+        for m in swiss_event.get('matches', []):
+            if (
+                m.get('round_number') == current_round
+                and m.get('winner') is not None
+                and not m.get('flushed')
+            ):
+                winner_id = m['winner']
+                loser_id  = m['player_1'] if m['player_2'] == winner_id else m['player_2']
+                self.pending_results.append({
+                    'match_id':  m['match_id'],
+                    'winner_id': winner_id,
+                    'loser_id':  loser_id,
+                    'is_dq':     False,
+                })
 
     async def on_player_register(self, user_id: int, user: dict) -> None:
-        """
-        Add the player to the swiss event's players dict with their elo and tier.
-        Stores None as the Challonge ID so registration status checks work uniformly.
-        If the tournament is already active, notify SwissManager to trigger pairing.
-        """
-        ranked_player = await self.tm.get_ranked_player(user_id)
-        elo = ranked_player['elo'] if ranked_player else 1200
-        username = user['name'] if user else f"Player {user_id}"
-
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if swiss_event:
-            await self.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo)
+            # If player already exists (rejoining), restore without resetting stats
+            rejoined = await self.dh.swiss_rejoin_player(swiss_event['_id'], user_id)
+            if not rejoined:
+                # New player — add fresh with elo/tier
+                ranked_player = await self.tm.get_ranked_player(user_id)
+                elo = ranked_player['elo'] if ranked_player else 1200
+                username = user['name'] if user else f"Player {user_id}"
+                await self.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo)
 
         await self.dh.register_player(self.tm.tournament['_id'], user_id, None)
 
@@ -78,9 +107,8 @@ class SwissFormat(BaseFormat):
 
     async def on_result(self, result: dict, lobby) -> None:
         """
-        Record the match result in the swiss event, report to the UCH Ranked API
-        (non-DQ, non-debug matches only), then notify SwissManager so it can
-        check whether the round is complete.
+        Immediately record the match result in the swiss DB.
+        Defer UCH Ranked API reporting until the next round starts or event ends.
         """
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
@@ -95,17 +123,29 @@ class SwissFormat(BaseFormat):
             result['loser_id'],
         )
 
-        if not self.tm.debug and not result['is_dq']:
-            await self._report_to_ranked_api(result['winner_id'], result['loser_id'])
+        await self.manager.check_round_complete()
 
-        await self.manager.on_match_complete(
-            result['match_id'],
-            result['winner_id'],
-            result['loser_id'],
-        )
+        if self.tm.is_ranked and not self.tm.debug and not result['is_dq']:
+            self.pending_results.append(result)
+
+    async def flush_pending_results(self) -> None:
+        """
+        Report all pending match results to UCH Ranked.
+        Called at the start of each new round and at event end.
+        """
+        if not self.pending_results:
+            return
+
+        for result in self.pending_results:
+            await self.tm.report_result_to_ranked_api(
+                result['winner_id'], result['loser_id']
+            )
+
+        self.pending_results.clear()
 
     async def on_tournament_end(self) -> None:
-        """Post final standings to the results channel."""
+        """Flush any remaining results then post final standings."""
+        await self.flush_pending_results()
         if not self.tm.debug:
             await self.tm.post_final_results()
 
@@ -117,11 +157,19 @@ class SwissFormat(BaseFormat):
         """SwissManager.start() handles everything — nothing to do here."""
         pass
 
+    async def on_reset(self) -> None:
+        """Reset swiss state when reverting from active back to check-in."""
+        self.manager.running = False
+        self.pending_results.clear()
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        if swiss_event:
+            await self.dh.swiss_reset_to_registration(swiss_event['_id'])
+
     # ─── Force-end flow ───────────────────────────────────────────────────────
 
     async def force_end_tournament(self, kwargs=None) -> None:
         """
-        Force-end a Swiss tournament: close lobbies, post results, finalize.
+        Force-end a Swiss tournament: flush results, close lobbies, post standings, finalize.
         Called by /end_swiss_tournament via ConfirmationView.
         """
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
@@ -129,30 +177,42 @@ class SwissFormat(BaseFormat):
             await self.dh.update_swiss_state(swiss_event['_id'], 'finished')
 
         self.manager.running = False
+        await self.flush_pending_results()
 
         await self.tm.end_tournament()
         await self.tm.post_final_results()
         await self.dh.update_tournament_state(self.tm.tournament['_id'], 'finished')
         await self.tm.finalize_tournament()
 
-    # ─── Optional overrides ───────────────────────────────────────────────────
+    async def get_dashboard_state(self) -> dict:
+        tournament  = await self.tm.get_tournament()
+        swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if not swiss_event:
+            return {}
 
-    async def on_registration_gate(self, user_id: int, interaction) -> bool:
-        """
-        Require a UCH Ranked account to register for Swiss events.
-        In debug mode this gate is skipped entirely.
-        """
-        if self.tm.debug:
-            return True
-        ranked_player = await self.tm.get_ranked_player(user_id)
-        if not ranked_player:
-            await interaction.response.send_message(
-                "You need a UCH Ranked account to participate in this event. "
-                "You can sign up at <https://uchranked.com>.",
-                ephemeral=True,
-            )
-            return False
-        return True
+        players           = swiss_event.get('players', {})
+        active_matches    = sum(
+            1 for p in players.values()
+            if p.get('active_match_id') is not None and not p.get('dropped')
+        ) // 2
+        players_remaining = sum(1 for p in players.values() if not p.get('dropped'))
+        current_round     = swiss_event.get('current_round', 0)
+        round_limit       = swiss_event.get('round_limit', tournament.get('round_limit', 8))
+        final_round_active = current_round >= round_limit
+        round_ready       = (
+            tournament.get('state') == 'active'
+            and active_matches == 0
+            and players_remaining > 1
+            and not final_round_active
+        )
+        return {
+            'current_round':     current_round,
+            'round_limit':       round_limit,
+            'active_matches':    active_matches,
+            'players_remaining': players_remaining,
+            'round_ready':       round_ready,
+            'final_round_active': final_round_active,
+        }
 
     # ─── Properties ───────────────────────────────────────────────────────────
 
@@ -168,68 +228,16 @@ class SwissFormat(BaseFormat):
     def shows_bracket_link(self) -> bool:
         return False
 
+    @property
+    def ranked_compatible(self) -> bool:
+        return True
+
     # ─── Private helpers ──────────────────────────────────────────────────────
 
-    async def _report_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
-        try:
-            result = await self.tm.bot.uchranked_api.report_match(
-                player1_id=winner_id,
-                player2_id=loser_id,
-                score='1-0',
-            )
-            if not result.get('success'):
-                await self._alert_ranked_api_failure(winner_id, loser_id, result.get('error'))
-                return
-
-            match_id = result.get('match_id')
-            if not match_id:
-                await self._alert_ranked_api_failure(winner_id, loser_id, "No match_id returned")
-                return
-
-            try:
-                await self.tm.bot.uchranked_api.accept_match(winner_id, match_id)
-            except Exception as e:
-                print(f"[Swiss] Winner accept_match failed: {e}")
-
-            try:
-                await self.tm.bot.uchranked_api.accept_match(loser_id, match_id)
-            except Exception:
-                pass  # loser confirm failure is expected/ignored
-
-        except Exception as e:
-            await self._alert_ranked_api_failure(winner_id, loser_id, str(e))
-
-    async def _alert_ranked_api_failure(self, winner_id: int, loser_id: int, error: str = None) -> None:
-        print(f"[Swiss] UCH Ranked API failure: winner={winner_id} loser={loser_id} error={error}")
-        try:
-            channel = await self.tm.get_channel('event-updates')
-            if channel:
-                embed = discord.Embed(
-                    title="⚠️ UCH Ranked API Failure",
-                    description=(
-                        f"Match result for <@{winner_id}> over <@{loser_id}> "
-                        f"**was recorded in the Swiss DB** but **failed to reach UCH Ranked**.\n\n"
-                        f"The tournament can continue normally. "
-                        f"Use `/force_report_swiss_match` if you need to manually re-trigger the round check, "
-                        f"or report the match to UCH Ranked manually.\n\n"
-                        + (f"**Error:** `{error}`" if error else "")
-                    ),
-                    color=discord.Color.red(),
-                )
-                await channel.send(embed=embed)
-        except Exception as e:
-            print(f"[Swiss] Failed to send API failure alert: {e}")
-
     async def _backfill_debug_players(self) -> None:
-        """
-        In debug mode, players are registered during open_registration before
-        the swiss event document exists. This adds any entrants who are missing
-        from the swiss event's players dict.
-        """
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if not swiss_event:
             return
-
         tournament = await self.tm.get_tournament()
         for discord_id_str in tournament.get('entrants', {}).keys():
             user_id = int(discord_id_str)
@@ -238,6 +246,6 @@ class SwissFormat(BaseFormat):
                 await self.dh.swiss_add_player(
                     swiss_event['_id'],
                     user_id,
-                    ranked_player['username'],
-                    ranked_player['elo'],
+                    ranked_player['username'] if ranked_player else f'Player {user_id}',
+                    ranked_player['elo'] if ranked_player else 1200,
                 )

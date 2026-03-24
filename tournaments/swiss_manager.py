@@ -42,7 +42,6 @@ class SwissManager:
             return
 
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
-        print(f"[run_pairing_cycle] Swiss event: _id={swiss_event.get('_id')}, current_round={swiss_event.get('current_round')}, round_limit={swiss_event.get('round_limit')}, state={swiss_event.get('state')}")
 
         is_complete = await self.dh.swiss_is_event_complete(swiss_event['_id'])
         print(f"[run_pairing_cycle] swiss_is_event_complete={is_complete}")
@@ -62,6 +61,9 @@ class SwissManager:
             return
 
         await self.close_previous_round_channels(swiss_event['_id'])
+
+        if swiss_event.get('current_round', 0) > 0:
+            await self.post_round_complete(swiss_event)
 
         current_round = await self.dh.swiss_increment_round(swiss_event['_id'])
         print(f"[run_pairing_cycle] Incremented round to {current_round}")
@@ -84,25 +86,15 @@ class SwissManager:
                 print(f"[run_pairing_cycle] Starting bye wait for unpaired player {candidate['discord_id']}")
                 await self.start_bye_wait(candidate, swiss_event)
 
-        if self.tm.debug:
-            await self.check_round_complete()
-
-        print("[run_pairing_cycle] Done")
-
     # ─── Channel cleanup ─────────────────────────────────────────────────────
 
     async def close_previous_round_channels(self, event_id):
         for match_id in list(self.tm.lobbies.keys()):
             lobby = self.tm.lobbies[match_id]
-            if lobby.channel is not None:
-                try:
-                    await lobby.channel.delete()
-                    lobby.channel = None
-                except discord.NotFound:
-                    lobby.channel = None
-                except Exception as e:
-                    print(f"Error deleting swiss lobby channel {match_id}: {e}")
-
+            try:
+                await lobby.close_lobby()
+            except Exception as e:
+                print(f"Error closing swiss lobby {match_id}: {e}")
     # ─── Check if round is complete ───────────────────────────────────────────
 
     async def check_round_complete(self):
@@ -117,11 +109,12 @@ class SwissManager:
             if player.get('active_match_id') is not None:
                 return
 
+        # Flush Ranked API calls for this round
+        await self.tm.format.flush_pending_results()
+
         if await self.dh.swiss_is_event_complete(swiss_event['_id']):
             await self.end_event()
             return
-
-        await self.post_round_complete(swiss_event)
 
     async def post_round_complete(self, swiss_event):
         """Post full standings to event-updates. The web dashboard handles enabling the next round button."""
@@ -157,18 +150,6 @@ class SwissManager:
             current_round,
         )
 
-        if self.tm.debug:
-            # In debug mode: skip Discord entirely, auto-resolve with player_1 winning
-            winner_id = player_1['discord_id']
-            loser_id = player_2['discord_id']
-            await self.dh.swiss_record_result(
-                swiss_event['_id'],
-                match_id,
-                winner_id,
-                loser_id,
-            )
-            return
-
         lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
 
         async def on_complete(result):
@@ -195,7 +176,6 @@ class SwissManager:
             guild=self.guild,
             bracket=None,
             match_service=service,
-            round=current_round,
         )
         self.tm.lobbies[match_id] = match_lobby
         await match_lobby.initialize_match()
@@ -249,7 +229,7 @@ class SwissManager:
     # ─── Called after a match finishes ───────────────────────────────────────
 
     async def on_match_complete(self, match_id: int, winner_id: int, loser_id: int):
-        """Called by TournamentManager after a swiss match result is recorded."""
+        """Called by format.on_result after a match is recorded."""
         await self.check_round_complete()
 
     # ─── Called when a player joins during active state ───────────────────────
@@ -334,8 +314,7 @@ class SwissManager:
         stage_codes = [stage['code'] for stage in stages]
         await self.dh.add_stages_to_tournament(tournament['_id'], stage_codes)
 
-        # Regenerate the banner
-        self.tm.banner_filepath = await self.tm.generate_banner()
-
-        # Update the stagelist channel
-        await self.tm.publish_stagelist()
+        # Regenerate the banner and update event-info embed
+        if not self.tm.debug:
+            self.tm.banner_filepath = await self.tm.generate_banner()
+            await self.tm.edit_event_info()

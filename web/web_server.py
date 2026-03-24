@@ -20,7 +20,6 @@ token_store: dict[str, dict] = {}
 
 TOKEN_EXPIRY_MINUTES = 30
 
-
 def generate_token(tournament_id: str, challonge_url: str) -> str:
     """Generate a one-time access token for a tournament seeding session."""
     token = secrets.token_urlsafe(32)
@@ -221,6 +220,7 @@ async def handle_create_tournament(request: web.Request) -> web.Response:
     display_entrants      = bool(body.get('display_entrants', False))
     round_limit           = max(1, min(int(body.get('round_limit', 8)), 99))
     debug                 = bool(body.get('debug', False))
+    ranked_reporting      = bool(body.get('ranked_reporting', False))
 
     tournament_data = {
         'name':                  name,
@@ -231,6 +231,7 @@ async def handle_create_tournament(request: web.Request) -> web.Response:
         'randomized_stagelist':  randomized_stagelist,
         'display_entrants':      display_entrants,
         'round_limit':           round_limit,
+        'ranked_reporting':      ranked_reporting,
         'debug':                 debug,
     }
 
@@ -374,7 +375,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             player_names.append(user['name'] if user else str(uid))
             player_ids.append(uid_int)
         lobbies.append({
-            'match_id':     l.get('match_id'),
+            'match_id':     str(l.get('match_id')),
             'lobby_name':   l.get('lobby_name', ''),
             'state':        l.get('state', ''),
             'player_names': player_names,
@@ -406,10 +407,11 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             if p.get('active_match_id') is not None and not p.get('dropped')
         ) // 2
         players_remaining = sum(1 for p in players.values() if not p.get('dropped'))
-        round_ready       = (
+        round_ready = (
             tournament.get('state') == 'active'
             and active_matches == 0
             and players_remaining > 1
+            and swiss_event.get('current_round', 0) < swiss_event.get('round_limit', 8)
         )
         swiss_data = {
             'current_round':     swiss_event.get('current_round', 0),
@@ -417,6 +419,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'active_matches':    active_matches,
             'players_remaining': players_remaining,
             'round_ready':       round_ready,
+            'final_round_acitve':swiss_event.get('current_round', 0) >= swiss_event.get('round_limit', 8)
         }
 
     # ── autocall / hold_when_ready (Challonge formats only) ──────────────────
@@ -455,9 +458,19 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'autocall_matches':      autocall_matches,
         'debug':                 tournament.get('debug', False),
         'stagelist_published':   tournament.get('stagelist_published', False),
+        'stagelist_ready':       (
+            tournament.get('stagelist_published', False)
+            or (
+                fmt in ('swiss')
+                and tournament.get('config', {}).get('randomized_stagelist', False)
+                and bool(tournament.get('stagelist'))
+            )
+        ),
         'registration_requests': registration_requests,
         'banner_url':            tournament.get('banner_url'),
         'logo_url':              tournament.get('logo_url'),
+        'ranked_compatible':     getattr(tm.format, 'ranked_compatible', False) if tm and tm.format else False,
+        'ranked_reporting':      tournament.get('config', {}).get('ranked_reporting', False),
     })
 
 
@@ -505,6 +518,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'refresh_event_info',
         'toggle_hold_when_ready',
         'unpublish_tournament',
+        'reopen_swiss_lobby',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -571,7 +585,16 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 return web.json_response(
                     {'error': 'match_id and target_state are required'}, status=400
                 )
-            match_lobby = tm.lobbies.get(match_id)
+
+            # Match by string comparison to avoid JS integer precision loss on large Swiss IDs
+            match_id_str = str(match_id)
+            # ↓ add these two lines here
+            print(f"[force_advance] received match_id={match_id!r} (type={type(match_id).__name__})")
+            print(f"[force_advance] lobbies keys: {[(k, type(k).__name__) for k in tm.lobbies.keys()]}")
+            match_lobby  = next(
+                (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
+                None
+            )
             if not match_lobby:
                 return web.json_response(
                     {'error': 'Lobby not found in memory — bot may have restarted'},
@@ -579,7 +602,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
             if target_state == 'winner':
-                await match_lobby.dh.update_lobby_state(match_id, 'finished')
+                await match_lobby.dh.update_lobby_state(match_lobby.match_id, 'finished')
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
             else:
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
@@ -593,7 +616,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 updates['name'] = name
             if 'date' in body:
                 updates['date'] = body['date'].strip()
-            for key in ('approved_registration', 'randomized_stagelist', 'display_entrants'):
+            for key in ('approved_registration', 'randomized_stagelist', 'display_entrants', 'ranked_reporting'):
                 if key in body:
                     updates[f'config.{key}'] = bool(body[key])
             if updates:
@@ -755,6 +778,41 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             need_tm()
             await tm.remove_tournament_from_discord()
             await bot.dh.unpublish_tournament(tournament['_id'])
+
+        elif action == 'reopen_swiss_lobby':
+            need_tm()
+            match_id_str = str(body.get('match_id'))
+            match_lobby  = next(
+                (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
+                None
+            )
+            if not match_lobby:
+                return web.json_response(
+                    {'error': 'Lobby not found in memory'}, status=404
+                )
+            swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+            if not swiss_event:
+                return web.json_response({'error': 'No Swiss event found'}, status=400)
+            # Reopen the lobby to reporting state
+            await match_lobby.dh.update_lobby_state(match_lobby.match_id, 'reporting')
+            # Clear both players' active_match_id so they appear available, then re-set it
+            # so the round doesn't incorrectly flip to ready
+            lobby_db = await match_lobby.get_lobby()
+            for player_id in lobby_db.get('players', []):
+                await bot.dh.swiss_set_active_match(swiss_event['_id'], player_id, match_lobby.match_id)
+            # Undo the recorded result
+            await bot.dh.swiss_unrecord_result(swiss_event['_id'], match_lobby.match_id)
+            # Reset the lobby to reporting state cleanly, without duplicating players
+            await bot.dh.lobby_collection.update_one(
+                {'match_id': match_lobby.match_id},
+                {'$set': {
+                    'state':        'reporting',
+                    'results':      [],
+                    'checked_in':   [],
+                    'picked_stage': None,
+                }}
+            )
+            await match_lobby.start_reporting()
 
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)

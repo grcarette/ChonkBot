@@ -211,6 +211,30 @@ class BaseFormat:
             return ['autocall', 'reset']
         return []
 
+    async def get_dashboard_state(self) -> dict:
+        """
+        Return format-specific state for the web dashboard.
+        Called by the web server on every poll. The result is passed through
+        as `format_state` in the tournament API response.
+        Default: empty dict (no extra state needed).
+        """
+        return {}
+
+    def get_action_buttons(self, tournament_state: str) -> list[dict]:
+        """
+        Return a list of button descriptors for the dashboard action area.
+        Called client-side via the format_actions list in the API response.
+        Each button is a dict with:
+            id:       str   — element ID
+            label:    str   — button text
+            style:    str   — 'success' | 'primary' | 'danger' | 'secondary' | 'toggle-on' | 'toggle-off'
+            disabled: bool
+            confirm:  dict | None — { title, message, type } if confirmation required
+            action:   str   — doAction() call
+        Default: empty list.
+        """
+        return []
+
     @property
     def supports_reset(self) -> bool:
         """DE/SE: True. Swiss: False."""
@@ -229,4 +253,9 @@ class BaseFormat:
     @property
     def shows_round_button(self) -> bool:
         """Whether the Start Round button should appear. Swiss: True. DE/SE: False."""
+        return False
+
+    @property
+    def ranked_compatible(self) -> bool:
+        """Whether this format supports UCH Ranked reporting. Default: False."""
         return False

@@ -390,6 +390,11 @@ class ChallongeFormat(BaseFormat):
 
     # ─── Properties ───────────────────────────────────────────────────────────
 
+    async def get_dashboard_state(self) -> dict:
+        return {
+            'autocall_matches': getattr(self, 'autocall_matches', False),
+        }
+
     @property
     def needs_match_call_refresh(self) -> bool:
         return True
@@ -400,4 +405,8 @@ class ChallongeFormat(BaseFormat):
 
     @property
     def shows_bracket_link(self) -> bool:
+        return True
+
+    @property
+    def ranked_compatible(self) -> bool:
         return True

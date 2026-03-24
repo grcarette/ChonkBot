@@ -18,7 +18,7 @@ const _matchActionInFlight = new Set();
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-function renderMatches(lobbies, pending, autocall) {
+function renderMatches(lobbies, pending, autocall, swiss) {
     const container       = document.getElementById('matches-section-wrap');
     const activeLobbies   = lobbies.filter(l => ACTIVE_LOBBY_STATES.has(l.state));
     const finishedLobbies = lobbies.filter(l => FINISHED_LOBBY_STATES.has(l.state));
@@ -111,14 +111,26 @@ function renderMatches(lobbies, pending, autocall) {
     // ── Finished ──
     html += `<div class="matches-group-title">Finished · ${finishedLobbies.length}</div>`;
     if (finishedLobbies.length) {
+        const canReopen = swiss && swiss.current_round > 0;
         html += finishedLobbies.map(l => {
-            const players = l.player_names.map(escapeHtml).join(' vs ');
-            return `<div class="match-row match-row-finished">
+            const players  = l.player_names.map(escapeHtml).join(' vs ');
+            const inFlight = _matchActionInFlight.has(l.match_id);
+            const reopenBtn = canReopen
+                ? `<button class="btn btn-secondary btn-sm"
+                        onclick="matchAction_reopen('${l.match_id}', this)"
+                        ${inFlight ? 'disabled' : ''}>
+                        Reopen
+                   </button>`
+                : '';
+            return `<div class="match-row match-row-finished" data-match-id="${l.match_id}">
                 <div class="match-row-info">
                     <span class="match-row-players">${players}</span>
                     <span class="match-row-meta">${escapeHtml(l.lobby_name || String(l.match_id))}</span>
                 </div>
-                <span class="tag tag-done" style="flex-shrink:0">Done</span>
+                <div class="match-row-actions">
+                    ${reopenBtn}
+                    <span class="tag tag-done" style="flex-shrink:0">Done</span>
+                </div>
             </div>`;
         }).join('');
     } else {
@@ -316,4 +328,9 @@ async function forceAdvanceMatch(matchId, playerNames, playerIds) {
 async function submitForceWinner(matchId, winnerId) {
     closeModal();
     await _matchActionAndRefresh(matchId, 'force_advance', { target_state: 'winner', winner_id: winnerId });
+}
+
+async function matchAction_reopen(matchId, btn) {
+    btn.textContent = 'Reopening...';
+    await _matchActionAndRefresh(matchId, 'reopen_swiss_lobby');
 }

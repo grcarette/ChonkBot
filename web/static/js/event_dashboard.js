@@ -9,6 +9,7 @@ let _forceRefreshSeeds     = false;
 let _seedsRendered         = false;
 let _loadTournamentInFlight = false;
 let _dangerZoneOpen = false;
+let _nextRoundInFlight = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     initAvatar(USERNAME, AVATAR_URL);
@@ -74,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             approved_registration: document.getElementById('cfg-approved').checked,
             randomized_stagelist:  document.getElementById('cfg-random-stage').checked,
             display_entrants:      document.getElementById('cfg-display-entrants').checked,
+            ranked_reporting:      document.getElementById('cfg-ranked').checked,
         });
     };
     // Image uploads — wired once, not on every populateConfig call
@@ -228,7 +230,7 @@ async function loadTournament({ force = false } = {}) {
         renderRegistrationRequests(data.registration_requests || [], data.config);
 
         const pending = pmResult.pending || [];
-        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false);
+        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false, data.swiss ?? null);
 
         if (_forceRefreshSeeds || !_seedsRendered) {
             renderPlayers(
@@ -294,12 +296,13 @@ function renderActionArea(t) {
         };
 
     } else if (state === 'registration') {
-        const stagelistReady = t.stagelist_published;
+        const stagelistReady = t.stagelist_ready ?? t.stagelist_published;
         area.innerHTML = `<div class="action-panel"><div class="action-panel-title">Registration</div>
             <div class="action-row">
                 <button class="btn ${registration_open ? 'btn-toggle-on' : 'btn-toggle-off'}" id="btn-toggle-reg">
                     ${registration_open ? 'Close Registration' : 'Open Registration'}
                 </button>
+                ${(!isSwiss || !t.config?.randomized_stagelist) ? `
                 <button class="btn btn-primary" id="btn-publish-stagelist">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -307,7 +310,7 @@ function renderActionArea(t) {
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                     ${stagelistReady ? '✓ Stagelist Published' : 'Publish Stagelist'}
-                </button>
+                </button>` : ''}
                 <button class="btn btn-primary" id="btn-start-checkin">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <polyline points="20 6 9 17 4 12"/>
@@ -329,7 +332,8 @@ function renderActionArea(t) {
                 'Registration will be locked and players asked to check in.'))
                 await doAction('progress');
         };
-        document.getElementById('btn-publish-stagelist').onclick = async () => {
+        const publishBtn = document.getElementById('btn-publish-stagelist');
+        if (publishBtn) publishBtn.onclick = async () => {
             if (await showConfirm('Publish Stagelist?',
                 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
@@ -344,7 +348,7 @@ function renderActionArea(t) {
         };
 
     } else if (state === 'checkin') {
-        const stagelistReady = t.stagelist_published;
+        const stagelistReady = t.stagelist_ready ?? t.stagelist_published;
         area.innerHTML = `<div class="action-panel"><div class="action-panel-title">Check-in</div>
             <div class="action-row">
                 <button class="btn ${registration_open ? 'btn-toggle-on' : 'btn-toggle-off'}" id="btn-toggle-reg">
@@ -357,6 +361,7 @@ function renderActionArea(t) {
                     </svg>
                     Ping Check-in
                 </button>
+                ${(!isSwiss || !t.config?.randomized_stagelist) ? `
                 <button class="btn btn-primary" id="btn-publish-stagelist">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -364,7 +369,7 @@ function renderActionArea(t) {
                         <line x1="12" y1="3" x2="12" y2="15"/>
                     </svg>
                     ${stagelistReady ? '✓ Stagelist Published' : 'Publish Stagelist'}
-                </button>
+                </button>` : ''}
                 <button class="btn btn-success" id="btn-start-tournament"
                     ${!stagelistReady ? 'disabled title="Publish the stagelist first"' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -392,10 +397,15 @@ function renderActionArea(t) {
         document.getElementById('btn-start-tournament').onclick = async () => {
             if (!stagelistReady) return;
             if (await showConfirm('Start Tournament?',
-                'Players who have not checked in will be removed. This cannot be undone.'))
+                'Players who have not checked in will be removed. This cannot be undone.')) {
+                const btn = document.getElementById('btn-start-tournament');
+                btn.disabled = true;
+                btn.textContent = 'Starting Tournament...';
                 await doAction('progress');
+            }
         };
-        document.getElementById('btn-publish-stagelist').onclick = async () => {
+        const publishBtn = document.getElementById('btn-publish-stagelist');
+        if (publishBtn) publishBtn.onclick = async () => {
             if (await showConfirm('Publish Stagelist?',
                 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
@@ -406,7 +416,7 @@ function renderActionArea(t) {
                 await doAction('revert_tournament');
         };
 
-    } else if (state === 'active') {
+        } else if (state === 'active') {
         const roundHtml = isSwiss && t.swiss ? `<div class="round-info">
             <div class="action-panel-title">Swiss Progress</div>
             <div class="round-stat-row">
@@ -415,13 +425,40 @@ function renderActionArea(t) {
                 <div class="round-stat"><span class="round-stat-val">${t.swiss.active_matches}</span><span class="round-stat-lbl">Active Matches</span></div>
                 <div class="round-stat"><span class="round-stat-val">${t.swiss.players_remaining}</span><span class="round-stat-lbl">Players In</span></div>
             </div></div>` : '';
-        const nextBtn = isSwiss && t.swiss?.round_ready
-            ? `<button class="btn btn-success" id="btn-next-round">
+        const finalRoundActive = isSwiss && t.swiss?.final_round_active;
+        const nextBtn = isSwiss && t.swiss && !finalRoundActive
+            ? `<button class="btn btn-success" id="btn-next-round" ${t.swiss.round_ready ? '' : 'disabled'}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
                 Start Round ${t.swiss.current_round + 1}
-               </button>` : '';
+               </button>`
+            : '';
+        const wrapUpHtml = finalRoundActive ? `
+            <div class="action-panel" style="margin-top:8px">
+                <div class="action-panel-title">Wrap Up</div>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                    Final round is underway. Once all matches complete the event will end automatically.
+                </p>
+                <div class="action-row">
+                    <button class="btn btn-primary" id="btn-post-results" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Post Results
+                    </button>
+                    <button class="btn btn-danger" id="btn-finalize" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                        </svg>
+                        Finalize &amp; Remove Channels
+                    </button>
+                </div>
+            </div>` : '';
 
         area.innerHTML = `
             ${roundHtml}
@@ -429,16 +466,17 @@ function renderActionArea(t) {
                 <div class="action-panel-title">Controls</div>
                 <div class="action-row">
                     ${nextBtn}
-                    <button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
+                    ${(!isSwiss || !t.config?.randomized_stagelist) ? `<button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="17 8 12 3 7 8"/>
                             <line x1="12" y1="3" x2="12" y2="15"/>
                         </svg>
                         Publish Stagelist to Discord
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
+            ${wrapUpHtml}
             <div class="action-panel danger-zone-panel">
                 <div class="danger-zone-header" id="danger-zone-toggle">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -464,10 +502,33 @@ function renderActionArea(t) {
                 </div>
             </div>`;
 
+        if (finalRoundActive) {
+            const postBtn = document.getElementById('btn-post-results');
+            if (postBtn) postBtn.onclick = async () => {
+                if (await showConfirm('Post Results?', 'This will post the final standings to the results channel.', 'warning'))
+                    await doAction('post_results');
+            };
+            const finalizeBtn = document.getElementById('btn-finalize');
+            if (finalizeBtn) finalizeBtn.onclick = async () => {
+                if (await showConfirm('Finalize Tournament?', 'All lobby channels and tournament roles will be permanently removed from Discord.', 'danger'))
+                    await doAction('progress');
+            };
+        }
+        
+
         const chevron = document.querySelector('.danger-zone-chevron');
         if (chevron) chevron.style.transform = _dangerZoneOpen ? 'rotate(180deg)' : '';
-        if (isSwiss && t.swiss?.round_ready)
-            document.getElementById('btn-next-round').onclick = () => doAction('next_round');
+        const nextRoundBtn = document.getElementById('btn-next-round');
+        if (nextRoundBtn) {
+            if (_nextRoundInFlight) nextRoundBtn.disabled = true;
+            nextRoundBtn.onclick = async () => {
+                _nextRoundInFlight = true;
+                nextRoundBtn.disabled = true;
+                nextRoundBtn.textContent = 'Starting...';
+                await doAction('next_round');
+                _nextRoundInFlight = false;
+            };
+        }
 
         document.getElementById('danger-zone-toggle').onclick = () => {
             const body    = document.getElementById('danger-zone-body');
@@ -476,7 +537,8 @@ function renderActionArea(t) {
             body.hidden   = !_dangerZoneOpen;
             chevron.style.transform = _dangerZoneOpen ? 'rotate(180deg)' : '';
         };
-        document.getElementById('btn-publish-stagelist').onclick = async () => {
+        const activePublishBtn = document.getElementById('btn-publish-stagelist');
+        if (activePublishBtn) activePublishBtn.onclick = async () => {
             if (await showConfirm('Publish Stagelist?',
                 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
@@ -585,6 +647,11 @@ function populateConfig(t) {
         logoPreview.innerHTML = t.logo_url
             ? `<img src="${escapeHtml(t.logo_url)}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;display:block">`
             : `<div style="font-size:12px;color:var(--text-muted);font-style:italic">No logo uploaded</div>`;
+    }
+    const rankedRow = document.getElementById('cfg-ranked-row');
+    if (rankedRow) {
+        rankedRow.hidden = !t.ranked_compatible;
+        document.getElementById('cfg-ranked').checked = t.ranked_reporting ?? false;
     }
 }
 

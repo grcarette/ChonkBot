@@ -24,14 +24,12 @@ def get_tier(elo: int) -> tuple[int, int]:
 
 def generate_match_id(tournament_id: str, sequence: int) -> int:
     """
-    Generate a unique integer match_id from a tournament_id and sequence number.
-    Result is guaranteed to fit in a signed 64-bit integer (BSON compatible).
+    Generate a unique match_id from a tournament_id and sequence number.
+    Uses a small integer safe for JavaScript (< 2^53).
     """
-    key = f"{tournament_id}:{sequence}"
-    hash_bytes = hashlib.md5(key.encode()).digest()[:8]
-    unsigned = int.from_bytes(hash_bytes, byteorder='big')
-    return unsigned & 0x7FFFFFFFFFFFFFFF
-
+    # Hash the tournament_id to a stable short prefix (0-9999)
+    prefix = int(hashlib.md5(tournament_id.encode()).hexdigest(), 16) % 10000
+    return prefix * 100000 + sequence
 
 class SwissMethodsMixin:
 
@@ -373,3 +371,77 @@ class SwissMethodsMixin:
                 '$pull': {'matches': {'round_number': event.get('current_round', 0), 'state': 'active'}},
             }
         )
+
+    async def swiss_reset_to_registration(self, event_id: ObjectId):
+        event = await self.get_swiss_event(event_id)
+        if not event:
+            return
+
+        player_updates = {}
+        for discord_id, player in event.get('players', {}).items():
+            player_updates[f'players.{discord_id}.active_match_id'] = None
+            player_updates[f'players.{discord_id}.points']          = 0.0
+            player_updates[f'players.{discord_id}.wins']            = 0
+            player_updates[f'players.{discord_id}.losses']          = 0
+            player_updates[f'players.{discord_id}.rounds_played']   = 0
+            player_updates[f'players.{discord_id}.match_history']   = []
+
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {'$set': {
+                'state':               'registration',
+                'current_round':       0,
+                'matches':             [],
+                'bye_queue':           None,
+                'next_match_sequence': 0,
+                **player_updates,
+            }}
+        )
+
+    async def swiss_unrecord_result(self, event_id: ObjectId, match_id: int):
+        """Undo a recorded result — revert match to active, reverse win/loss counts."""
+        event = await self.get_swiss_event(event_id)
+        match = next((m for m in event.get('matches', []) if m['match_id'] == match_id), None)
+        if not match or match.get('winner') is None:
+            return
+
+        winner_id = match['winner']
+        loser_id  = next(p for p in [match['player_1'], match['player_2']] if p != winner_id)
+        winner    = event['players'].get(str(winner_id))
+        loser     = event['players'].get(str(loser_id))
+
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {
+                '$set': {
+                    'matches.$[m].winner': None,
+                    'matches.$[m].state':  'active',
+                    f'players.{winner_id}.active_match_id': match_id,
+                    f'players.{winner_id}.points':          winner['points'] - 1,
+                    f'players.{winner_id}.wins':            winner['wins'] - 1,
+                    f'players.{winner_id}.rounds_played':   winner['rounds_played'] - 1,
+                    f'players.{loser_id}.active_match_id':  match_id,
+                    f'players.{loser_id}.losses':           loser['losses'] - 1,
+                    f'players.{loser_id}.rounds_played':    loser['rounds_played'] - 1,
+                }
+            },
+            array_filters=[{'m.match_id': match_id}]
+        )
+
+async def swiss_rejoin_player(self, event_id: ObjectId, discord_id: int) -> bool:
+        """
+        Rejoin a previously dropped player, restoring their dropped=False status
+        without resetting their points, wins, losses, or match history.
+        Returns True if the player was found and rejoined, False if they're new.
+        """
+        event = await self.get_swiss_event(event_id)
+        if str(discord_id) in event.get('players', {}):
+            await self.swiss_collection.update_one(
+                {'_id': ObjectId(event_id)},
+                {'$set': {
+                    f'players.{discord_id}.dropped':         False,
+                    f'players.{discord_id}.active_match_id': None,
+                }}
+            )
+            return True
+        return False
