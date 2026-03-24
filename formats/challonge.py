@@ -3,6 +3,8 @@
 from formats.base import BaseFormat
 from tournaments.challonge_handler import ChallongeHandler
 
+import asyncio
+
 
 class ChallongeFormat(BaseFormat):
     """
@@ -84,8 +86,19 @@ class ChallongeFormat(BaseFormat):
 
         tournament = await self.tm.get_tournament()
         winner_user_id = str(result['winner_id'])
+
+        if winner_user_id not in tournament['entrants']:
+            winner_int = int(winner_user_id)
+            closest = min(tournament['entrants'].keys(), key=lambda k: abs(int(k) - winner_int))
+            if abs(int(closest) - winner_int) < 100:
+                winner_user_id = closest
+            else:
+                raise ValueError(f"Could not resolve winner {winner_user_id} to any entrant.")
+
         challonge_winner_id = tournament['entrants'][winner_user_id]
 
+        # Report the match — status check must come after since Challonge
+        # updates state synchronously on report
         await self.ch.report_match(
             tournament['challonge_data']['url'],
             result['match_id'],
@@ -94,20 +107,25 @@ class ChallongeFormat(BaseFormat):
         )
         print(f"[timing] challonge report_match: {time.perf_counter()-t0:.3f}s")
 
-        status = await self.ch.check_tournament_status(tournament['challonge_data']['id'])
-        print(f"[timing] check_tournament_status: {time.perf_counter()-t0:.3f}s")
-
-        await self.tm.close_prereqs(lobby)
-        print(f"[timing] close_prereqs: {time.perf_counter()-t0:.3f}s")
+        # Run status check and prereq close in parallel — neither depends on the other
+        status, _ = await asyncio.gather(
+            self.ch.check_tournament_status(tournament['challonge_data']['id']),
+            self.tm.close_prereqs(lobby),
+        )
+        print(f"[timing] status+close_prereqs parallel: {time.perf_counter()-t0:.3f}s")
 
         if status == 'awaiting_review':
             await self.tm.bot.dh.update_tournament_state(self.tm.tournament['_id'], 'finished')
             self.tm.invalidate_pending_cache()
         else:
+            self.tm.invalidate_pending_cache()
             if getattr(self.tm, 'autocall_matches', False):
                 await self.tm.call_matches()
-        print(f"[timing] call_matches/finish: {time.perf_counter()-t0:.3f}s")
-
+            elif self.tm.hold_when_ready:
+                pending = await self.tm.get_pending_matches()
+                for match_data in pending:
+                    if match_data['match_id'] in self.tm.hold_when_ready:
+                        await self.tm.call_match(match_data, hold_match=True)
         print(f"[timing] on_result TOTAL: {time.perf_counter()-t0:.3f}s")
 
     async def on_tournament_end(self) -> None:

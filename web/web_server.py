@@ -2,6 +2,7 @@ import os
 import secrets
 import discord
 import asyncio
+import time
 from datetime import datetime, timezone, timedelta
 from aiohttp import web
 from utils.validate_stagecode import validate_stagecode
@@ -179,6 +180,8 @@ async def handle_get_tournaments(request: web.Request) -> web.Response:
             'lobby_count':       lobby_count,
             'registration_open': t.get('registration_open', False),
             'debug':             t.get('debug', False),
+            'banner_url': t.get('banner_url'),
+            'logo_url':   t.get('logo_url'),
         })
 
     STATE_ORDER = {'active': 0, 'checkin': 1, 'registration': 2, 'setup': 3, 'initialize': 4}
@@ -446,6 +449,8 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'debug':                 tournament.get('debug', False),
         'stagelist_published':   tournament.get('stagelist_published', False),
         'registration_requests': registration_requests,
+        'banner_url':            tournament.get('banner_url'),
+        'logo_url':              tournament.get('logo_url'),
     })
 
 
@@ -493,6 +498,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'update_config',
         'refresh_event_info',
         'toggle_hold_when_ready',
+        'unpublish_tournament',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -567,10 +573,8 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
             if target_state == 'winner':
-                # Update DB immediately so dashboard reflects finished state right away,
-                # then fire the rest of the chain in the background
                 await match_lobby.dh.update_lobby_state(match_id, 'finished')
-                asyncio.create_task(match_lobby.force_advance(target_state, winner_id=winner_id))
+                await match_lobby.force_advance(target_state, winner_id=winner_id)
             else:
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
 
@@ -745,6 +749,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 return web.json_response({'error': 'match_id is required'}, status=400)
             is_flagged = tm.toggle_hold_when_ready(match_id)
             return web.json_response({'ok': True, 'flagged': is_flagged})
+        elif action == 'unpublish_tournament':
+            need_tm()
+            await tm.remove_tournament_from_discord()
+            await bot.dh.unpublish_tournament(tournament['_id'])
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:
@@ -1107,6 +1115,98 @@ async def handle_get_pending_matches(request: web.Request) -> web.Response:
 
     return web.json_response({'pending': result})
 
+@require_auth
+async def handle_upload_image(request: web.Request) -> web.Response:
+    """Handle banner or logo image upload for a tournament."""
+    tournament_id = request.match_info['tournament_id']
+    image_type    = request.match_info['image_type']  # 'banner' or 'logo'
+    bot           = request.app['bot']
+
+    if image_type not in ('banner', 'logo'):
+        return web.json_response({'error': 'Invalid image type'}, status=400)
+
+    tournament = await bot.dh.get_tournament_by_id(tournament_id)
+    if not tournament:
+        return web.json_response({'error': 'Tournament not found'}, status=404)
+
+    try:
+        reader = await request.multipart()
+        field  = await reader.next()
+        if not field or field.name != 'image':
+            return web.json_response({'error': 'No image field in request'}, status=400)
+
+        # Read raw bytes
+        data = b''
+        while True:
+            chunk = await field.read_chunk()
+            if not chunk:
+                break
+            data += chunk
+
+        if not data:
+            return web.json_response({'error': 'Empty file'}, status=400)
+
+        # Validate it's an image and resize/compress with Pillow
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(data))
+            img.verify()
+            img = Image.open(io.BytesIO(data))  # re-open after verify
+
+            # Resize to reasonable max dimensions
+            max_dims = (1920, 480) if image_type == 'banner' else (512, 512)
+            img.thumbnail(max_dims, Image.LANCZOS)
+
+            # Convert to RGB (handles PNG with alpha etc.)
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+
+            out = io.BytesIO()
+            img.save(out, format='JPEG', quality=85, optimize=True)
+            data = out.getvalue()
+        except Exception as e:
+            return web.json_response({'error': f'Invalid image: {e}'}, status=400)
+
+        # Save to disk
+        upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', f'{image_type}s')
+        filepath   = os.path.join(upload_dir, f'{tournament_id}.jpg')
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+        # Store the URL path in the tournament document
+
+        clean_path = f'/static/uploads/{image_type}s/{tournament_id}.jpg'
+        await bot.dh.update_tournament_image_path(tournament['_id'], image_type, clean_path)
+        return web.json_response({'ok': True, 'url': f'{clean_path}?v={int(time.time())}'})
+
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500)
+
+
+@require_auth
+async def handle_delete_image(request: web.Request) -> web.Response:
+    """Delete a tournament's banner or logo image."""
+    tournament_id = request.match_info['tournament_id']
+    image_type    = request.match_info['image_type']
+    bot           = request.app['bot']
+
+    if image_type not in ('banner', 'logo'):
+        return web.json_response({'error': 'Invalid image type'}, status=400)
+
+    filepath = os.path.join(
+        os.path.dirname(__file__), 'static', 'uploads',
+        f'{image_type}s', f'{tournament_id}.jpg'
+    )
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    await bot.dh.update_tournament_image_path(
+        (await bot.dh.get_tournament_by_id(tournament_id))['_id'],
+        image_type, None
+    )
+    return web.json_response({'ok': True})
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 def create_app(challonge_handler_factory, bot) -> web.Application:
@@ -1124,6 +1224,8 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get( '/dashboard',      handle_dashboard)
     app.router.add_get( '/api/tournaments', handle_get_tournaments)
     app.router.add_post('/api/tournaments', handle_create_tournament)
+    app.router.add_post(  '/api/tournament/{tournament_id}/upload/{image_type}', handle_upload_image)
+    app.router.add_delete('/api/tournament/{tournament_id}/upload/{image_type}', handle_delete_image)
 
     # Event dashboard
     app.router.add_get(   '/dashboard/{tournament_id}', handle_event_dashboard)
@@ -1153,9 +1255,12 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
 
 
 async def start_server(challonge_handler_factory, bot):
-    """Start the aiohttp server. Called from bot.py on_ready."""
     host = os.getenv('WEB_HOST', '0.0.0.0')
     port = int(os.getenv('PORT', os.getenv('WEB_PORT', 8080)))
+
+    base = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+    os.makedirs(os.path.join(base, 'banners'), exist_ok=True)
+    os.makedirs(os.path.join(base, 'logos'),   exist_ok=True)
 
     app = create_app(challonge_handler_factory, bot)
     runner = web.AppRunner(app)

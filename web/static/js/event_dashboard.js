@@ -8,6 +8,7 @@ let bracketRefreshInterval = null;
 let _forceRefreshSeeds     = false;
 let _seedsRendered         = false;
 let _loadTournamentInFlight = false;
+let _dangerZoneOpen = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     initAvatar(USERNAME, AVATAR_URL);
@@ -75,6 +76,30 @@ document.addEventListener('DOMContentLoaded', () => {
             display_entrants:      document.getElementById('cfg-display-entrants').checked,
         });
     };
+    // Image uploads — wired once, not on every populateConfig call
+    document.getElementById('cfg-banner-upload').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await uploadImage(file, 'banner');
+        e.target.value = '';
+    });
+
+    document.getElementById('cfg-logo-upload').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await uploadImage(file, 'logo');
+        e.target.value = '';
+    });
+
+    document.getElementById('cfg-banner-delete').addEventListener('click', async () => {
+        if (await showConfirm('Remove Banner?', 'The banner image will be deleted.', 'danger'))
+            await deleteImage('banner');
+    });
+
+    document.getElementById('cfg-logo-delete').addEventListener('click', async () => {
+        if (await showConfirm('Remove Logo?', 'The logo image will be deleted.', 'danger'))
+            await deleteImage('logo');
+    });
 
     // Delete tournament
     document.getElementById('btn-delete-tournament').onclick = async () => {
@@ -194,6 +219,7 @@ async function loadTournament({ force = false } = {}) {
 
         _timing.start('loadTournament_render');
         renderBadge(data.state);
+        renderLogo(data.logo_url);
         renderStats(data);
         renderActionArea(data);
         populateConfig(data);
@@ -288,6 +314,13 @@ function renderActionArea(t) {
                     </svg>
                     Start Check-in
                 </button>
+                <button class="btn btn-danger" id="btn-unpublish">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 .49-3.45"/>
+                    </svg>
+                    Unpublish
+                </button>
             </div></div>`;
         document.getElementById('btn-toggle-reg').onclick = () =>
             doAction(registration_open ? 'close_registration' : 'open_registration');
@@ -300,6 +333,14 @@ function renderActionArea(t) {
             if (await showConfirm('Publish Stagelist?',
                 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
+        };
+        document.getElementById('btn-unpublish').onclick = async () => {
+            if (await showConfirm(
+                'Unpublish Tournament?',
+                'All tournament channels and roles will be permanently removed from Discord. The tournament record will remain so you can republish.',
+                'danger'
+            ))
+                await doAction('unpublish_tournament');
         };
 
     } else if (state === 'checkin') {
@@ -410,9 +451,8 @@ function renderActionArea(t) {
                         <polyline points="6 9 12 15 18 9"/>
                     </svg>
                 </div>
-                <div class="danger-zone-body" id="danger-zone-body" hidden>
+                <div class="danger-zone-body" id="danger-zone-body" ${_dangerZoneOpen ? '' : 'hidden'}>
                     <div class="action-row" style="padding:14px 18px">
-                        <button class="btn btn-danger" id="btn-end">End Tournament</button>
                         <button class="btn btn-danger" id="btn-revert-active">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <polyline points="1 4 1 10 7 10"/>
@@ -424,24 +464,22 @@ function renderActionArea(t) {
                 </div>
             </div>`;
 
+        const chevron = document.querySelector('.danger-zone-chevron');
+        if (chevron) chevron.style.transform = _dangerZoneOpen ? 'rotate(180deg)' : '';
         if (isSwiss && t.swiss?.round_ready)
             document.getElementById('btn-next-round').onclick = () => doAction('next_round');
 
         document.getElementById('danger-zone-toggle').onclick = () => {
             const body    = document.getElementById('danger-zone-body');
             const chevron = document.querySelector('.danger-zone-chevron');
-            body.hidden   = !body.hidden;
-            chevron.style.transform = body.hidden ? '' : 'rotate(180deg)';
+            _dangerZoneOpen = !_dangerZoneOpen;
+            body.hidden   = !_dangerZoneOpen;
+            chevron.style.transform = _dangerZoneOpen ? 'rotate(180deg)' : '';
         };
         document.getElementById('btn-publish-stagelist').onclick = async () => {
             if (await showConfirm('Publish Stagelist?',
                 'This will post stage embeds to the event-info channel. Any previously published stages will be replaced.'))
                 await doAction('publish_stagelist');
-        };
-        document.getElementById('btn-end').onclick = async () => {
-            if (await showConfirm('End Tournament?',
-                'All open matches will be closed and the tournament moved to finished state.', 'danger'))
-                await doAction('progress');
         };
         document.getElementById('btn-revert-active').onclick = async () => {
             const extraHtml = `
@@ -534,6 +572,20 @@ function populateConfig(t) {
     document.getElementById('cfg-approved').checked         = t.config?.approved_registration ?? false;
     document.getElementById('cfg-random-stage').checked     = t.config?.randomized_stagelist  ?? false;
     document.getElementById('cfg-display-entrants').checked = t.config?.display_entrants       ?? false;
+
+    // Image previews
+    const bannerPreview = document.getElementById('cfg-banner-preview');
+    if (bannerPreview) {
+        bannerPreview.innerHTML = t.banner_url
+            ? `<img src="${escapeHtml(t.banner_url)}" style="width:100%;max-height:120px;object-fit:cover;border-radius:6px;display:block">`
+            : `<div style="font-size:12px;color:var(--text-muted);font-style:italic">No banner uploaded</div>`;
+    }
+    const logoPreview = document.getElementById('cfg-logo-preview');
+    if (logoPreview) {
+        logoPreview.innerHTML = t.logo_url
+            ? `<img src="${escapeHtml(t.logo_url)}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;display:block">`
+            : `<div style="font-size:12px;color:var(--text-muted);font-style:italic">No logo uploaded</div>`;
+    }
 }
 
 // ── Registration requests ─────────────────────────────────────────────────────
@@ -580,5 +632,50 @@ async function denyRegistration(discordId, name) {
         `Deny registration for <strong>${escapeHtml(name)}</strong>?`, 'danger', extra)) {
         const reason = document.getElementById('deny-reason')?.value?.trim() || '';
         await doAction('deny_registration', { discord_id: discordId, reason });
+    }
+}
+
+function renderLogo(logoUrl) {
+    const el = document.getElementById('sidebar-logo');
+    if (!el) return;
+    if (logoUrl) {
+        el.innerHTML = `<img src="${escapeHtml(logoUrl)}?v=${Date.now()}"
+            style="height:100%;width:auto;border-radius:10px;display:block;object-fit:contain;max-height:100px"
+            alt="">`;
+    } else {
+        el.innerHTML = '';
+    }
+}
+
+async function uploadImage(file, type) {
+    const statusEl = document.getElementById(`cfg-${type}-status`);
+    if (statusEl) { statusEl.textContent = 'Uploading...'; statusEl.style.color = 'var(--text-muted)'; }
+    try {
+        const form = new FormData();
+        form.append('image', file);
+        const resp = await fetch(`/api/tournament/${TOURNAMENT_ID}/upload/${type}`, {
+            method: 'POST',
+            body:   form,
+        });
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.error || 'Upload failed');
+        }
+        if (statusEl) { statusEl.textContent = 'Uploaded ✓'; statusEl.style.color = 'var(--green)'; }
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+        await loadTournament({ force: true });
+    } catch (err) {
+        if (statusEl) { statusEl.textContent = `Failed: ${err.message}`; statusEl.style.color = 'var(--red)'; }
+        showToast(`Upload failed: ${err.message}`, 'error');
+    }
+}
+
+async function deleteImage(type) {
+    try {
+        await fetch(`/api/tournament/${TOURNAMENT_ID}/upload/${type}`, { method: 'DELETE' });
+        showToast(`${type} removed`, 'success');
+        await loadTournament({ force: true });
+    } catch (err) {
+        showToast(`Failed: ${err.message}`, 'error');
     }
 }

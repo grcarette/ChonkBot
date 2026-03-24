@@ -349,3 +349,22 @@ class TournamentMethodsMixin:
             {'_id': ObjectId(tournament_id)},
             {'$set': {'registration_requests': []}}
         )
+
+    async def update_tournament_image_path(self, tournament_id, image_type: str, url: str | None):
+        """Store or clear the banner/logo URL path for a tournament."""
+        field = 'banner_url' if image_type == 'banner' else 'logo_url'
+        query  = {'_id': ObjectId(tournament_id)}
+        if url:
+            update = {'$set': {field: url}}
+        else:
+            update = {'$unset': {field: ''}}
+        await self.tournament_collection.update_one(query, update)
+
+    async def unpublish_tournament(self, tournament_id):
+        """Reset a published tournament back to setup state, clearing Discord-specific data."""
+        query  = {'_id': ObjectId(tournament_id)}
+        update = {
+            '$set':   {'state': 'setup', 'registration_open': False},
+            '$unset': {'category_id': '', 'checked_in': '', 'called_match_ids': ''},
+        }
+        await self.tournament_collection.update_one(query, update)

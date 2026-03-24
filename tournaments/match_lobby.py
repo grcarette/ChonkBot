@@ -211,8 +211,8 @@ class MatchLobby:
                 await self.tournament_manager.report_match(self, is_dq)
                 print(f"[timing] report_match fallback: {time.perf_counter()-t0:.3f}s")
 
-            await self.send_player_instructions()
-            print(f"[timing] send_player_instructions: {time.perf_counter()-t0:.3f}s")
+            asyncio.create_task(self.send_player_instructions())
+            print(f"[timing] send_player_instructions (backgrounded): {time.perf_counter()-t0:.3f}s")
 
             if is_dq:
                 await self.close_lobby()
@@ -358,6 +358,7 @@ class MatchLobby:
             elif target_state == 'winner':
                 if winner_id is None:
                     raise ValueError("winner_id is required when forcing to 'winner' state")
+                asyncio.create_task(self.purge_bot_messages())
                 await self.end_reporting(winner_id=winner_id)
     
 

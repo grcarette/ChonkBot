@@ -696,13 +696,9 @@ class TournamentManager:
             self._pending_cache = [m for m in self._pending_cache if m['match_id'] != match_id]
 
     async def call_matches(self):
-        """
-        Call all currently pending matches. Only triggered explicitly
-        from the web dashboard (Call All button or Auto Call).
-        """
         tournament = await self.get_tournament()
         pending_matches = await self.ch.get_pending_matches(tournament['challonge_data']['url'])
-        self.invalidate_pending_cache()
+        print(f"[call_matches] {len(pending_matches)} pending matches from Challonge")
         for match in pending_matches:
             if self.tournament_reset:
                 return
@@ -715,9 +711,12 @@ class TournamentManager:
             if match_data is None:
                 await self._alert_unresolvable_match(match)
                 continue
+            print(f"[call_matches] match {match_data['match_id']} — in called_match_ids: {match_data['match_id'] in self.called_match_ids}, hold_when_ready: {match_data['match_id'] in self.hold_when_ready}")
             if match_data['match_id'] not in self.called_match_ids:
+                should_hold = match_data['match_id'] in self.hold_when_ready
+                print(f"[call_matches] calling match {match_data['match_id']} with hold={should_hold}")
                 try:
-                    await self.call_match(match_data)
+                    await self.call_match(match_data, hold_match=should_hold)
                 except Exception as e:
                     print(f"[call_matches] Failed to call match {match_data['match_id']}: {e}")
                     await self._alert_unresolvable_match(match, str(e))
@@ -774,10 +773,8 @@ class TournamentManager:
         via POST /api/tournament/{id}/action with action='call_match'.
         """
         if match_data['match_id'] in self.called_match_ids:
-            print(f"[call_match] Match {match_data['match_id']} already called, skipping.")
             return
         if await self.bot.dh.find_match(match_data['match_id']):
-            print(f"[call_match] Match {match_data['match_id']} already exists in DB, skipping.")
             self.called_match_ids.add(match_data['match_id'])
             self._remove_from_pending_cache(match_data['match_id'])
             return
@@ -820,6 +817,7 @@ class TournamentManager:
                 self.lobbies[match_data['match_id']] = match_lobby
 
                 should_hold = hold_match or (match_data['match_id'] in self.hold_when_ready)
+                print(f"[call_match] match {match_data['match_id']} hold_match={hold_match} in_hold_when_ready={match_data['match_id'] in self.hold_when_ready} should_hold={should_hold}")
                 self.hold_when_ready.discard(match_data['match_id'])
 
                 if player_1['user_id'] in tournament['dqs']:
@@ -828,7 +826,7 @@ class TournamentManager:
                     await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
                 else:
                     await match_lobby.initialize_match(should_hold)
-                    
+
             except Exception as e:
                 print(f"[call_match] Background lobby creation failed for match {match_data['match_id']}: {e}")
                 self.lobbies.pop(match_data['match_id'], None)
@@ -844,10 +842,6 @@ class TournamentManager:
         await self.lobbies[match_data['match_id']].start_match()
 
     def toggle_hold_when_ready(self, match_id: int) -> bool:
-        """
-        Toggle the hold-when-ready flag for a match.
-        Returns True if the match is now flagged, False if unflagged.
-        """
         if match_id in self.hold_when_ready:
             self.hold_when_ready.discard(match_id)
             return False
@@ -876,6 +870,14 @@ class TournamentManager:
         if lobby:
             await self.format.on_result(result, lobby)
             self.invalidate_pending_cache()
+
+            # Always call any matches flagged for hold-when-ready, regardless of autocall
+            if self.hold_when_ready:
+                pending = await self.get_pending_matches()
+                for match_data in pending:
+                    if match_data['match_id'] in self.hold_when_ready:
+                        await self.call_match(match_data, hold_match=True)
+
             if getattr(self, 'autocall_matches', False) and self.format.needs_match_call_refresh:
                 await self.call_matches()
 
@@ -907,6 +909,7 @@ class TournamentManager:
         """
         # Check for finished dependent matches
         dependent_lobbies = await self.bot.dh.get_dependent_matches(match_id)
+        print(f"[reset_lobby] match_id={match_id}, dependents={[d['match_id'] for d in dependent_lobbies]}, states={[d['state'] for d in dependent_lobbies]}")
         for dep in dependent_lobbies:
             if dep.get('state') in ('finished', 'closed'):
                 raise ValueError(
@@ -1371,40 +1374,25 @@ class TournamentManager:
             member = discord.utils.get(self.guild.members, id=user_id)
             if member:
                 organizer_list.append(member.mention)
-        organizer_str = '\n-'.join(organizer_list) if organizer_list else 'N/A'
 
-        description = (
-            f"**Date:** {tournament.get('date', 'TBA')}\n"
-            f"**Format:** {tournament.get('format', '')}\n"
-        )
-        if tournament.get('format') == 'swiss':
-            description += f"**Rounds:** {tournament.get('round_limit', 8)}\n"
-        description += f"**TO's:**\n-{organizer_str}\n"
-
+        # ── Entrants ──────────────────────────────────────────────────────────────
+        entrant_list = []
         if tournament.get('config', {}).get('display_entrants'):
             entrants = tournament.get('entrants', {})
             if entrants:
                 discord_ids = [int(d) for d in entrants.keys()]
                 user_map = await self.bot.dh.get_users_bulk(discord_ids)
 
-                # Build list with seed info for sorting
-                entrant_list = []
                 for discord_id_str in entrants.keys():
                     discord_id_int = int(discord_id_str)
                     user = user_map.get(discord_id_int)
                     name = user['name'] if user else f'Unknown ({discord_id_str})'
                     seed = None
-
-                    # Get seed: native seeds dict for swiss, challonge for bracket formats
-                    if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
-                        pass  # populated below via challonge bulk fetch
-                    else:
+                    if not (self.format and self.format.shows_bracket_link and 'challonge_data' in tournament):
                         seeds = tournament.get('seeds', {})
-                        seed = seeds.get(discord_id_str) or seeds.get(discord_id_int)
-
+                        seed  = seeds.get(discord_id_str) or seeds.get(discord_id_int)
                     entrant_list.append({'discord_id': discord_id_str, 'name': name, 'seed': seed})
 
-                # For bracket formats, get seeds from Challonge participants
                 if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
                     try:
                         participants = await self.ch.get_participants(tournament['challonge_data']['url'])
@@ -1423,38 +1411,105 @@ class TournamentManager:
                     except Exception as ex:
                         print(f"[post_event_info] Failed to fetch Challonge seeds: {ex}")
 
-                # Sort by seed, unseeded players go to the end
                 entrant_list.sort(key=lambda e: e['seed'] if e['seed'] is not None else 9999)
 
-                names = [f"{i + 1}. {e['name']}" for i, e in enumerate(entrant_list)]
-                description += f"\n**Entrants ({len(entrant_list)}):**\n" + '\n'.join(names)
+        # ── Banner ────────────────────────────────────────────────────────────────
+        banner_file      = None
+        banner_image_url = None
+        banner_path      = tournament.get('banner_url')
+        if banner_path:
+            abs_path = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), '..', 'web', banner_path.lstrip('/'))
+            )
+            if os.path.exists(abs_path):
+                banner_file      = discord.File(abs_path, filename='banner.jpg')
+                banner_image_url = 'attachment://banner.jpg'
+            else:
+                print(f"[post_event_info] Banner file not found at {abs_path}")
 
-        embed = discord.Embed(
-            title=tournament['name'],
-            description=description,
-            color=color
-        )
+        # ── Bracket link view ─────────────────────────────────────────────────────
+        UCH_RULESET_URL = 'https://docs.google.com/document/d/1Z9FcjZPDYJVVLo90GeTZSMHd4HNE8Ms8/edit?usp=sharing&ouid=116452753972353491775&rtpof=true&sd=true'
 
         if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
             from utils.get_bracket_link import get_bracket_link
             from ui.link_view import LinkView
             from utils.emojis import INDICATOR_EMOJIS
             bracket_link = await get_bracket_link(tournament['challonge_data']['url'])
-            view = LinkView(f"{INDICATOR_EMOJIS['link']} Bracket", bracket_link)
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label=f"{INDICATOR_EMOJIS['link']} Bracket",
+                url=bracket_link,
+                style=discord.ButtonStyle.link
+            ))
+            view.add_item(discord.ui.Button(
+                label=f"{INDICATOR_EMOJIS['link']} Ruleset",
+                url=UCH_RULESET_URL,
+                style=discord.ButtonStyle.link
+            ))
         else:
-            view = None
+            from utils.emojis import INDICATOR_EMOJIS
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label=f"{INDICATOR_EMOJIS['link']} Ruleset",
+                url=UCH_RULESET_URL,
+                style=discord.ButtonStyle.link
+            ))
 
-        bot_id = self.bot.user.id
+        # ── Build embed ───────────────────────────────────────────────────────────
+        embed = discord.Embed(color=color)
+
+        embed.title = tournament['name']
+        if banner_image_url:
+            embed.set_image(url=banner_image_url)
+
+        # Inline fields: Date, Format, TOs on one row
+        embed.add_field(
+            name='Date',
+            value=tournament.get('date', 'TBA'),
+            inline=True
+        )
+        fmt_display = tournament.get('format', '').replace('_', ' ').title()
+        if tournament.get('format') == 'swiss':
+            fmt_display += f" ({tournament.get('round_limit', 8)} rounds)"
+        embed.add_field(
+            name='Format',
+            value=fmt_display,
+            inline=True
+        )
+        embed.add_field(
+            name="TO's",
+            value='\n'.join(organizer_list) if organizer_list else 'N/A',
+            inline=True
+        )
+
+        # Entrants as full-width field
+        if entrant_list:
+            names = '\n'.join(f"{i+1}. {e['name']}" for i, e in enumerate(entrant_list))
+            embed.add_field(
+                name=f"Entrants ({len(entrant_list)})",
+                value=names,
+                inline=False
+            )
+
+        # ── Find or create the message ────────────────────────────────────────────
+        bot_id   = self.bot.user.id
         existing = None
         async for msg in channel.history(limit=20, oldest_first=True):
-            if msg.author.id == bot_id and msg.embeds:
+            if msg.author.id == bot_id and (msg.embeds or msg.attachments):
                 existing = msg
                 break
 
         if existing:
-            await existing.edit(embed=embed, view=view)
+            if banner_file:
+                await existing.delete()
+                await channel.send(file=banner_file, embed=embed, view=view)
+            else:
+                await existing.edit(embed=embed, view=view)
         else:
-            await channel.send(embed=embed, view=view)
+            if banner_file:
+                await channel.send(file=banner_file, embed=embed, view=view)
+            else:
+                await channel.send(embed=embed, view=view)
 
     async def publish_stagelist(self):
         from utils.embed_utils import create_stage_embed

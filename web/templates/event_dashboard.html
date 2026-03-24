@@ -10,12 +10,17 @@
 
 <aside class="sidebar">
     <div class="sidebar-top">
-        <a href="/dashboard" class="back-link">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-            All Events
-        </a>
-        <div class="tournament-title">__TOURNAMENT_NAME__</div>
-        <div id="sidebar-badge"></div>
+        <div style="display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:4px 10px;align-items:center">
+            <a href="/dashboard" class="back-link" style="grid-column:1;grid-row:1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                All Events
+            </a>
+            <div style="grid-column:1;grid-row:2;min-width:0">
+                <div class="tournament-title">__TOURNAMENT_NAME__</div>
+                <div id="sidebar-badge"></div>
+            </div>
+            <div id="sidebar-logo" style="grid-column:2;grid-row:1/3;align-self:stretch;display:flex;align-items:stretch"></div>
+        </div>
     </div>
     <nav class="sidebar-nav">
         <div class="nav-label">Overview</div>
@@ -24,21 +29,25 @@
             Overview
         </button>
         <div class="nav-label">Management</div>
+        <button class="nav-item" data-section="players">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Participants
+        </button>
         <button class="nav-item" data-section="matches">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             Matches
         </button>
-        <button class="nav-item" data-section="config">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.62 14.1M14.12 2.29A10 10 0 0 0 2.05 14.91M4.93 19.07a10 10 0 0 0 14.1 1.62M2.29 9.88A10 10 0 0 1 14.91 21.95"/></svg>
-            Config
+        <button class="nav-item" data-section="bracket">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Bracket
         </button>
         <button class="nav-item" data-section="stagelist">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg>
             Stagelist
         </button>
-        <button class="nav-item" data-section="bracket">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            Bracket
+        <button class="nav-item" data-section="config">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.62 14.1M14.12 2.29A10 10 0 0 0 2.05 14.91M4.93 19.07a10 10 0 0 0 14.1 1.62M2.29 9.88A10 10 0 0 1 14.91 21.95"/></svg>
+            Event Configuration
         </button>
     </nav>
     <div class="sidebar-footer">
@@ -53,10 +62,14 @@
 </aside>
 
 <main class="main">
+    <div id="tournament-banner"></div>
+
     <div class="topbar">
-        <div>
-            <div class="page-title" id="topbar-title">Overview</div>
-            <div class="page-subtitle" id="topbar-sub">Loading...</div>
+        <div style="display:flex;align-items:center;gap:12px">
+            <div>
+                <div class="page-title" id="topbar-title">Overview</div>
+                <div class="page-subtitle" id="topbar-sub">Loading...</div>
+            </div>
         </div>
         <div class="refresh-indicator"><div class="refresh-dot"></div><span>Live</span></div>
     </div>
@@ -89,6 +102,7 @@
                         </div>
                     </div>
                 </div>
+
                 <!-- Right column: participants -->
                 <div>
                     <div class="panel" style="max-height:calc(100vh - 220px);display:flex;flex-direction:column">
@@ -114,7 +128,18 @@
 
             </div>
         </div>
-        
+
+        <!-- PARTICIPANTS -->
+        <div class="section" id="section-players">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Participants</span>
+                    <span id="players-count" style="font-size:12px;color:var(--text-muted)"></span>
+                </div>
+                <div id="participants-list-wrap"></div>
+            </div>
+        </div>
+
         <!-- MATCHES -->
         <div class="section" id="section-matches">
             <div class="panel">
@@ -126,52 +151,12 @@
             </div>
         </div>
 
-        <!-- CONFIG -->
-        <div class="section" id="section-config">
-            <div class="panel">
-                <div class="panel-header"><span class="panel-title">Tournament Details</span></div>
-                <div class="config-grid">
-                    <div class="field-group">
-                        <label class="field-label" for="cfg-name">Name</label>
-                        <input class="field-input" type="text" id="cfg-name" maxlength="80">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label" for="cfg-date">Date</label>
-                        <input class="field-input" type="text" id="cfg-date" placeholder="e.g. &lt;t:1700000000:F&gt;">
-                    </div>
-                </div>
-                <div class="config-save-row">
-                    <button class="btn btn-primary btn-sm" id="cfg-save-details">Save Changes</button>
-                </div>
-            </div>
-            <div class="panel">
-                <div class="panel-header"><span class="panel-title">Options</span></div>
-                <label class="toggle-row">
-                    <div class="toggle-info"><span class="toggle-name">Approved Registration</span><span class="toggle-desc">Registrations require TO approval</span></div>
-                    <span class="toggle-wrap"><input type="checkbox" id="cfg-approved" class="toggle-input"><span class="toggle-thumb"></span></span>
-                </label>
-                <label class="toggle-row">
-                    <div class="toggle-info"><span class="toggle-name">Randomised Stagelist</span><span class="toggle-desc">Stage order shuffled each match</span></div>
-                    <span class="toggle-wrap"><input type="checkbox" id="cfg-random-stage" class="toggle-input"><span class="toggle-thumb"></span></span>
-                </label>
-                <label class="toggle-row">
-                    <div class="toggle-info"><span class="toggle-name">Display Entrants</span><span class="toggle-desc">Show entrants on event-info embed</span></div>
-                    <span class="toggle-wrap"><input type="checkbox" id="cfg-display-entrants" class="toggle-input"><span class="toggle-thumb"></span></span>
-                </label>
-                <div class="config-save-row">
-                    <button class="btn btn-primary btn-sm" id="cfg-save-options">Save Options</button>
-                </div>
-            </div>
-            <div class="panel" style="border-color:rgba(237,66,69,.3);margin-top:8px">
-                <div class="panel-header">
-                    <span class="panel-title" style="color:var(--red)">Danger Zone</span>
-                </div>
-                <div style="padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
-                    <div>
-                        <div style="font-size:13px;font-weight:600;margin-bottom:3px">Delete Tournament</div>
-                        <div style="font-size:12px;color:var(--text-muted)">Permanently delete this tournament and all associated data. This cannot be undone.</div>
-                    </div>
-                    <button class="btn btn-danger btn-sm" id="btn-delete-tournament" style="flex-shrink:0">Delete</button>
+        <!-- BRACKET -->
+        <div class="section" id="section-bracket">
+            <div id="bracket-wrap">
+                <div class="bracket-unavailable">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <p style="margin-top:8px">Loading bracket...</p>
                 </div>
             </div>
         </div>
@@ -212,14 +197,97 @@
             </div>
         </div>
 
-        <!-- BRACKET -->
-        <div class="section" id="section-bracket">
-            <div id="bracket-wrap">
-                <div class="bracket-unavailable">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                    <p style="margin-top:8px">Loading bracket...</p>
+        <!-- EVENT CONFIGURATION -->
+        <div class="section" id="section-config">
+
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Tournament Details</span></div>
+                <div class="config-grid">
+                    <div class="field-group">
+                        <label class="field-label" for="cfg-name">Name</label>
+                        <input class="field-input" type="text" id="cfg-name" maxlength="80">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label" for="cfg-date">Date</label>
+                        <input class="field-input" type="text" id="cfg-date" placeholder="e.g. &lt;t:1700000000:F&gt;">
+                    </div>
+                </div>
+                <div class="config-save-row">
+                    <button class="btn btn-primary btn-sm" id="cfg-save-details">Save Changes</button>
                 </div>
             </div>
+
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Images</span></div>
+                <div style="padding:16px 18px;display:flex;flex-direction:column;gap:20px">
+
+                    <div>
+                        <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--text-secondary)">
+                            Banner
+                            <span style="font-weight:400;color:var(--text-muted)"> — shown at top of dashboard and posted to event-info on publish</span>
+                        </div>
+                        <div id="cfg-banner-preview" style="margin-bottom:10px"></div>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0">
+                                Upload Banner
+                                <input type="file" id="cfg-banner-upload" accept="image/*" style="display:none">
+                            </label>
+                            <button class="btn btn-danger btn-sm" id="cfg-banner-delete">Remove</button>
+                            <span id="cfg-banner-status" style="font-size:12px;color:var(--text-muted)"></span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--text-secondary)">
+                            Logo
+                            <span style="font-weight:400;color:var(--text-muted)"> — shown next to the tournament title in the dashboard topbar</span>
+                        </div>
+                        <div id="cfg-logo-preview" style="margin-bottom:10px"></div>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0">
+                                Upload Logo
+                                <input type="file" id="cfg-logo-upload" accept="image/*" style="display:none">
+                            </label>
+                            <button class="btn btn-danger btn-sm" id="cfg-logo-delete">Remove</button>
+                            <span id="cfg-logo-status" style="font-size:12px;color:var(--text-muted)"></span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header"><span class="panel-title">Options</span></div>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Approved Registration</span><span class="toggle-desc">Registrations require TO approval</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-approved" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Randomised Stagelist</span><span class="toggle-desc">Stage order shuffled each match</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-random-stage" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <label class="toggle-row">
+                    <div class="toggle-info"><span class="toggle-name">Display Entrants</span><span class="toggle-desc">Show entrants on event-info embed</span></div>
+                    <span class="toggle-wrap"><input type="checkbox" id="cfg-display-entrants" class="toggle-input"><span class="toggle-thumb"></span></span>
+                </label>
+                <div class="config-save-row">
+                    <button class="btn btn-primary btn-sm" id="cfg-save-options">Save Options</button>
+                </div>
+            </div>
+
+            <div class="panel" style="border-color:rgba(237,66,69,.3);margin-top:8px">
+                <div class="panel-header">
+                    <span class="panel-title" style="color:var(--red)">Danger Zone</span>
+                </div>
+                <div style="padding:18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;margin-bottom:3px">Delete Tournament</div>
+                        <div style="font-size:12px;color:var(--text-muted)">Permanently delete this tournament and all associated data. This cannot be undone.</div>
+                    </div>
+                    <button class="btn btn-danger btn-sm" id="btn-delete-tournament" style="flex-shrink:0">Delete</button>
+                </div>
+            </div>
+
         </div>
 
     </div>

@@ -2,6 +2,7 @@
 // Bracket view: renderBracket, match cards, match drawer.
 
 let bracketData = null;
+let _bracketRapidPollTimer = null;
 
 async function loadBracket() {
     try {
@@ -418,10 +419,8 @@ async function drawerCallMatch(matchId, btn) {
     _disableMatchRow(matchId);
     btn.textContent = 'Calling...';
     btn.disabled = true;
-    // Disable the Hold button in the same row
     const row = btn.closest('.drawer-action-row');
     if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
-    // Show loading state in drawer sub
     document.getElementById('drawer-sub').textContent = 'Calling match...';
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
@@ -432,6 +431,9 @@ async function drawerCallMatch(matchId, btn) {
     }
     _matchActionInFlight.delete(matchId);
     await Promise.all([loadTournament({ force: true }), loadBracket()]);
+    // Re-populate drawer with updated match data
+    const updated = bracketData?.matches?.find(m => m.match_id === matchId);
+    if (updated) populateDrawer(updated);
 }
 
 async function drawerHoldMatch(matchId, btn) {
@@ -440,22 +442,54 @@ async function drawerHoldMatch(matchId, btn) {
     btn.disabled = true;
     const row = btn.closest('.drawer-action-row');
     if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
-    document.getElementById('drawer-sub').textContent = 'Holding match...';
+    document.getElementById('drawer-sub').textContent = 'Creating held lobby...';
+
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
             action: 'hold_match', match_id: matchId
         });
     } catch (err) {
         showToast(err.message, 'error');
+        _matchActionInFlight.delete(matchId);
+        return;
     }
+
+    document.getElementById('drawer-sub').textContent = 'Waiting for lobby to be held...';
+    startBracketRapidPoll(20000, 1000);
+
+    const MAX_POLLS = 20;
+    let updated = null;
+    for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        updated = bracketData?.matches?.find(m => m.match_id === matchId);
+        if (updated?.lobby_state === 'held') break;
+        if (updated?.has_lobby && updated?.lobby_state && updated?.lobby_state !== 'initialize') break;
+    }
+
     _matchActionInFlight.delete(matchId);
-    await Promise.all([loadTournament({ force: true }), loadBracket()]);
+    await loadTournament({ force: true });
+    if (updated) populateDrawer(updated);
 }
 
 async function drawerStartHeld(matchId, btn) {
-    await matchAction_startHeld(matchId, btn);
+    _disableMatchRow(matchId);
+    btn.textContent = 'Starting...';
+    btn.disabled = true;
+    const row = btn.closest('.drawer-action-row');
+    if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
+    document.getElementById('drawer-sub').textContent = 'Starting match...';
+    try {
+        await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+            action: 'start_held_match', match_id: matchId
+        });
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+    _matchActionInFlight.delete(matchId);
+    await Promise.all([loadTournament({ force: true }), loadBracket()]);
+    const updated = bracketData?.matches?.find(m => m.match_id === matchId);
+    if (updated) populateDrawer(updated);
 }
-
 async function drawerDQ(discordId, name) {
     await dqPlayer(discordId, name);
 }
@@ -487,4 +521,17 @@ async function drawerResetLobby(matchId) {
         await loadBracket();
         await loadTournament({ force: true });
     }
+}
+function startBracketRapidPoll(durationMs = 15000, intervalMs = 1500) {
+    // Already polling rapidly
+    if (_bracketRapidPollTimer) return;
+
+    const end = Date.now() + durationMs;
+    _bracketRapidPollTimer = setInterval(async () => {
+        await loadBracket();
+        if (Date.now() >= end) {
+            clearInterval(_bracketRapidPollTimer);
+            _bracketRapidPollTimer = null;
+        }
+    }, intervalMs);
 }

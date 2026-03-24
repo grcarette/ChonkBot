@@ -64,40 +64,53 @@ function renderTournaments(tournaments) {
         initialize:   ['badge-setup',   'Initializing'],
     };
 
-    const list = document.createElement('div');
-    list.className = 'tournament-list';
+    const grid = document.createElement('div');
+    grid.className = 'tournament-gallery';
 
     tournaments.forEach(t => {
         const [badgeClass, badgeLabel] = BADGE[t.state] || ['badge-setup', t.state];
         const entrantCount = t.entrant_count ?? 0;
-        const date         = t.date ? `${escapeHtml(t.date)} · ` : '';
         const debugTag     = t.debug ? '<span class="t-debug">debug</span>' : '';
 
         const card = document.createElement('div');
-        card.className = 'tournament-card clickable';
+        card.className = 'tournament-gallery-card clickable';
         card.setAttribute('role', 'button');
         card.setAttribute('tabindex', '0');
+
+        const logoHtml = t.logo_url
+            ? `<img src="${escapeHtml(t.logo_url)}" class="tg-logo-img" alt="">`
+            : `<div class="tg-logo-placeholder">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+               </div>`;
+
         card.innerHTML = `
-            <div class="t-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <div class="tg-logo">
+                ${logoHtml}
             </div>
-            <div class="t-info">
-                <div class="t-name">${escapeHtml(t.name)}${debugTag}</div>
-                <div class="t-meta">${date}${escapeHtml(t.format || '')} · ${entrantCount} entrant${entrantCount !== 1 ? 's' : ''}</div>
+            <div class="tg-body">
+                <div class="tg-name">${escapeHtml(t.name)}${debugTag}</div>
+                <div class="tg-meta">${escapeHtml(t.format || '')} · ${entrantCount} entrant${entrantCount !== 1 ? 's' : ''}</div>
+                ${t.date ? `<div class="tg-date">${escapeHtml(t.date)}</div>` : ''}
             </div>
-            <div class="t-right">
+            <div class="tg-footer">
                 <span class="t-badge ${badgeClass}">${badgeLabel}</span>
-                <svg class="t-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                ${t.lobby_count ? `<span class="tg-lobbies">${t.lobby_count} active</span>` : ''}
             </div>`;
 
-        const go = () => { window.location.href = `/dashboard/${t.id}`; };
-        card.addEventListener('click', go);
-        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') go(); });
-        list.appendChild(card);
+        card.addEventListener('click', () => {
+            window.location.href = `/dashboard/${t.id}`;
+        });
+        card.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') window.location.href = `/dashboard/${t.id}`;
+        });
+
+        grid.appendChild(card);
     });
 
     wrap.innerHTML = '';
-    wrap.appendChild(list);
+    wrap.appendChild(grid);
 }
 
 // ── Create Event modal ─────────────────────────────────────────────────────────

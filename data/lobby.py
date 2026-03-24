@@ -39,7 +39,7 @@ class LobbyMethodsMixin:
     
     async def get_dependent_matches(self, match_id):
         query = {
-            'prereq_match_ids': int(match_id)
+            'prereq_matches': int(match_id)
         }
         lobbies = await self.lobby_collection.find(query).to_list(length=None)
         return lobbies
@@ -331,7 +331,7 @@ class LobbyMethodsMixin:
             'tournament': ObjectId(tournament_id),
         }
         return await self.lobby_collection.find(query).to_list(None)
-        
+
     async def find_matches_bulk(self, match_ids: list[int]) -> set[int]:
         """Return the set of match_ids that already exist in the lobby collection."""
         if not match_ids:

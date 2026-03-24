@@ -156,8 +156,19 @@ async function _matchActionAndRefresh(matchId, action, extra = {}) {
     }
 
     _timing.start(`loadTournament_after_action[${matchId}]`);
-    await loadTournament({ force: true });
+    const refreshPromises = [loadTournament({ force: true })];
+    if (action === 'force_advance' ||
+        document.getElementById('section-bracket')?.classList.contains('active')) {
+        refreshPromises.push(loadBracket());
+    }
+    await Promise.all(refreshPromises);
     _timing.end(`loadTournament_after_action[${matchId}]`);
+
+    // Start rapid bracket polling after hold or call actions since
+    // Discord channel creation happens in the background
+    if (action === 'hold_match' || action === 'call_match') {
+        startBracketRapidPoll(20000, 1500);
+    }
 
     _matchActionInFlight.delete(matchId);
 }
@@ -206,15 +217,24 @@ async function matchAction_forceAdvance(matchId, playerNames, playerIds, btn) {
         confirmBtn.style.display = 'none';
         document.getElementById('modal-backdrop').hidden = false;
 
-        document.getElementById('fa-stage-bans').onclick = () => { closeModal(); resolve('stage_bans'); };
-        document.getElementById('fa-reporting').onclick  = () => { closeModal(); resolve('reporting'); };
-        document.getElementById('fa-winner').onclick     = () => { closeModal(); resolve('winner'); };
-
-        document.getElementById('modal-cancel').onclick = () => {
+        _confirmResolve = (val) => {
             confirmBtn.style.display = '';
-            closeModal();
-            resolve(null);
+            confirmBtn.disabled = false;
+            resolve(val ?? null);
+            _confirmResolve = null;
         };
+
+        const pick = (state) => {
+            document.getElementById('modal-backdrop').hidden = true;
+            document.getElementById('modal-extra').innerHTML = '';
+            confirmBtn.style.display = '';
+            _confirmResolve = null;
+            resolve(state);
+        };
+
+        document.getElementById('fa-stage-bans').onclick = () => pick('stage_bans');
+        document.getElementById('fa-reporting').onclick  = () => pick('reporting');
+        document.getElementById('fa-winner').onclick     = () => pick('winner');
     });
 
     if (!targetState) return;
@@ -243,6 +263,8 @@ async function matchAction_forceAdvance(matchId, playerNames, playerIds, btn) {
             confirmBtn.disabled      = true;
             document.getElementById('modal-backdrop').hidden = false;
 
+            _confirmResolve = () => { resolve(null); _confirmResolve = null; };
+
             let selected = null;
 
             playerIds.forEach((id, i) => {
@@ -257,12 +279,10 @@ async function matchAction_forceAdvance(matchId, playerNames, playerIds, btn) {
             });
 
             confirmBtn.onclick = () => {
-                closeModal();
+                document.getElementById('modal-backdrop').hidden = true;
+                document.getElementById('modal-extra').innerHTML = '';
+                _confirmResolve = null;
                 resolve(selected);
-            };
-            document.getElementById('modal-cancel').onclick = () => {
-                closeModal();
-                resolve(null);
             };
         });
 
@@ -275,6 +295,12 @@ async function matchAction_forceAdvance(matchId, playerNames, playerIds, btn) {
     } else {
         await _matchActionAndRefresh(matchId, 'force_advance', { target_state: targetState });
     }
+}
+
+async function matchAction_hold(matchId, btn) {
+    btn.textContent = '...';
+    await _matchActionAndRefresh(matchId, 'hold_match');
+    startBracketRapidPoll(20000, 1500);
 }
 
 // ── Legacy aliases (used by bracket drawer and other call sites) ──────────────
