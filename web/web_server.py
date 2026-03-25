@@ -559,9 +559,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
         elif action == 'dq_player':
             need_tm()
-            discord_id = int(body.get('discord_id', 0))
-            if not discord_id:
+            discord_id = body.get('discord_id')
+            if discord_id is None:
                 return web.json_response({'error': 'discord_id is required'}, status=400)
+            discord_id = int(discord_id)
             result = await tm.disqualify_player(discord_id)
             if result is False:
                 return web.json_response(
@@ -570,9 +571,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
         elif action == 'undq_player':
-            discord_id = int(body.get('discord_id', 0))
-            if not discord_id:
+            discord_id = body.get('discord_id')
+            if discord_id is None:
                 return web.json_response({'error': 'discord_id is required'}, status=400)
+            discord_id = int(discord_id)
             await bot.dh.undisqualify_player(tournament['_id'], discord_id)
 
         elif action == 'force_advance':

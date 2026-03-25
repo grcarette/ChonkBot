@@ -72,10 +72,12 @@ class SwissFormat(BaseFormat):
     async def on_player_register(self, user_id: int, user: dict) -> None:
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if swiss_event:
-            # If player already exists (rejoining), restore without resetting stats
             rejoined = await self.dh.swiss_rejoin_player(swiss_event['_id'], user_id)
             if not rejoined:
-                # New player — add fresh with elo/tier
+                # Check if player is DQ'd before adding as fresh player
+                tournament = await self.tm.get_tournament()
+                if user_id in tournament.get('dqs', []):
+                    return  # DQ'd players cannot rejoin
                 ranked_player = await self.tm.get_ranked_player(user_id)
                 elo = ranked_player['elo'] if ranked_player else 1200
                 username = user['name'] if user else f"Player {user_id}"

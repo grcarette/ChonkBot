@@ -214,9 +214,6 @@ class MatchLobby:
             asyncio.create_task(self.send_player_instructions())
             print(f"[timing] send_player_instructions (backgrounded): {time.perf_counter()-t0:.3f}s")
 
-            if is_dq:
-                await self.close_lobby()
-                print(f"[timing] close_lobby: {time.perf_counter()-t0:.3f}s")
         else:
             await self.start_match()
             print(f"[timing] start_match (multi-game): {time.perf_counter()-t0:.3f}s")

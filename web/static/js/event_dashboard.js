@@ -434,6 +434,9 @@ function renderActionArea(t) {
                 Start Round ${t.swiss.current_round + 1}
                </button>`
             : '';
+        if (finalRoundActive) {
+            _nextRoundInFlight = false;
+        }
         const wrapUpHtml = finalRoundActive ? `
             <div class="action-panel" style="margin-top:8px">
                 <div class="action-panel-title">Wrap Up</div>

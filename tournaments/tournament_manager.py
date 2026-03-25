@@ -958,10 +958,68 @@ class TournamentManager:
         if lobby_data:
             lobby = self.lobbies[lobby_data['match_id']]
             winner_id = (set(lobby_data['players']) - {user_id}).pop()
+
+            # Send DQ notification in the channel but don't close it immediately
+            if lobby.channel:
+                dq_mention      = f"<@{user_id}>"
+                winner_mention  = f"<@{winner_id}>"
+                embed = discord.Embed(
+                    title="Player Disqualified",
+                    description=(
+                        f"{dq_mention} has been disqualified.\n"
+                        f"{winner_mention} wins this match by default.\n\n"
+                        f"This channel will close shortly."
+                    ),
+                    color=discord.Color.red()
+                )
+                await lobby.channel.send(embed=embed)
+
             await lobby.end_reporting(winner_id, is_dq=True)
+
         return await self.bot.dh.disqualify_player(self.tournament['_id'], user_id)
 
     async def undisqualify_player(self, user_id):
+        tournament = await self.get_tournament()
+
+        # Only proceed if the player is actually DQ'd
+        if user_id not in tournament.get('dqs', []):
+            return False
+
+        # Find any finished lobby this player is in
+        lobby_data = await self.bot.dh.find_player_match(self.tournament['_id'], user_id)
+
+        if not lobby_data:
+            all_lobbies = await self.bot.dh.get_all_lobbies(self.tournament['_id'])
+            lobby_data = next(
+                (l for l in all_lobbies
+                 if user_id in l.get('players', []) and l.get('state') == 'finished'),
+                None
+            )
+
+        if lobby_data:
+            match_id = lobby_data['match_id']
+            lobby = self.lobbies.get(match_id)
+
+            fmt = tournament.get('format', '')
+            if fmt in ('swiss', 'swiss filter'):
+                swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+                if swiss_event:
+                    await self.bot.dh.swiss_unrecord_result(swiss_event['_id'], match_id)
+
+            await self.bot.dh.lobby_collection.update_one(
+                {'match_id': match_id},
+                {'$set': {
+                    'state':      'reporting',
+                    'results':    [],
+                    'checked_in': [],
+                }}
+            )
+
+            if lobby:
+                lobby.remaining_players = set(lobby_data['players'])
+                if lobby.channel:
+                    await lobby.start_checkin()
+
         return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
 
     # ─── Seeding ─────────────────────────────────────────────────────────────

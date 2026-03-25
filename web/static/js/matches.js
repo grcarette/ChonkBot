@@ -88,6 +88,14 @@ function renderMatches(lobbies, pending, autocall, swiss) {
                         ${inFlight ? 'Starting...' : 'Start Match'}
                    </button>`
                 : '';
+            const dqButtons = (l.player_ids || []).map((pid, i) =>
+                `<button class="btn btn-danger btn-sm match-dq-btn"
+                    data-pid="${pid}"
+                    data-name="${escapeHtml(l.player_names[i] || String(pid))}"
+                    ${inFlight ? 'disabled' : ''}>
+                    DQ ${escapeHtml(l.player_names[i] || String(pid))}
+                </button>`
+            ).join('');
             return `<div class="match-row" data-match-id="${l.match_id}">
                 <div class="match-row-info">
                     <span class="match-row-players">${players}</span>
@@ -101,6 +109,7 @@ function renderMatches(lobbies, pending, autocall, swiss) {
                         ${inFlight ? 'disabled' : ''}>
                         Force Advance
                     </button>
+                    ${dqButtons}
                 </div>
             </div>`;
         }).join('');
@@ -138,6 +147,24 @@ function renderMatches(lobbies, pending, autocall, swiss) {
     }
 
     container.innerHTML = html;
+
+    // Wire DQ buttons
+    container.querySelectorAll('.match-dq-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            const pid  = parseInt(btn.dataset.pid, 10);
+            const name = btn.dataset.name;
+            if (await showConfirm(
+                'Disqualify Player?',
+                `${escapeHtml(name)} will be DQ'd. If they have an active match, their opponent wins.`,
+                'danger'
+            )) {
+                await doAction('dq_player', { discord_id: pid });
+            } else {
+                btn.disabled = false;
+            }
+        });
+    });
 
     document.getElementById('btn-autocall').onclick = async () => {
         await doAction('set_autocall', { enabled: !autocall });

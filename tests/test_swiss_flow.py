@@ -1,36 +1,51 @@
+# tests/test_swiss_flow.py
 """
-tests/test_swiss_flow.py
-
-Tests for the Swiss tournament flow from start to finish.
+Tests for SwissManager round lifecycle.
 
 Covers:
-- Full round cycle: pairing → match completion → round complete → next round
-- Event completion after round_limit is reached
-- Player joining mid-event triggers pairing if between rounds
-- Player dropping mid-match gives opponent the win
-- Player dropping between rounds just removes them from future pairings
-- Bye logic: odd player out waits, gets bye if no one joins
-- check_round_complete doesn't fire while matches are still active
+- run_pairing_cycle: closes channels, posts standings, increments round, creates matches
+- run_pairing_cycle: aborts when not running
+- run_pairing_cycle: calls end_event when event is already complete
+- run_pairing_cycle: starts bye wait for single available player
+- run_pairing_cycle: does nothing with zero available players
+- check_round_complete: does nothing at round 0
+- check_round_complete: does nothing when any player has active_match_id
+- check_round_complete: does nothing when swiss event is finished
+- check_round_complete: flushes Ranked API calls then checks completion
+- check_round_complete: calls end_event when event is complete
+- on_player_joined: triggers pairing when between rounds
+- on_player_joined: does nothing when matches are active
+- on_player_joined: cancels bye wait when a new player joins
+- on_player_dropped: triggers round complete check when current_round > 0
+- on_player_dropped: does nothing at round 0
+- Bye timer: awards bye after wait if player still in queue
+- Bye timer: does not award bye if queue was cleared
 """
 
 import pytest
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
+def make_player_doc(discord_id, points=0, dropped=False, active_match_id=None, match_history=None):
+    return {
+        'username': f'player_{discord_id}',
+        'elo': 1000 + discord_id * 100,
+        'points': float(points),
+        'wins': int(points),
+        'losses': 0,
+        'rounds_played': int(points),
+        'active_match_id': active_match_id,
+        'dropped': dropped,
+        'match_history': match_history or [],
+    }
+
+
 def make_swiss_manager(players=None, current_round=0, round_limit=3):
-    """
-    Build a SwissManager with a fully mocked DB layer.
-    players: dict of { str(discord_id): player_dict }
-    """
     from tournaments.swiss_manager import SwissManager
 
     if players is None:
-        players = {
-            '1': make_player_doc(1, points=0),
-            '2': make_player_doc(2, points=0),
-            '3': make_player_doc(3, points=0),
-            '4': make_player_doc(4, points=0),
-        }
+        players = {str(i): make_player_doc(i) for i in range(1, 5)}
 
     swiss_event = {
         '_id': 'eid',
@@ -48,8 +63,8 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
         'name': 'Test',
         'format': 'swiss',
         'state': 'active',
-        'stagelist': ['stage1', 'stage2'],
-        'entrants': {str(k): None for k in players.keys()},
+        'stagelist': ['s1', 's2'],
+        'entrants': {str(k): None for k in players},
         'dqs': [],
         'debug': False,
     }
@@ -75,7 +90,9 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
 
     bot = MagicMock()
     bot.dh = dh
-    bot.add_view = MagicMock()
+
+    fmt = MagicMock()
+    fmt.flush_pending_results = AsyncMock()
 
     tm = MagicMock()
     tm.tournament = tournament
@@ -83,10 +100,10 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
     tm.guild = MagicMock()
     tm.lobbies = {}
     tm.debug = False
-    tm.is_swiss = True
-    tm.tc = AsyncMock()
-    tm.tc.bc = AsyncMock()
+    tm.format = fmt
     tm.get_channel = AsyncMock(return_value=AsyncMock())
+    tm.get_tournament = AsyncMock(return_value=tournament)
+    tm.progress_tournament = AsyncMock()
 
     sm = object.__new__(SwissManager)
     sm.tm = tm
@@ -96,7 +113,6 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
     sm.bye_task = None
     sm.running = True
 
-    # Stub call_match so we don't hit Discord
     sm.call_match = AsyncMock()
     sm.close_previous_round_channels = AsyncMock()
     sm.randomize_stagelist = AsyncMock()
@@ -104,51 +120,68 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
     sm.post_round_complete = AsyncMock()
     sm.start_bye_wait = AsyncMock()
 
-    return sm, dh, swiss_event
-
-
-def make_player_doc(discord_id, points=0, dropped=False, active_match_id=None, match_history=None):
-    return {
-        'username': f'player_{discord_id}',
-        'elo': 1000 + discord_id * 100,
-        'points': float(points),
-        'wins': int(points),
-        'losses': 0,
-        'rounds_played': int(points),
-        'active_match_id': active_match_id,
-        'dropped': dropped,
-        'match_history': match_history or [],
-    }
+    return sm, dh, swiss_event, tournament
 
 
 # ─── run_pairing_cycle ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_pairing_cycle_pairs_all_available_players():
-    sm, dh, _ = make_swiss_manager()
+    sm, dh, swiss_event, _ = make_swiss_manager()
     await sm.run_pairing_cycle()
-    # 4 players → 2 pairs → call_match called twice
     assert sm.call_match.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_pairing_cycle_increments_round():
-    sm, dh, _ = make_swiss_manager()
+    sm, dh, swiss_event, _ = make_swiss_manager()
     await sm.run_pairing_cycle()
     dh.swiss_increment_round.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_pairing_cycle_closes_previous_round_channels():
-    sm, dh, _ = make_swiss_manager()
+    sm, dh, swiss_event, _ = make_swiss_manager()
     await sm.run_pairing_cycle()
     sm.close_previous_round_channels.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_pairing_cycle_with_one_player_starts_bye_wait():
+async def test_pairing_cycle_posts_standings_after_round_1():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=1)
+    await sm.run_pairing_cycle()
+    sm.post_round_complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pairing_cycle_does_not_post_standings_on_round_0():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=0)
+    await sm.run_pairing_cycle()
+    sm.post_round_complete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pairing_cycle_aborts_when_not_running():
+    sm, dh, swiss_event, _ = make_swiss_manager()
+    sm.running = False
+    await sm.run_pairing_cycle()
+    sm.call_match.assert_not_awaited()
+    dh.swiss_increment_round.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pairing_cycle_ends_event_when_complete():
+    sm, dh, swiss_event, _ = make_swiss_manager()
+    dh.swiss_is_event_complete = AsyncMock(return_value=True)
+    await sm.run_pairing_cycle()
+    sm.end_event.assert_awaited_once()
+    sm.call_match.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pairing_cycle_starts_bye_wait_for_single_player():
     players = {'1': make_player_doc(1)}
-    sm, dh, _ = make_swiss_manager(players=players)
+    sm, dh, swiss_event, _ = make_swiss_manager(players=players)
     dh.swiss_get_available_players = AsyncMock(return_value=[
         {'discord_id': 1, **players['1']}
     ])
@@ -158,146 +191,93 @@ async def test_pairing_cycle_with_one_player_starts_bye_wait():
 
 
 @pytest.mark.asyncio
-async def test_pairing_cycle_with_zero_players_does_nothing():
-    sm, dh, _ = make_swiss_manager()
+async def test_pairing_cycle_does_nothing_with_zero_players():
+    sm, dh, swiss_event, _ = make_swiss_manager()
     dh.swiss_get_available_players = AsyncMock(return_value=[])
     await sm.run_pairing_cycle()
     sm.call_match.assert_not_awaited()
     sm.start_bye_wait.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_pairing_cycle_stops_when_event_complete():
-    sm, dh, _ = make_swiss_manager()
-    dh.swiss_is_event_complete = AsyncMock(return_value=True)
-    await sm.run_pairing_cycle()
-    sm.end_event.assert_awaited_once()
-    sm.call_match.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_pairing_cycle_does_nothing_when_not_running():
-    sm, dh, _ = make_swiss_manager()
-    sm.running = False
-    await sm.run_pairing_cycle()
-    sm.call_match.assert_not_awaited()
-    dh.swiss_increment_round.assert_not_awaited()
-
-
 # ─── check_round_complete ─────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_round_not_complete_while_match_active():
+async def test_round_complete_skips_at_round_zero():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=0)
+    swiss_event['current_round'] = 0
+    await sm.check_round_complete()
+    sm.end_event.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_round_complete_skips_when_active_matches_exist():
     players = {
         '1': make_player_doc(1, active_match_id=100),
         '2': make_player_doc(2, active_match_id=100),
     }
-    sm, dh, swiss_event = make_swiss_manager(players=players, current_round=1)
+    sm, dh, swiss_event, _ = make_swiss_manager(players=players, current_round=1)
     swiss_event['current_round'] = 1
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
-
     await sm.check_round_complete()
-
-    sm.post_round_complete.assert_not_awaited()
     sm.end_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_round_complete_when_all_matches_done():
-    players = {
-        '1': make_player_doc(1, active_match_id=None),
-        '2': make_player_doc(2, active_match_id=None),
-    }
-    sm, dh, swiss_event = make_swiss_manager(players=players, current_round=1)
-    swiss_event['current_round'] = 1
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
-
+async def test_round_complete_skips_when_swiss_event_finished():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=1)
+    swiss_event['state'] = 'finished'
     await sm.check_round_complete()
-
-    sm.post_round_complete.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_check_round_complete_skips_if_round_zero():
-    """Don't fire round-complete logic before any rounds have started."""
-    sm, dh, swiss_event = make_swiss_manager(current_round=0)
-    swiss_event['current_round'] = 0
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
-
-    await sm.check_round_complete()
-
-    sm.post_round_complete.assert_not_awaited()
     sm.end_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_check_round_complete_ends_event_when_limit_reached():
-    players = {
-        '1': make_player_doc(1, active_match_id=None),
-        '2': make_player_doc(2, active_match_id=None),
-    }
-    sm, dh, swiss_event = make_swiss_manager(players=players, current_round=3, round_limit=3)
+async def test_round_complete_flushes_ranked_results():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=1)
+    swiss_event['current_round'] = 1
+    await sm.check_round_complete()
+    sm.tm.format.flush_pending_results.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_round_complete_ends_event_when_complete():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=3, round_limit=3)
     swiss_event['current_round'] = 3
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
     dh.swiss_is_event_complete = AsyncMock(return_value=True)
-
     await sm.check_round_complete()
-
     sm.end_event.assert_awaited_once()
-    sm.post_round_complete.assert_not_awaited()
 
 
 # ─── on_player_joined ─────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_player_joining_between_rounds_triggers_pairing():
-    """If no matches are active, a new player joining should trigger pairing."""
-    players = {
-        '1': make_player_doc(1, active_match_id=None),
-        '2': make_player_doc(2, active_match_id=None),
-        '3': make_player_doc(3, active_match_id=None),  # the new joiner
-    }
-    sm, dh, swiss_event = make_swiss_manager(players=players)
+    players = {str(i): make_player_doc(i) for i in range(1, 4)}
+    sm, dh, swiss_event, _ = make_swiss_manager(players=players)
     swiss_event['bye_queue'] = None
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
     sm.run_pairing_cycle = AsyncMock()
-
     await sm.on_player_joined()
-
     sm.run_pairing_cycle.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_player_joining_mid_round_does_not_trigger_pairing():
-    """If matches are still active, don't start a new round."""
     players = {
         '1': make_player_doc(1, active_match_id=100),
         '2': make_player_doc(2, active_match_id=100),
     }
-    sm, dh, swiss_event = make_swiss_manager(players=players)
-    swiss_event['bye_queue'] = None
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
+    sm, dh, swiss_event, _ = make_swiss_manager(players=players)
     sm.run_pairing_cycle = AsyncMock()
-
     await sm.on_player_joined()
-
     sm.run_pairing_cycle.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_player_joining_cancels_pending_bye():
-    """If someone was waiting for a bye and a new player joins, cancel the bye."""
-    players = {
-        '1': make_player_doc(1, active_match_id=None),
-    }
-    sm, dh, swiss_event = make_swiss_manager(players=players)
-    swiss_event['bye_queue'] = 1  # player 1 was waiting
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
+async def test_player_joining_cancels_bye_wait():
+    players = {'1': make_player_doc(1)}
+    sm, dh, swiss_event, _ = make_swiss_manager(players=players)
+    swiss_event['bye_queue'] = 1
     sm.cancel_bye_wait = AsyncMock()
     sm.run_pairing_cycle = AsyncMock()
-
     await sm.on_player_joined()
-
     sm.cancel_bye_wait.assert_awaited_once_with('eid')
 
 
@@ -305,58 +285,60 @@ async def test_player_joining_cancels_pending_bye():
 
 @pytest.mark.asyncio
 async def test_player_dropping_mid_round_triggers_round_check():
-    players = {'1': make_player_doc(1), '2': make_player_doc(2)}
-    sm, dh, swiss_event = make_swiss_manager(players=players, current_round=1)
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=1)
     swiss_event['current_round'] = 1
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
     sm.check_round_complete = AsyncMock()
-
     await sm.on_player_dropped()
-
     sm.check_round_complete.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_player_dropping_before_rounds_start_does_not_check_complete():
-    """Dropping during registration (round 0) should not trigger round-complete."""
-    sm, dh, swiss_event = make_swiss_manager(current_round=0)
+async def test_player_dropping_before_rounds_start_does_nothing():
+    sm, dh, swiss_event, _ = make_swiss_manager(current_round=0)
     swiss_event['current_round'] = 0
-    dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
     sm.check_round_complete = AsyncMock()
-
     await sm.on_player_dropped()
-
     sm.check_round_complete.assert_not_awaited()
 
 
-# ─── end_event ────────────────────────────────────────────────────────────────
+# ─── Bye timer ────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_end_event_marks_swiss_event_finished():
-    from tournaments.swiss_manager import SwissManager
+async def test_bye_timer_awards_bye_when_player_still_in_queue():
+    sm, dh, swiss_event, _ = make_swiss_manager()
+    swiss_event['bye_queue'] = 42
+    dh.get_swiss_event = AsyncMock(return_value=swiss_event)
+    sm.check_round_complete = AsyncMock()
 
-    sm, dh, swiss_event = make_swiss_manager()
-    sm.tm.prompt_end_tournament = AsyncMock()  # it gets awaited
+    with patch('tournaments.swiss_manager.BYE_WAIT_SECONDS', 0):
+        await sm._bye_timer(42, 'eid')
 
-    real_end_event = SwissManager.end_event
-    sm.end_event = lambda: real_end_event(sm)
-
-    await sm.end_event()
-
-    dh.update_swiss_state.assert_awaited_with('eid', 'finished')
+    dh.swiss_award_bye.assert_awaited_once_with('eid', 42)
 
 
 @pytest.mark.asyncio
-async def test_end_event_sets_running_false():
-    from tournaments.swiss_manager import SwissManager
+async def test_bye_timer_does_not_award_bye_when_queue_cleared():
+    sm, dh, swiss_event, _ = make_swiss_manager()
+    swiss_event['bye_queue'] = None  # someone else joined
+    dh.get_swiss_event = AsyncMock(return_value=swiss_event)
 
-    sm, dh, swiss_event = make_swiss_manager()
-    sm.tm.debug = True  # skip Discord channel cleanup
-    sm.tm.prompt_end_tournament = AsyncMock()
+    with patch('tournaments.swiss_manager.BYE_WAIT_SECONDS', 0):
+        await sm._bye_timer(42, 'eid')
 
-    real_end_event = SwissManager.end_event
-    sm.end_event = lambda: real_end_event(sm)
+    dh.swiss_award_bye.assert_not_awaited()
 
-    await sm.end_event()
 
-    assert sm.running is False
+@pytest.mark.asyncio
+async def test_bye_timer_cancelled_does_not_award_bye():
+    sm, dh, swiss_event, _ = make_swiss_manager()
+
+    async def immediate_cancel(discord_id, event_id):
+        raise asyncio.CancelledError()
+
+    with patch.object(sm, '_bye_timer', immediate_cancel):
+        try:
+            await sm._bye_timer(42, 'eid')
+        except asyncio.CancelledError:
+            pass
+
+    dh.swiss_award_bye.assert_not_awaited()

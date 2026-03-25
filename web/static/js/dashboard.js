@@ -3,7 +3,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     initAvatar(USERNAME, AVATAR_URL);
 
-    // Navigation
     const SECTION_META = {
         overview: { title: 'Dashboard', sub: 'Overview of active tournaments' },
     };
@@ -26,6 +25,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape' && !document.getElementById('modal-backdrop').hidden) closeModal();
     });
 });
+
+// ── Format capabilities ───────────────────────────────────────────────────────
+
+const FORMAT_CONFIG = {
+    'swiss':               { hasRoundLimit: true,  rankedCompatible: true  },
+    'swiss filter':        { hasRoundLimit: true,  rankedCompatible: true  },
+    'double elimination':  { hasRoundLimit: false, rankedCompatible: true  },
+    'single elimination':  { hasRoundLimit: false, rankedCompatible: true  },
+};
+
+function formatConfig(fmt) {
+    return FORMAT_CONFIG[fmt] || { hasRoundLimit: false, rankedCompatible: false };
+}
 
 // ── Tournament list ────────────────────────────────────────────────────────────
 
@@ -136,8 +148,6 @@ function initCreateModal() {
     const modalTitle   = document.getElementById('modal-title');
     const rankedRow    = document.getElementById('opt-ranked-row');
 
-    const RANKED_COMPATIBLE = ['swiss', 'double elimination', 'single elimination', 'swiss filter'];
-
     let selectedFormat = null;
     let currentStep    = 1;
 
@@ -172,8 +182,8 @@ function initCreateModal() {
             btnLabel.textContent   = 'Continue';
             checkStep1Ready();
         } else {
-            const isSwiss = selectedFormat === 'swiss' || selectedFormat === 'swiss filter';
-            roundGroup.hidden      = !isSwiss;
+            const cfg = formatConfig(selectedFormat);
+            roundGroup.hidden      = !cfg.hasRoundLimit;
             modalTitle.textContent = 'Configuration';
             btnLabel.textContent   = 'Create Tournament';
             btnSubmit.style.opacity = '';
@@ -204,7 +214,7 @@ function initCreateModal() {
             formatBtns.forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             selectedFormat = btn.dataset.value;
-            if (rankedRow) rankedRow.hidden = !RANKED_COMPATIBLE.includes(selectedFormat);
+            if (rankedRow) rankedRow.hidden = !formatConfig(selectedFormat).rankedCompatible;
             checkStep1Ready();
         });
     });
@@ -216,7 +226,7 @@ function initCreateModal() {
             return;
         }
 
-        const isSwiss = selectedFormat === 'swiss' || selectedFormat === 'swiss filter';
+        const cfg = formatConfig(selectedFormat);
         btnLabel.hidden    = true;
         btnSpinner.hidden  = false;
         btnSubmit.disabled = true;
@@ -232,7 +242,7 @@ function initCreateModal() {
                 display_entrants:      document.getElementById('opt-display-entrants').checked,
                 ranked_reporting:      document.getElementById('opt-ranked').checked,
                 debug:                 document.getElementById('opt-debug').checked,
-                round_limit:           isSwiss ? parseInt(fieldRounds.value) || 8 : 8,
+                round_limit:           cfg.hasRoundLimit ? parseInt(fieldRounds.value) || 8 : 8,
             });
             closeModal();
             await loadTournaments();

@@ -428,20 +428,20 @@ class SwissMethodsMixin:
             array_filters=[{'m.match_id': match_id}]
         )
 
-async def swiss_rejoin_player(self, event_id: ObjectId, discord_id: int) -> bool:
-        """
-        Rejoin a previously dropped player, restoring their dropped=False status
-        without resetting their points, wins, losses, or match history.
-        Returns True if the player was found and rejoined, False if they're new.
-        """
-        event = await self.get_swiss_event(event_id)
-        if str(discord_id) in event.get('players', {}):
-            await self.swiss_collection.update_one(
-                {'_id': ObjectId(event_id)},
-                {'$set': {
-                    f'players.{discord_id}.dropped':         False,
-                    f'players.{discord_id}.active_match_id': None,
-                }}
-            )
-            return True
-        return False
+    async def swiss_rejoin_player(self, event_id: ObjectId, discord_id: int) -> bool:
+            """
+            Rejoin a previously dropped player, restoring their dropped=False status
+            without resetting their points, wins, losses, or match history.
+            Returns True if the player was found and rejoined, False if they're new.
+            """
+            event = await self.get_swiss_event(event_id)
+            if str(discord_id) in event.get('players', {}):
+                await self.swiss_collection.update_one(
+                    {'_id': ObjectId(event_id)},
+                    {'$set': {
+                        f'players.{discord_id}.dropped':         False,
+                        f'players.{discord_id}.active_match_id': None,
+                    }}
+                )
+                return True
+            return False
