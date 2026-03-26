@@ -172,36 +172,15 @@ async def test_revert_checkin_deletes_checkin_channel():
 
 
 @pytest.mark.asyncio
-async def test_revert_checkin_clears_checkin_list():
+async def test_revert_checkin_calls_dh_revert_tournament():
     tm, t = make_tm(state='checkin')
     tm.get_channel = AsyncMock(return_value=None)
     tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={**t, 'state': 'checkin'})
+    tm.bot.dh.revert_tournament = AsyncMock()
 
     await tm.revert_tournament()
 
-    tm.bot.dh.clear_checkin.assert_awaited_once_with('tid')
-
-
-@pytest.mark.asyncio
-async def test_revert_checkin_opens_registration():
-    tm, t = make_tm(state='checkin')
-    tm.get_channel = AsyncMock(return_value=None)
-    tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={**t, 'state': 'checkin'})
-
-    await tm.revert_tournament()
-
-    tm.bot.dh.open_registration.assert_awaited_once_with('tid')
-
-
-@pytest.mark.asyncio
-async def test_revert_checkin_sets_state_to_registration():
-    tm, t = make_tm(state='checkin')
-    tm.get_channel = AsyncMock(return_value=None)
-    tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={**t, 'state': 'checkin'})
-
-    await tm.revert_tournament()
-
-    tm.bot.dh.update_tournament_state.assert_awaited_once_with('tid', 'registration')
+    tm.bot.dh.revert_tournament.assert_awaited_once_with('tid', 'registration')
 
 
 # ─── Revert: active → checkin ─────────────────────────────────────────────────
@@ -245,14 +224,15 @@ async def test_revert_active_calls_format_on_reset():
 
 
 @pytest.mark.asyncio
-async def test_revert_active_sets_state_to_checkin():
+async def test_revert_active_calls_dh_revert_tournament():
     tm, t = make_tm(state='active')
     tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={**t, 'state': 'active'})
+    tm.bot.dh.revert_tournament = AsyncMock()
     tm.start_checkin = AsyncMock()
 
     await tm.revert_tournament()
 
-    tm.bot.dh.update_tournament_state.assert_awaited_once_with('tid', 'checkin')
+    tm.bot.dh.revert_tournament.assert_awaited_once_with('tid', 'checkin')
 
 
 # ─── Delete tournament ────────────────────────────────────────────────────────

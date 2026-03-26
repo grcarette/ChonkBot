@@ -913,8 +913,6 @@ class TournamentManager:
         tournament = await self.get_tournament()
         if tournament.get('category_id'):
             await self.remove_tournament_from_discord()
-        if tournament['state'] == 'finished':
-            return False
         await self._cleanup_lobbies()
         await self.format.on_tournament_delete()
         await self.bot.dh.delete_tournament(tournament['_id'])
@@ -1333,12 +1331,18 @@ class TournamentManager:
 
         channels = {ch.name: ch for ch in tournament_category.channels}
         desired  = [channels[name] for name in CHANNEL_ORDER if name in channels]
-        base_position = min(ch.position for ch in desired) if desired else 0
+        if not desired:
+            return
 
-        for i, ch in enumerate(desired):
-            expected = base_position + i
-            if ch.position != expected:
-                await ch.edit(position=expected)
+        # Check if already in the right order — nothing to do
+        current_order = [ch for ch in tournament_category.channels if ch in desired]
+        if current_order == desired:
+            return
+
+        # Build bulk position update: 0-based within the category
+        await self.guild.edit_channel_positions(
+            *[(ch, i) for i, ch in enumerate(desired)]
+        )
 
     async def revert_tournament(self):
         tournament = await self.get_tournament()

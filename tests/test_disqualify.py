@@ -285,17 +285,47 @@ class TestDQActiveLobby:
 class TestDQExcludedFromPairings:
 
     @pytest.mark.asyncio
-    async def test_swiss_dq_calls_on_player_unregister_to_set_dropped(self):
+    async def test_dqd_player_not_in_available_players(self):
         """
-        disqualify_player must call format.on_player_unregister so Swiss sets
-        dropped=True in the swiss event, excluding the player from future rounds.
+        swiss_get_available_players must exclude players whose discord_id is in
+        tournament.dqs, even if their dropped flag is False.
+        """
+        from data.swiss import SwissMethodsMixin
+
+        event = {
+            '_id': 'eid',
+            'tournament_id': 'tid',
+            'players': {
+                '100': {'dropped': False, 'active_match_id': None, 'points': 0.0},
+                '200': {'dropped': False, 'active_match_id': None, 'points': 0.0},
+                '300': {'dropped': False, 'active_match_id': None, 'points': 0.0},
+            }
+        }
+
+        mixin = object.__new__(SwissMethodsMixin)
+        mixin.get_swiss_event = AsyncMock(return_value=event)
+        mixin.get_tournament_by_id = AsyncMock(return_value={'dqs': [100]})
+
+        available = await mixin.swiss_get_available_players('eid')
+        available_ids = [p['discord_id'] for p in available]
+
+        assert 100 not in available_ids, "DQ'd player must be excluded even if dropped=False"
+        assert 200 in available_ids
+        assert 300 in available_ids
+        
+    @pytest.mark.asyncio
+    async def test_swiss_dq_does_not_call_on_player_unregister(self):
+        """
+        disqualify_player must NOT call format.on_player_unregister — DQ is not
+        the same as unregistering. Exclusion from pairings is handled via the
+        tournament.dqs list, not the dropped flag.
         """
         tm, _ = make_swiss_tm()
         tm.format.on_player_unregister = AsyncMock()
 
         await tm.disqualify_player(100)
 
-        tm.format.on_player_unregister.assert_awaited_once_with(100)
+        tm.format.on_player_unregister.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_swiss_on_player_unregister_calls_swiss_drop_player(self):
@@ -332,6 +362,7 @@ class TestDQExcludedFromPairings:
 
         event = {
             '_id': 'eid',
+            'tournament_id': 'tid',
             'players': {
                 '100': {'dropped': True,  'active_match_id': None, 'points': 0.0},
                 '200': {'dropped': False, 'active_match_id': None, 'points': 0.0},
@@ -341,6 +372,7 @@ class TestDQExcludedFromPairings:
 
         mixin = object.__new__(SwissMethodsMixin)
         mixin.get_swiss_event = AsyncMock(return_value=event)
+        mixin.get_tournament_by_id = AsyncMock(return_value={'dqs': []})
 
         available = await mixin.swiss_get_available_players('eid')
         available_ids = [p['discord_id'] for p in available]
@@ -350,17 +382,17 @@ class TestDQExcludedFromPairings:
         assert 300 in available_ids
 
     @pytest.mark.asyncio
-    async def test_challonge_dq_unregisters_participant_from_bracket(self):
+    async def test_challonge_dq_does_not_call_on_player_unregister(self):
         """
-        For Challonge, on_player_unregister must destroy the participant from
-        the bracket so they cannot be matched in future rounds.
+        disqualify_player must NOT call format.on_player_unregister for Challonge
+        either — DQ exclusion is handled via tournament.dqs, not bracket removal.
         """
         tm, t = make_challonge_tm()
         tm.format.on_player_unregister = AsyncMock()
 
         await tm.disqualify_player(100)
 
-        tm.format.on_player_unregister.assert_awaited_once_with(100)
+        tm.format.on_player_unregister.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_challonge_on_player_unregister_calls_ch_unregister(self):

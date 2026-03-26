@@ -237,20 +237,15 @@ class SwissManager:
     async def on_player_joined(self):
         """
         Called when a player registers during an active swiss event.
-        Only triggers pairing if no matches are currently active (between rounds).
+        They will be considered in the next run_pairing_cycle call.
         """
         if not self.running:
             return
+
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         if swiss_event.get('bye_queue') is not None:
             await self.cancel_bye_wait(swiss_event['_id'])
-
-        for player in swiss_event['players'].values():
-            if player.get('active_match_id') is not None:
-                return
-
-        await self.run_pairing_cycle()
 
     # ─── Called when a player drops ───────────────────────────────────────────
 
