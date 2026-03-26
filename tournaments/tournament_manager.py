@@ -961,6 +961,7 @@ class TournamentManager:
 
             # Send DQ notification in the channel but don't close it immediately
             if lobby.channel:
+                await lobby.purge_bot_messages()
                 dq_mention      = f"<@{user_id}>"
                 winner_mention  = f"<@{winner_id}>"
                 embed = discord.Embed(
@@ -981,46 +982,60 @@ class TournamentManager:
     async def undisqualify_player(self, user_id):
         tournament = await self.get_tournament()
 
-        # Only proceed if the player is actually DQ'd
         if user_id not in tournament.get('dqs', []):
             return False
 
-        # Find any finished lobby this player is in
-        lobby_data = await self.bot.dh.find_player_match(self.tournament['_id'], user_id)
-
-        if not lobby_data:
-            all_lobbies = await self.bot.dh.get_all_lobbies(self.tournament['_id'])
-            lobby_data = next(
-                (l for l in all_lobbies
-                 if user_id in l.get('players', []) and l.get('state') == 'finished'),
-                None
-            )
-
-        if lobby_data:
-            match_id = lobby_data['match_id']
-            lobby = self.lobbies.get(match_id)
-
-            fmt = tournament.get('format', '')
-            if fmt in ('swiss', 'swiss filter'):
-                swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
-                if swiss_event:
-                    await self.bot.dh.swiss_unrecord_result(swiss_event['_id'], match_id)
-
-            await self.bot.dh.lobby_collection.update_one(
-                {'match_id': match_id},
-                {'$set': {
-                    'state':      'reporting',
-                    'results':    [],
-                    'checked_in': [],
-                }}
-            )
-
-            if lobby:
-                lobby.remaining_players = set(lobby_data['players'])
-                if lobby.channel:
-                    await lobby.start_checkin()
-
         return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
+
+    async def reopen_lobby(self, match_id_str: str):
+        match_lobby = next(
+            (lobby for key, lobby in self.lobbies.items() if str(key) == match_id_str),
+            None
+        )
+        if not match_lobby:
+            raise ValueError('Lobby not found in memory — bot may have restarted')
+
+        lobby_db = await match_lobby.get_lobby()
+        tournament = await self.get_tournament()
+
+        dq_players = [p for p in lobby_db.get('players', []) if p in tournament.get('dqs', [])]
+        # Un-DQ any DQ'd players in this lobby
+        for player_id in lobby_db.get('players', []):
+            if player_id in tournament.get('dqs', []):
+                await self.undisqualify_player(player_id)
+
+        # Format-specific result unrecording
+        await self.format.on_lobby_reopen(match_lobby, lobby_db)
+
+        # Reset lobby DB state
+        await self.bot.dh.lobby_collection.update_one(
+            {'match_id': match_lobby.match_id},
+            {'$set': {
+                'state':        'checkin',
+                'results':      [],
+                'checked_in':   [],
+                'picked_stage': None,
+            }}
+        )
+
+        match_lobby.remaining_players = set(lobby_db.get('players', []))
+
+        # Notify channel if present
+        if match_lobby.channel:
+            await match_lobby.purge_bot_messages()
+            if dq_players:
+                mentions = ' '.join(f"<@{p}>" for p in lobby_db.get('players', []))
+                embed = discord.Embed(
+                    title="Disqualification Reverted",
+                    description=(
+                        f"The disqualification has been reverted.\n"
+                        f"please play out your match."
+                    ),
+                    color=discord.Color.green()
+                )
+                await match_lobby.channel.send(embed=embed)
+
+        await match_lobby.start_checkin()
 
     # ─── Seeding ─────────────────────────────────────────────────────────────
 
@@ -1333,9 +1348,6 @@ class TournamentManager:
             checkin_channel = await self.get_channel('check-in')
             if checkin_channel:
                 await checkin_channel.delete()
-
-            await self.bot.dh.clear_checkin(tournament['_id'])
-
             register_channel = await self.get_channel('register')
             if register_channel:
                 history = [msg async for msg in register_channel.history(limit=1)]
@@ -1347,28 +1359,22 @@ class TournamentManager:
                     )
                     await register_channel.send(embed=embed, view=view)
                 await self.set_registration_visibility(True)
-
-            await self.bot.dh.open_registration(tournament['_id'])
-            await self.bot.dh.update_tournament_state(self.tournament['_id'], 'registration')
             if hasattr(self.format, 'invalidate_pending_cache'):
                 self.format.invalidate_pending_cache()
+            await self.bot.dh.revert_tournament(self.tournament['_id'], 'registration')
 
         elif state == 'active':
             self.stop_checkin_reminder_loop()
-
             await self._cleanup_lobbies()
             self.lobbies.clear()
             if hasattr(self.format, 'called_match_ids'):
                 self.format.called_match_ids.clear()
             if hasattr(self.format, 'invalidate_pending_cache'):
                 self.format.invalidate_pending_cache()
-            await self.bot.dh.clear_lobbies(self.tournament['_id'])
-
             if self.format and hasattr(self.format, 'on_reset'):
                 await self.format.on_reset()
-
+            await self.bot.dh.revert_tournament(self.tournament['_id'], 'checkin')
             await self.start_checkin()
-            await self.bot.dh.update_tournament_state(self.tournament['_id'], 'checkin')
 
         else:
             raise ValueError(f'Cannot revert from state: {state!r}')

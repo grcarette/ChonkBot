@@ -16,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SECTION_META = {
         overview:  { title: 'Overview',       sub: 'Tournament status and controls' },
-        players:   { title: 'Participants',   sub: 'Manage entrants and seeding' },
         matches:   { title: 'Matches',        sub: 'Active lobbies and match state' },
         config:    { title: 'Configuration',  sub: 'Tournament settings' },
         stagelist: { title: 'Stagelist',      sub: 'Manage tournament stages' },
@@ -230,7 +229,7 @@ async function loadTournament({ force = false } = {}) {
         renderRegistrationRequests(data.registration_requests || [], data.config);
 
         const pending = pmResult.pending || [];
-        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false, data.swiss ?? null);
+        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false, data.swiss ?? null, data.dqs || []);
 
         if (_forceRefreshSeeds || !_seedsRendered) {
             renderPlayers(

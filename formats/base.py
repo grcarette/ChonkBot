@@ -235,6 +235,14 @@ class BaseFormat:
         """
         return []
 
+    async def on_lobby_reopen(self, lobby, lobby_db: dict) -> None:
+        """
+        Called when a finished lobby is reopened to checkin.
+        Format-specific cleanup — e.g. unrecording Swiss results.
+        Default: nothing.
+        """
+        pass
+
     @property
     def supports_reset(self) -> bool:
         """DE/SE: True. Swiss: False."""
@@ -259,3 +267,4 @@ class BaseFormat:
     def ranked_compatible(self) -> bool:
         """Whether this format supports UCH Ranked reporting. Default: False."""
         return False
+

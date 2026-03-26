@@ -18,7 +18,7 @@ const _matchActionInFlight = new Set();
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-function renderMatches(lobbies, pending, autocall, swiss) {
+function renderMatches(lobbies, pending, autocall, swiss, dqs) {
     const container       = document.getElementById('matches-section-wrap');
     const activeLobbies   = lobbies.filter(l => ACTIVE_LOBBY_STATES.has(l.state));
     const finishedLobbies = lobbies.filter(l => FINISHED_LOBBY_STATES.has(l.state));
@@ -125,8 +125,10 @@ function renderMatches(lobbies, pending, autocall, swiss) {
             const players  = l.player_names.map(escapeHtml).join(' vs ');
             const inFlight = _matchActionInFlight.has(l.match_id);
             const reopenBtn = canReopen
-                ? `<button class="btn btn-secondary btn-sm"
-                        onclick="matchAction_reopen('${l.match_id}', this)"
+                ? `<button class="btn btn-secondary btn-sm reopen-btn"
+                        data-match-id="${l.match_id}"
+                        data-player-names="${escapeHtml(JSON.stringify(l.player_names))}"
+                        data-player-ids="${escapeHtml(JSON.stringify(l.player_ids))}"
                         ${inFlight ? 'disabled' : ''}>
                         Reopen
                    </button>`
@@ -163,6 +165,15 @@ function renderMatches(lobbies, pending, autocall, swiss) {
             } else {
                 btn.disabled = false;
             }
+        });
+    });
+
+    container.querySelectorAll('.reopen-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const matchId     = btn.dataset.matchId;
+            const playerNames = JSON.parse(btn.dataset.playerNames);
+            const playerIds   = JSON.parse(btn.dataset.playerIds);
+            matchAction_reopen(matchId, playerNames, playerIds, dqs, btn);
         });
     });
 
@@ -357,7 +368,22 @@ async function submitForceWinner(matchId, winnerId) {
     await _matchActionAndRefresh(matchId, 'force_advance', { target_state: 'winner', winner_id: winnerId });
 }
 
-async function matchAction_reopen(matchId, btn) {
+async function matchAction_reopen(matchId, playerNames, playerIds, dqs, btn) {
+    const dqsStr = (dqs || []).map(String);
+    const dqedPlayers = (playerIds || [])
+        .map((id, i) => ({ id, name: playerNames[i] || String(id) }))
+        .filter(p => dqsStr.includes(String(p.id)));
+
+    if (dqedPlayers.length > 0) {
+        const names = dqedPlayers.map(p => escapeHtml(p.name)).join(' and ');
+        const confirmed = await showConfirm(
+            'Un-disqualify Player?',
+            `${names} ${dqedPlayers.length > 1 ? 'are' : 'is'} DQ'd. Reopening this lobby will un-disqualify ${dqedPlayers.length > 1 ? 'them' : 'them'}. Are you sure?`,
+            'danger'
+        );
+        if (!confirmed) return;
+    }
+
     btn.textContent = 'Reopening...';
-    await _matchActionAndRefresh(matchId, 'reopen_swiss_lobby');
+    await _matchActionAndRefresh(matchId, 'reopen_lobby');
 }

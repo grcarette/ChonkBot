@@ -369,3 +369,25 @@ class TournamentMethodsMixin:
             '$unset': {'category_id': '', 'checked_in': '', 'called_match_ids': ''},
         }
         await self.tournament_collection.update_one(query, update)
+
+    async def revert_tournament(self, tournament_id, to_state: str):
+        if to_state == 'checkin':
+            await self.lobby_collection.delete_many({'tournament': ObjectId(tournament_id)})
+            await self.tournament_collection.update_one(
+                {'_id': ObjectId(tournament_id)},
+                {'$set': {'state': 'checkin', 'dqs': []}}
+            )
+
+        elif to_state == 'registration':
+            await self.tournament_collection.update_one(
+                {'_id': ObjectId(tournament_id)},
+                {'$set': {
+                    'state': 'registration',
+                    'dqs': [],
+                    'checked_in': [],
+                    'registration_open': True,
+                }}
+            )
+
+        else:
+            raise ValueError(f'Unsupported revert target state: {to_state!r}')

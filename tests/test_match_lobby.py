@@ -206,8 +206,10 @@ async def test_end_reporting_falls_back_to_report_match_when_no_service():
 
 
 @pytest.mark.asyncio
-async def test_end_reporting_dq_closes_lobby():
+async def test_end_reporting_dq_sends_player_instructions():
+    """A DQ result still sends player instructions — no close_lobby."""
     from tournaments.match_lobby import MatchLobby
+    import tournaments.match_lobby as ml
     lobby = make_lobby()
 
     real_lobby = object.__new__(MatchLobby)
@@ -217,14 +219,18 @@ async def test_end_reporting_dq_closes_lobby():
     real_lobby.match_service = AsyncMock()
     real_lobby.purge_bot_messages = AsyncMock()
 
-    await MatchLobby.end_reporting(real_lobby, winner_id=100, is_dq=True)
+    with patch.object(ml.asyncio, 'create_task', side_effect=lambda coro: coro):
+        await MatchLobby.end_reporting(real_lobby, winner_id=100, is_dq=True)
 
-    real_lobby.close_lobby.assert_awaited_once()
+    real_lobby.send_player_instructions.assert_awaited_once()
+    real_lobby.close_lobby.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_end_reporting_non_dq_does_not_close_lobby():
+async def test_end_reporting_non_dq_sends_player_instructions():
+    """A normal result also sends player instructions."""
     from tournaments.match_lobby import MatchLobby
+    import tournaments.match_lobby as ml
     lobby = make_lobby()
 
     real_lobby = object.__new__(MatchLobby)
@@ -234,10 +240,10 @@ async def test_end_reporting_non_dq_does_not_close_lobby():
     real_lobby.match_service = AsyncMock()
     real_lobby.purge_bot_messages = AsyncMock()
 
-    await MatchLobby.end_reporting(real_lobby, winner_id=100, is_dq=False)
+    with patch.object(ml.asyncio, 'create_task', side_effect=lambda coro: coro):
+        await MatchLobby.end_reporting(real_lobby, winner_id=100, is_dq=False)
 
-    real_lobby.close_lobby.assert_not_awaited()
-
+    real_lobby.send_player_instructions.assert_awaited_once()
 
 # ─── Stage bans ───────────────────────────────────────────────────────────────
 

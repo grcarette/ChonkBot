@@ -80,7 +80,6 @@ class MatchLobby:
         channel_id = lobby['channel_id']
         channel = discord.utils.get(self.guild.channels, id=channel_id)
         self.channel = channel
-        await self.channel.send('confirm')
         
     async def initialize_match(self, hold_match=False):
         await self.create_channel(hold_match)

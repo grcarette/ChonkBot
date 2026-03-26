@@ -518,7 +518,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'refresh_event_info',
         'toggle_hold_when_ready',
         'unpublish_tournament',
-        'reopen_swiss_lobby',
+        'reopen_lobby',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -571,11 +571,12 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
         elif action == 'undq_player':
+            need_tm()
             discord_id = body.get('discord_id')
             if discord_id is None:
                 return web.json_response({'error': 'discord_id is required'}, status=400)
             discord_id = int(discord_id)
-            await bot.dh.undisqualify_player(tournament['_id'], discord_id)
+            await tm.undisqualify_player(discord_id)
 
         elif action == 'force_advance':
             need_tm()
@@ -781,41 +782,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             await tm.remove_tournament_from_discord()
             await bot.dh.unpublish_tournament(tournament['_id'])
 
-        elif action == 'reopen_swiss_lobby':
+        elif action == 'reopen_lobby':
             need_tm()
             match_id_str = str(body.get('match_id'))
-            match_lobby  = next(
-                (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
-                None
-            )
-            if not match_lobby:
-                return web.json_response(
-                    {'error': 'Lobby not found in memory'}, status=404
-                )
-            swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
-            if not swiss_event:
-                return web.json_response({'error': 'No Swiss event found'}, status=400)
-            # Reopen the lobby to reporting state
-            await match_lobby.dh.update_lobby_state(match_lobby.match_id, 'reporting')
-            # Clear both players' active_match_id so they appear available, then re-set it
-            # so the round doesn't incorrectly flip to ready
-            lobby_db = await match_lobby.get_lobby()
-            for player_id in lobby_db.get('players', []):
-                await bot.dh.swiss_set_active_match(swiss_event['_id'], player_id, match_lobby.match_id)
-            # Undo the recorded result
-            await bot.dh.swiss_unrecord_result(swiss_event['_id'], match_lobby.match_id)
-            # Reset the lobby to reporting state cleanly, without duplicating players
-            await bot.dh.lobby_collection.update_one(
-                {'match_id': match_lobby.match_id},
-                {'$set': {
-                    'state':        'reporting',
-                    'results':      [],
-                    'checked_in':   [],
-                    'picked_stage': None,
-                }}
-            )
-            await match_lobby.start_reporting()
-
+            await tm.reopen_lobby(match_id_str)
     except ValueError as e:
         return web.json_response({'error': str(e)}, status=400)
     except Exception as e:

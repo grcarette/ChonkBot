@@ -123,6 +123,7 @@ class SwissFormat(BaseFormat):
             result['match_id'],
             result['winner_id'],
             result['loser_id'],
+            result.get('is_dq', False),
         )
 
         await self.manager.check_round_complete()
@@ -215,6 +216,15 @@ class SwissFormat(BaseFormat):
             'round_ready':       round_ready,
             'final_round_active': final_round_active,
         }
+
+    async def on_lobby_reopen(self, lobby, lobby_db: dict) -> None:
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        if not swiss_event:
+            return
+        match_id = lobby.match_id
+        await self.dh.swiss_unrecord_result(swiss_event['_id'], match_id)
+        for player_id in lobby_db.get('players', []):
+            await self.dh.swiss_set_active_match(swiss_event['_id'], player_id, match_id)
 
     # ─── Properties ───────────────────────────────────────────────────────────
 

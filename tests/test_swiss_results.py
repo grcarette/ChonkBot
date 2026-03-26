@@ -65,7 +65,7 @@ async def test_on_result_calls_swiss_record_result_immediately():
 
     await fmt.on_result(result, MagicMock())
 
-    dh.swiss_record_result.assert_awaited_once_with('eid', 1, 100, 200)
+    dh.swiss_record_result.assert_awaited_once_with('eid', 1, 100, 200, False)
 
 
 @pytest.mark.asyncio
