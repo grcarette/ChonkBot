@@ -426,7 +426,7 @@ function renderActionArea(t) {
             </div></div>` : '';
         const finalRoundActive = isSwiss && t.swiss?.final_round_active;
         const nextBtn = isSwiss && t.swiss && !finalRoundActive
-            ? `<button class="btn btn-success" id="btn-next-round" ${t.swiss.round_ready ? '' : 'disabled'}>
+            ? `<button class="btn btn-success" id="btn-next-round">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>

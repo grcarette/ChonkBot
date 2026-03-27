@@ -67,6 +67,36 @@ class BaseFormat:
         """
         raise NotImplementedError
 
+    async def on_team_register(self, team_id: str, team_doc: dict) -> None:
+        """
+        Register a 2v2 team as a single bracket participant.
+        Called after both players have confirmed and roles have been assigned.
+
+        team_id:  deterministic string "{lower_id}_{higher_id}"
+        team_doc: dict with keys player1_id, player2_id, name
+
+        Default: no-op (only relevant when teams_mode is True).
+        Override in formats that support bracket registration.
+
+        Examples:
+        - DE/SE: register team name on Challonge, store participant ID via dh.register_team
+        - Swiss: add team as a single player entry in the swiss event
+        """
+        pass
+
+    async def on_team_unregister(self, team_id: str) -> None:
+        """
+        Remove a 2v2 team from the format's tracking system.
+        Called after both members' Discord roles have been removed.
+
+        Default: no-op.
+
+        Examples:
+        - DE/SE: destroy the Challonge participant
+        - Swiss: mark the team entry as dropped
+        """
+        pass
+
     async def on_tournament_start(self) -> None:
         """
         Called by start_tournament after channel setup is complete.

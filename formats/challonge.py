@@ -74,6 +74,23 @@ class ChallongeFormat(BaseFormat):
         if player_id is not None:
             await self.ch.unregister_player(tournament['challonge_data']['id'], player_id)
 
+    async def on_team_register(self, team_id: str, team_doc: dict) -> None:
+        """Register the team as a single Challonge participant using the team name."""
+        tournament = await self.tm.get_tournament()
+        participant_id = await self.ch.register_player(
+            tournament['challonge_data']['url'], team_doc['name']
+        )
+        await self.dh.register_team(tournament['_id'], team_id, participant_id)
+
+    async def on_team_unregister(self, team_id: str) -> None:
+        """Destroy the Challonge participant for this team."""
+        tournament = await self.tm.get_tournament()
+        participant_id = tournament['entrants'].get(str(team_id))
+        if participant_id is not None:
+            await self.ch.unregister_player(
+                tournament['challonge_data']['id'], participant_id
+            )
+
     async def on_tournament_start(self) -> None:
         """Lock in the bracket seeding on Challonge."""
         tournament = await self.tm.get_tournament()

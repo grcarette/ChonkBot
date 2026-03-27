@@ -122,7 +122,14 @@ function renderMatches(lobbies, pending, autocall, swiss, dqs) {
     if (finishedLobbies.length) {
         const canReopen = swiss && swiss.current_round > 0;
         html += finishedLobbies.map(l => {
-            const players  = l.player_names.map(escapeHtml).join(' vs ');
+            const players = l.winner_name
+                ? l.player_names.map((n, i) => {
+                    const isWinner = n === l.winner_name;
+                    return isWinner
+                        ? `<strong>${escapeHtml(n)}</strong>`
+                        : `<span style="opacity:0.6">${escapeHtml(n)}</span>`;
+                  }).join(' vs ')
+                : l.player_names.map(escapeHtml).join(' vs ');
             const inFlight = _matchActionInFlight.has(l.match_id);
             const reopenBtn = canReopen
                 ? `<button class="btn btn-secondary btn-sm reopen-btn"

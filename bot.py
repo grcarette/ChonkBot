@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from data import DataHandler
 from data.uchranked_api import UCHRankedAPI
 from handlers.tournament_handler import TournamentHandler
-from handlers.reaction_handler import ReactionHandler
 
 from ui.register_control import RegisterControlView
 from ui.bot_control import BotControlView
@@ -19,7 +18,6 @@ class ChonkBot(commands.Bot):
         
         self.dh = DataHandler()
         self.th = TournamentHandler(self)
-        self.rh = ReactionHandler(self)
         self.uchranked_api = UCHRankedAPI()
         
         self.debug = False

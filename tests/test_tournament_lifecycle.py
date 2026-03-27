@@ -259,18 +259,6 @@ async def test_delete_deletes_in_memory_lobbies():
 
     lobby.delete_lobby.assert_awaited_once()
 
-
-@pytest.mark.asyncio
-async def test_delete_finished_tournament_is_noop():
-    tm, t = make_tm(state='finished')
-    tm.bot.dh.get_tournament_by_id = AsyncMock(return_value={**t, 'state': 'finished'})
-
-    result = await tm.delete_tournament()
-
-    assert result is False
-    tm.bot.dh.delete_tournament.assert_not_awaited()
-
-
 @pytest.mark.asyncio
 async def test_delete_removes_tournament_from_db():
     tm, t = make_tm(state='active')

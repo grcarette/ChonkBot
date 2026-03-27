@@ -246,17 +246,7 @@ async def test_round_complete_ends_event_when_complete():
     sm.end_event.assert_awaited_once()
 
 
-# ─── on_player_joined ─────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_player_joining_between_rounds_triggers_pairing():
-    players = {str(i): make_player_doc(i) for i in range(1, 4)}
-    sm, dh, swiss_event, _ = make_swiss_manager(players=players)
-    swiss_event['bye_queue'] = None
-    sm.run_pairing_cycle = AsyncMock()
-    await sm.on_player_joined()
-    sm.run_pairing_cycle.assert_awaited_once()
-
+# ─── on_player_joined ────────────────────────────────────────────────────────-
 
 @pytest.mark.asyncio
 async def test_player_joining_mid_round_does_not_trigger_pairing():

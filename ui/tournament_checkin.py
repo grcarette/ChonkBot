@@ -73,7 +73,20 @@ class TournamentCheckinView(discord.ui.View):
         
     async def get_entrants(self):
         tournament = await self.tm.bot.dh.get_tournament(name=self.tournament['name'])
-        entrants = [int(user_id) for user_id in tournament['entrants'].keys()]
+        entrants = []
+        for key in tournament['entrants'].keys():
+            key_str = str(key)
+            if '_' in key_str:
+                try:
+                    p1, p2 = key_str.split('_')
+                    entrants.extend([int(p1), int(p2)])
+                except ValueError:
+                    pass
+            else:
+                try:
+                    entrants.append(int(key_str))
+                except ValueError:
+                    pass
         return entrants
     
     async def generate_embed(self):

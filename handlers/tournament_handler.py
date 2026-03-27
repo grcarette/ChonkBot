@@ -19,7 +19,6 @@ from formats import make_format
 from tournaments.match_lobby import MatchLobby
 from tournaments.tournament_manager import TournamentManager
 
-from .bracket_handler import BracketHandler
 from tournaments.challonge_handler import ChallongeHandler
 
 RESULTS_CHANNEL_ID = 1346422769721544754

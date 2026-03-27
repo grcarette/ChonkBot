@@ -286,13 +286,18 @@ class SwissMethodsMixin:
         dqs = set(tournament.get('dqs', [])) if tournament else set()
 
         available = []
-        for discord_id, player in event['players'].items():
-            if (
-                not player['dropped']
-                and player['active_match_id'] is None
-                and int(discord_id) not in dqs
-            ):
-                available.append({'discord_id': int(discord_id), **player})
+        for player_id, player in event['players'].items():
+            if player['dropped'] or player['active_match_id'] is not None:
+                continue
+            if '_' in player_id:
+                p1, p2 = player_id.split('_')
+                if int(p1) in dqs or int(p2) in dqs:
+                    continue
+                available.append({'discord_id': player_id, **player})
+            else:
+                if int(player_id) in dqs:
+                    continue
+                available.append({'discord_id': int(player_id), **player})
         return available
 
     async def swiss_get_standings(self, event_id: ObjectId) -> list[dict]:
@@ -313,7 +318,7 @@ class SwissMethodsMixin:
             buchholz_cut1 = sum(sorted(opponent_points)[1:]) if len(opponent_points) > 1 else buchholz
 
             standings.append({
-                'discord_id': int(discord_id),
+                'discord_id': discord_id,  # kept as string; callers handle int cast where needed
                 'buchholz': buchholz,
                 'buchholz_cut1': buchholz_cut1,
                 **player,

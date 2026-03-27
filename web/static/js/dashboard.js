@@ -243,6 +243,7 @@ function initCreateModal() {
                 ranked_reporting:      document.getElementById('opt-ranked').checked,
                 debug:                 document.getElementById('opt-debug').checked,
                 round_limit:           cfg.hasRoundLimit ? parseInt(fieldRounds.value) || 8 : 8,
+                teams_mode:            document.getElementById('opt-teams').checked,
             });
             closeModal();
             await loadTournaments();

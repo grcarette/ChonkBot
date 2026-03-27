@@ -60,6 +60,41 @@ class MatchLobby:
 
         return self
 
+    async def get_discord_members(self) -> list[int]:
+        """
+        Return the flat list of discord user IDs for all players in this lobby.
+        In solo mode: self.players already contains discord IDs, returned as-is.
+        In teams mode: each entry is a team_id string; resolve to both member IDs.
+        """
+        if not self.tournament_manager.is_teams_mode:
+            return list(self.players)
+        return await self.tournament_manager.resolve_team_members(self.players)
+
+    async def get_remaining_discord_members(self) -> list[int]:
+        """
+        Same as get_discord_members but scoped to remaining_players (not yet reported).
+        """
+        if not self.tournament_manager.is_teams_mode:
+            return list(self.remaining_players)
+        return await self.tournament_manager.resolve_team_members(list(self.remaining_players))
+
+    async def _resolve_checkin_slot(self, user_id: int):
+        """
+        Return the slot identifier this user maps to in remaining_players.
+        Solo mode: returns user_id if present, else None.
+        Teams mode: returns the team_id if user_id is a member of a remaining team, else None.
+        """
+        if not self.tournament_manager.is_teams_mode:
+            return user_id if user_id in self.remaining_players else None
+        for team_id in self.remaining_players:
+            try:
+                p1, p2 = self.tournament_manager._parse_team_id(str(team_id))
+                if user_id in (p1, p2):
+                    return team_id
+            except (ValueError, AttributeError):
+                continue
+        return None
+
     async def setup_lobby(self):
         await self.dh.create_lobby(
             tournament=self.tournament,
@@ -107,7 +142,8 @@ class MatchLobby:
             organizer_role: discord.PermissionOverwrite(read_messages=True)
         }
         if self.tournament_manager.bot.debug == False:
-            for player in self.players:
+            discord_members = await self.get_discord_members()
+            for player in discord_members:
                 member = discord.utils.get(self.guild.members, id=player)
                 if member:
                     overwrites[member] = discord.PermissionOverwrite(read_messages=True)
@@ -118,28 +154,24 @@ class MatchLobby:
         self.channel = await self.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=None)
         await self.dh.add_channel_to_lobby(self.match_id, self.channel)
 
-        message_content = (
-            "Your match is ready, but it is currently being held until further notice. Please be on standby until your match is called."
-        )
-        embed = discord.Embed(
-            title="Match Held",
-            description=message_content,
-            color=get_random_color()
-        )
-        await self.channel.send(embed=embed)
+        if hold_match:
+            message_content = (
+                "Your match is ready, but it is currently being held until further notice. Please be on standby until your match is called."
+            )
+            embed = discord.Embed(
+                title="Match Held",
+                description=message_content,
+                color=get_random_color()
+            )
+            await self.channel.send(embed=embed)
         
     async def start_checkin(self):
         await self.dh.update_lobby_state(self.match_id, 'checkin')
         view = CheckinView(self)
         embed = await view.generate_embed()
-        mentions = get_mentions(self.remaining_players)
-        await self.channel.send(' '.join(mentions),embed=embed, view=view)
-
-        userlist = []
-        for player in self.remaining_players:
-            user = discord.utils.get(self.guild.members, id=player)
-            if user:
-                userlist.append(user)
+        discord_members = await self.get_remaining_discord_members()
+        mentions = get_mentions(discord_members)
+        await self.channel.send(' '.join(mentions), embed=embed, view=view)
 
     async def checkin_player(self, player_id):
         lobby = await self.dh.lobby_checkin_player(self.match_id, player_id)
@@ -153,12 +185,13 @@ class MatchLobby:
         await self.dh.update_lobby_state(self.match_id, 'stage_bans')
         view = BanStagesButton(self)
         num_stage_bans = view.calculate_num_stage_bans()
-        
+
         if num_stage_bans == 0:
             await self.end_stage_bans(banned_stages=[])
-        else:    
+        else:
             embed, file = await view.generate_embed()
-            mentions = get_mentions(self.remaining_players)
+            discord_members = await self.get_remaining_discord_members()
+            mentions = get_mentions(discord_members)
             await self.channel.send(' '.join(mentions), embed=embed, file=file, view=view)
             
     async def end_stage_bans(self, banned_stages):
@@ -229,8 +262,16 @@ class MatchLobby:
         if self.channel is None:
             return
 
-        winner_mention = f"<@{lobby['results'][0]}>"
-        loser_mention = f"<@{lobby['results'][1]}>"
+        if self.tournament_manager.is_teams_mode:
+            winner_team_id = str(lobby['results'][0])
+            loser_team_id = next(str(p) for p in self.players if str(p) != winner_team_id)
+            winner_members = await self.tournament_manager.resolve_team_members([winner_team_id])
+            loser_members = await self.tournament_manager.resolve_team_members([loser_team_id])
+            winner_mention = ' '.join(f'<@{m}>' for m in winner_members)
+            loser_mention = ' '.join(f'<@{m}>' for m in loser_members)
+        else:
+            winner_mention = f"<@{lobby['results'][0]}>"
+            loser_mention = f"<@{lobby['results'][1]}>"
 
         tm = self.tournament_manager
         is_swiss = (

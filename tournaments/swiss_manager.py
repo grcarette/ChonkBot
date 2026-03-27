@@ -35,28 +35,19 @@ class SwissManager:
     # ─── Main pairing cycle ───────────────────────────────────────────────────
 
     async def run_pairing_cycle(self):
-        print("[run_pairing_cycle] Called")
-
         if not self.running:
-            print("[run_pairing_cycle] Aborted — self.running is False")
             return
-
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         is_complete = await self.dh.swiss_is_event_complete(swiss_event['_id'])
-        print(f"[run_pairing_cycle] swiss_is_event_complete={is_complete}")
         if is_complete:
-            print("[run_pairing_cycle] Event is complete — calling end_event")
             await self.end_event()
             return
 
         available = await self.dh.swiss_get_available_players(swiss_event['_id'])
-        print(f"[run_pairing_cycle] Available players ({len(available)}): {[p['discord_id'] for p in available]}")
 
         if len(available) < 2:
-            print(f"[run_pairing_cycle] Not enough players to pair ({len(available)})")
             if len(available) == 1 and self.bye_task is None:
-                print(f"[run_pairing_cycle] Starting bye wait for {available[0]['discord_id']}")
                 await self.start_bye_wait(available[0], swiss_event)
             return
 
@@ -66,24 +57,21 @@ class SwissManager:
             await self.post_round_complete(swiss_event)
 
         current_round = await self.dh.swiss_increment_round(swiss_event['_id'])
-        print(f"[run_pairing_cycle] Incremented round to {current_round}")
 
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         await self.randomize_stagelist()
 
         pairs, unpaired = pair_players(available)
-        print(f"[run_pairing_cycle] Pairs: {[{p1['discord_id'], p2['discord_id']} for p1, p2 in pairs]}")
-        print(f"[run_pairing_cycle] Unpaired: {[p['discord_id'] for p in unpaired]}")
+
+        self.tm.logger.round_started(current_round, len(available), len(pairs))
 
         for player_1, player_2 in pairs:
-            print(f"[run_pairing_cycle] Calling match: {player_1['discord_id']} vs {player_2['discord_id']}")
             await self.call_match(player_1, player_2, swiss_event, current_round)
 
         if unpaired:
             candidate = select_bye_candidate(unpaired)
             if candidate and self.bye_task is None:
-                print(f"[run_pairing_cycle] Starting bye wait for unpaired player {candidate['discord_id']}")
                 await self.start_bye_wait(candidate, swiss_event)
 
     # ─── Channel cleanup ─────────────────────────────────────────────────────
@@ -111,6 +99,8 @@ class SwissManager:
 
         # Flush Ranked API calls for this round
         await self.tm.format.flush_pending_results()
+
+        self.tm.logger.round_complete(swiss_event['current_round'])
 
         if await self.dh.swiss_is_event_complete(swiss_event['_id']):
             await self.end_event()
@@ -149,6 +139,8 @@ class SwissManager:
             player_2['discord_id'],
             current_round,
         )
+
+        self.tm.logger.match_created(match_id, player_1['discord_id'], player_2['discord_id'], current_round)
 
         lobby_name = f"swiss-{player_1['username']}-vs-{player_2['username']}"
 

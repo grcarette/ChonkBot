@@ -15,25 +15,28 @@ class CheckinView(discord.ui.View):
     async def check_in(self, interaction: discord.Interaction):
         override = False
         user_id = interaction.user.id
-        message = interaction.message 
+        message = interaction.message
         lobby = await self.lobby.get_lobby()
-        
+
         user_is_to = await self.lobby.check_to_role(user_id)
         if user_is_to:
             override = True
-        elif user_id not in self.lobby.remaining_players:
-            await interaction.response.send_message("You're not part of this match!", ephemeral=True)
-            return
-        elif user_id in lobby['checked_in']:
-            await interaction.response.send_message("You've already checked in!", ephemeral=True)
-            return
-        
+        else:
+            # Resolve which slot (player_id or team_id) this user belongs to
+            slot = await self.lobby._resolve_checkin_slot(user_id)
+            if slot is None:
+                await interaction.response.send_message("You're not part of this match!", ephemeral=True)
+                return
+            if slot in lobby['checked_in']:
+                await interaction.response.send_message("You've already checked in!", ephemeral=True)
+                return
+
         if not override:
-            lobby = await self.lobby.checkin_player(user_id)
+            lobby = await self.lobby.checkin_player(slot)
             embed = await self.generate_embed()
         else:
-            for player in self.lobby.remaining_players:
-                lobby = await self.lobby.checkin_player(player)
+            for slot in self.lobby.remaining_players:
+                lobby = await self.lobby.checkin_player(slot)
             embed = await self.generate_embed()
 
         await interaction.response.edit_message(embed=embed, view=self)

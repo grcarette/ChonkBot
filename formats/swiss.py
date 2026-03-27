@@ -98,6 +98,29 @@ class SwissFormat(BaseFormat):
             if tournament['state'] == 'active':
                 await self.manager.on_player_dropped()
 
+    async def on_team_register(self, team_id: str, team_doc: dict) -> None:
+        """Register the team as a single swiss player entry using the team name."""
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        if swiss_event:
+            # Teams mode doesn't support ranked reporting, so elo is always default
+            await self.dh.swiss_add_player(
+                swiss_event['_id'], team_id, team_doc['name'], elo=1200
+            )
+        await self.dh.register_team(self.tm.tournament['_id'], team_id, None)
+
+        tournament = await self.tm.get_tournament()
+        if tournament['state'] == 'active':
+            await self.manager.on_player_joined()
+
+    async def on_team_unregister(self, team_id: str) -> None:
+        """Mark the team entry as dropped in the swiss event."""
+        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        if swiss_event:
+            await self.dh.swiss_drop_player(swiss_event['_id'], team_id)
+            tournament = await self.tm.get_tournament()
+            if tournament['state'] == 'active':
+                await self.manager.on_player_dropped()
+
     async def on_tournament_start(self) -> None:
         """
         Backfill any debug players who registered before the swiss event existed,
@@ -108,10 +131,6 @@ class SwissFormat(BaseFormat):
         await self.manager.start()
 
     async def on_result(self, result: dict, lobby) -> None:
-        """
-        Immediately record the match result in the swiss DB.
-        Defer UCH Ranked API reporting until the next round starts or event ends.
-        """
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
 
@@ -126,20 +145,22 @@ class SwissFormat(BaseFormat):
             result.get('is_dq', False),
         )
 
-        await self.manager.check_round_complete()
+        self.tm.logger.match_result(result['match_id'], result['winner_id'], result['loser_id'], result.get('is_dq', False))
 
-        if self.tm.is_ranked and not self.tm.debug and not result['is_dq']:
+        if self.tm.is_ranked and not result['is_dq']:
             self.pending_results.append(result)
+
+        await self.manager.check_round_complete()
 
     async def flush_pending_results(self) -> None:
         """
         Report all pending match results to UCH Ranked.
-        Called at the start of each new round and at event end.
         """
         if not self.pending_results:
             return
 
         for result in self.pending_results:
+            # report_result_to_ranked_api handles its own SUCCESS/FAIL logging internally
             await self.tm.report_result_to_ranked_api(
                 result['winner_id'], result['loser_id']
             )
@@ -202,11 +223,9 @@ class SwissFormat(BaseFormat):
         current_round     = swiss_event.get('current_round', 0)
         round_limit       = swiss_event.get('round_limit', tournament.get('round_limit', 8))
         final_round_active = current_round >= round_limit
-        round_ready       = (
+        round_ready = (
             tournament.get('state') == 'active'
-            and active_matches == 0
-            and players_remaining > 1
-            and not final_round_active
+            and swiss_event.get('current_round', 0) < swiss_event.get('round_limit', 8)
         )
         return {
             'current_round':     current_round,

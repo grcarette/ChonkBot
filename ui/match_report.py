@@ -11,29 +11,49 @@ class MatchReportView(discord.ui.View):
         self.original_message = original_message
         
     async def setup(self):
-        for user_id in self.lobby.remaining_players:
-            player = await self.lobby.dh.get_user(user_id=int(user_id))
-            if player is None:
-                print(f"[MatchReportView] Could not find user {user_id} in DB")
-                self.players[int(user_id)] = str(user_id)
-            else:
-                self.players[int(user_id)] = player['name']
-        
+        if self.lobby.tournament_manager.is_teams_mode:
+            # Build options from team names rather than individual user lookups
+            for team_id in self.lobby.remaining_players:
+                tournament = await self.lobby.tournament_manager.get_tournament()
+                team_name = tournament.get('entrants_meta', {}).get(str(team_id))
+                if not team_name:
+                    # Fall back to resolving member names
+                    try:
+                        p1, p2 = self.lobby.tournament_manager._parse_team_id(str(team_id))
+                        u1 = await self.lobby.dh.get_user(user_id=p1)
+                        u2 = await self.lobby.dh.get_user(user_id=p2)
+                        n1 = u1['name'] if u1 else str(p1)
+                        n2 = u2['name'] if u2 else str(p2)
+                        team_name = f"{n1} / {n2}"
+                    except (ValueError, AttributeError):
+                        team_name = str(team_id)
+                self.players[str(team_id)] = team_name
+        else:
+            for user_id in self.lobby.remaining_players:
+                player = await self.lobby.dh.get_user(user_id=int(user_id))
+                if player is None:
+                    print(f"[MatchReportView] Could not find user {user_id} in DB")
+                    self.players[int(user_id)] = str(user_id)
+                else:
+                    self.players[int(user_id)] = player['name']
+
         options = []
-        for player_id in self.players.keys():
-            select_option = discord.SelectOption(label=f"{self.players[player_id]}", value=player_id)
-            options.append(select_option)
-            
+        for player_id, name in self.players.items():
+            options.append(discord.SelectOption(label=name, value=str(player_id)))
+
         self.select_menu = discord.ui.Select(
-            placeholder = "Select the winner of the match",
-            options = options
+            placeholder="Select the winner of the match",
+            options=options
         )
         self.select_menu.callback = self.select_winner
         self.add_item(self.select_menu)
         
     async def select_winner(self, interaction: discord.Interaction):
         self.winner = self.select_menu.values[0]
-        self.select_menu.placeholder = self.players[int(self.select_menu.values[0])]
+        self.select_menu.placeholder = self.players[
+            int(self.winner) if not self.lobby.tournament_manager.is_teams_mode
+            else self.winner
+        ]
         for child in self.children:
             if child.custom_id == 'report_submit':
                 child.disabled = False
@@ -64,34 +84,48 @@ class MatchReportButton(discord.ui.View):
     async def report_match(self, interaction: discord.Interaction):
         user = interaction.user
         message = interaction.message
-        if any(role.name == self.lobby.organizer_role for role in user.roles) or user.id in self.lobby.remaining_players:
-            view = MatchReportView(self.lobby, self, message)
-            await view.setup()
-            await interaction.response.send_message(view=view, ephemeral=True)
-        else:
-            message_content = (
-                'You are not a player in this match.'
-            )
-            await interaction.response.send_message(message_content, ephemeral=True)
+        is_to = any(role.name == self.lobby.organizer_role for role in user.roles)
+
+        if not is_to:
+            slot = await self.lobby._resolve_checkin_slot(user.id)
+            if slot is None:
+                await interaction.response.send_message(
+                    'You are not a player in this match.', ephemeral=True
+                )
+                return
+
+        view = MatchReportView(self.lobby, self, message)
+        await view.setup()
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def add_report(self, user, report, original_message):
         async with self._lock:
-            # Guard: ignore duplicate submissions from the same user
-            if int(user.id) in self.user_reports:
+            # Resolve the slot this user represents
+            slot = await self.lobby._resolve_checkin_slot(user.id)
+            is_to = any(role.name == self.lobby.organizer_role for role in user.roles)
+
+            if not is_to:
+                if slot is None:
+                    return
+                # Guard: one report per slot
+                if slot in self.user_reports:
+                    return
+                self.reports.append(report)
+                self.user_reports.append(slot)
+            else:
+                # TO override — report immediately
+                await self.lobby.end_reporting(report)
+                await original_message.delete()
                 return
 
-            self.reports.append(int(report))
-            self.user_reports.append(int(user.id))
-            
-            if any(role.name == self.lobby.organizer_role for role in user.roles):
-                await self.lobby.end_reporting(self.reports[-1])
+            all_reported = set(self.user_reports) == set(self.lobby.remaining_players)
+
+        if all_reported:
+            if len(set(self.reports)) > 1:
+                await self.redo_report()
+            else:
+                await self.lobby.end_reporting(self.reports[0])
                 await original_message.delete()
-            elif set(self.user_reports) == set(self.lobby.remaining_players):
-                if len(set(self.reports)) > 1:
-                    await self.redo_report()
-                else:
-                    await self.lobby.end_reporting(int(self.reports[0]))
-                    await original_message.delete()
                 
     async def redo_report(self):
         channel = self.lobby.channel

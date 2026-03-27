@@ -1,8 +1,11 @@
 """
 Swiss pairing algorithm for ChonkBot.
 
-Uses minimum-weight perfect matching to find the globally optimal pairing,
-rather than a greedy approach that can produce suboptimal results.
+For small fields (≤ EXHAUSTIVE_THRESHOLD players): uses minimum-weight perfect
+matching over all possible pairings — globally optimal but O((n-1)!!).
+
+For larger fields: uses a fast greedy approach — sort by points desc, pair
+adjacent players, with rematch avoidance by swapping down the list.
 
 Pairing cost (lower is better):
 1. Rematch penalty (highest priority — avoid at all costs)
@@ -10,13 +13,13 @@ Pairing cost (lower is better):
 3. Elo difference (tiebreaker)
 
 Each player dict must have:
-    discord_id: int
+    discord_id: int | str
     points: float
     elo: int
-    match_history: list[int]   # discord_ids of past opponents
+    match_history: list   # discord_ids of past opponents
 """
 
-import itertools
+EXHAUSTIVE_THRESHOLD = 10  # use exhaustive matching for fields this size or smaller
 
 
 def _pairing_cost(p1: dict, p2: dict) -> tuple:
@@ -31,17 +34,16 @@ def _pairing_cost(p1: dict, p2: dict) -> tuple:
 
 def _total_cost(pairs: list[tuple[dict, dict]]) -> tuple:
     """Sum costs across all pairs for global comparison."""
-    total_rematch   = sum(c[0] for c in (_pairing_cost(a, b) for a, b in pairs))
-    total_points    = sum(c[1] for c in (_pairing_cost(a, b) for a, b in pairs))
-    total_elo       = sum(c[2] for c in (_pairing_cost(a, b) for a, b in pairs))
+    total_rematch = sum(c[0] for c in (_pairing_cost(a, b) for a, b in pairs))
+    total_points  = sum(c[1] for c in (_pairing_cost(a, b) for a, b in pairs))
+    total_elo     = sum(c[2] for c in (_pairing_cost(a, b) for a, b in pairs))
     return (total_rematch, total_points, total_elo)
 
 
 def _all_perfect_matchings(players: list[dict]) -> list[list[tuple[dict, dict]]]:
     """
     Generate all possible perfect matchings for an even-length player list.
-    For n players this is (n-1)!! matchings. Scales fine up to ~16 players;
-    for larger fields the search space grows but Swiss events are typically ≤32.
+    Only call this for small fields — complexity is O((n-1)!!).
     """
     if len(players) == 0:
         return [[]]
@@ -58,16 +60,46 @@ def _all_perfect_matchings(players: list[dict]) -> list[list[tuple[dict, dict]]]
     return matchings
 
 
+def _greedy_pair(players: list[dict]) -> list[tuple[dict, dict]]:
+    """
+    Greedy pairing for large fields. Players are pre-sorted by points desc.
+    Pair adjacent players, then attempt single swaps to eliminate rematches.
+    """
+    remaining = list(players)
+    pairs = []
+
+    while len(remaining) >= 2:
+        p1 = remaining.pop(0)
+        # Find the best partner: first non-rematch adjacent player
+        partner_idx = None
+        for i, candidate in enumerate(remaining):
+            if candidate['discord_id'] not in p1['match_history']:
+                partner_idx = i
+                break
+
+        if partner_idx is None:
+            # All remaining players are rematches — just take the closest
+            partner_idx = 0
+
+        partner = remaining.pop(partner_idx)
+        pairs.append((p1, partner))
+
+    return pairs
+
+
 def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[dict]]:
     """
-    Pair available players using globally optimal minimum-cost matching.
+    Pair available players optimally.
 
-    For odd player counts, tries removing each player as the unpaired candidate
-    and picks the removal that yields the best pairing for the rest.
+    For fields ≤ EXHAUSTIVE_THRESHOLD: exhaustive global optimum.
+    For larger fields: fast greedy with rematch avoidance.
+
+    For odd player counts, the bye candidate is selected first (fewest points,
+    fewest wins as tiebreaker), then the remaining even field is paired.
 
     Returns:
         pairs:    list of (player1, player2) tuples
-        unpaired: list of 0 or 1 players
+        unpaired: list of 0 or 1 players (the bye candidate)
     """
     if len(available) < 2:
         return [], list(available)
@@ -75,42 +107,35 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
     # Sort by points desc, elo desc for deterministic ordering
     players = sorted(available, key=lambda p: (-p['points'], -p['elo']))
 
-    if len(players) % 2 == 0:
-        # Even — find the globally optimal perfect matching
+    # Handle odd count — pull bye candidate out first
+    unpaired = []
+    if len(players) % 2 == 1:
+        bye = select_bye_candidate(players)
+        players = [p for p in players if p['discord_id'] != bye['discord_id']]
+        unpaired = [bye]
+
+    if len(players) == 0:
+        return [], unpaired
+
+    if len(players) <= EXHAUSTIVE_THRESHOLD:
+        # Exhaustive: find globally optimal matching
         best_matching = None
         best_cost     = None
-
         for matching in _all_perfect_matchings(players):
             cost = _total_cost(matching)
             if best_cost is None or cost < best_cost:
                 best_cost     = cost
                 best_matching = matching
-
-        return best_matching, []
-
+        return best_matching, unpaired
     else:
-        # Odd — try each player as the bye candidate, pick best result
-        best_matching  = None
-        best_cost      = None
-        best_unpaired  = None
-
-        for i, bye_candidate in enumerate(players):
-            remaining = players[:i] + players[i+1:]
-            for matching in _all_perfect_matchings(remaining):
-                cost = _total_cost(matching)
-                if best_cost is None or cost < best_cost:
-                    best_cost     = cost
-                    best_matching = matching
-                    best_unpaired = bye_candidate
-
-        return best_matching, [best_unpaired]
+        # Greedy: fast O(n log n) approach
+        pairs = _greedy_pair(players)
+        return pairs, unpaired
 
 
 def select_bye_candidate(unpaired: list[dict]) -> dict | None:
     """
-    If there is exactly one unpaired player, return them as the bye candidate.
-    If somehow more than one is unpaired (shouldn't happen with new algorithm),
-    pick the one with fewest points, then fewest wins.
+    Select the bye candidate: fewest points, fewest wins as tiebreaker.
     """
     if not unpaired:
         return None

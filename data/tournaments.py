@@ -14,7 +14,8 @@ class TournamentMethodsMixin:
             'approved_registration': tournament['approved_registration'],
             'randomized_stagelist': tournament['randomized_stagelist'],
             'display_entrants': tournament['display_entrants'],
-            'ranked_reporting': tournament.get('ranked_reporting', False)
+            'ranked_reporting': tournament.get('ranked_reporting', False),
+            'teams_mode': tournament.get('teams_mode', False),
         }
         tournament_doc = {
             'name': tournament['name'],
@@ -27,6 +28,7 @@ class TournamentMethodsMixin:
             'entrants': {},
             'dqs': [],
             'checked_in': [],
+            'pending_teams': [],
             'registration_open': False,
             'debug': tournament.get('debug', False),
         }
@@ -391,3 +393,47 @@ class TournamentMethodsMixin:
 
         else:
             raise ValueError(f'Unsupported revert target state: {to_state!r}')
+
+    async def add_pending_team(self, tournament_id, player1_id: int, player2_id: int) -> dict:
+        """
+        Push a pending team invite onto the tournament's pending_teams list.
+        Returns the pending team dict that was stored.
+        """
+        team = {'player1_id': player1_id, 'player2_id': player2_id}
+        query = {'_id': ObjectId(tournament_id)}
+        update = {'$push': {'pending_teams': team}}
+        await self.tournament_collection.update_one(query, update)
+        return team
+
+    async def remove_pending_team(self, tournament_id, player1_id: int, player2_id: int) -> None:
+        """Remove a pending team invite (on accept or cancel)."""
+        query = {'_id': ObjectId(tournament_id)}
+        update = {'$pull': {'pending_teams': {'player1_id': player1_id, 'player2_id': player2_id}}}
+        await self.tournament_collection.update_one(query, update)
+
+    async def get_pending_teams(self, tournament_id) -> list:
+        """Return the pending_teams list for a tournament."""
+        tournament = await self.get_tournament_by_id(tournament_id)
+        return tournament.get('pending_teams', []) if tournament else []
+
+    async def register_team(self, tournament_id, team_id: str, participant_id) -> None:
+        """
+        Store team_id → participant_id in entrants.
+        team_id is the deterministic string f"{player1_id}_{player2_id}".
+        Same shape as solo registration so all bracket code is unaffected.
+        """
+        query = {'_id': ObjectId(tournament_id)}
+        update = {'$set': {f'entrants.{team_id}': participant_id}}
+        await self.tournament_collection.update_one(query, update)
+
+    async def unregister_team(self, tournament_id, team_id: str) -> None:
+        """Remove a team from entrants and checked_in."""
+        tournament = await self.get_tournament_by_id(tournament_id)
+        update = {}
+        if str(team_id) in tournament.get('entrants', {}):
+            update.setdefault('$unset', {})[f'entrants.{team_id}'] = ''
+        # checked_in stores player discord ids for teams mode; handled separately
+        if update:
+            await self.tournament_collection.update_one(
+                {'_id': ObjectId(tournament_id)}, update
+            )

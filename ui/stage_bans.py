@@ -91,24 +91,41 @@ class BanStagesButton(discord.ui.View):
             await self.message.delete()
             await self.lobby.end_stage_bans(self.banned_stages)
             await interaction.response.defer()
-        else:
-            view = StageBansView(self)
-            await view.setup()
-            self.message = interaction.message
-            await interaction.response.send_message(view=view, ephemeral=True)
+            return
+
+        # Resolve which slot (team_id or player_id) this user owns
+        slot = await self.lobby._resolve_checkin_slot(user_id)
+        if slot is None:
+            await interaction.response.send_message("You're not part of this match!", ephemeral=True)
+            return
+
+        # Guard: first submitter from this slot wins; teammates are blocked
+        if slot in self.finished_users:
+            await interaction.response.send_message(
+                "Your teammate has already submitted bans for your team.", ephemeral=True
+            )
+            return
+
+        view = StageBansView(self)
+        await view.setup()
+        self.message = interaction.message
+        await interaction.response.send_message(view=view, ephemeral=True)
         
     async def submit_player_bans(self, user, banned_stages):
         async with self._lock:
-            # Guard: ignore duplicate submissions from the same user
-            if user.id in self.finished_users:
+            # Resolve this user's slot
+            slot = await self.lobby._resolve_checkin_slot(user.id)
+            if slot is None:
+                return
+
+            # Guard: ignore if this slot already submitted
+            if slot in self.finished_users:
                 return
 
             self.player_bans[user] = banned_stages
-            self.finished_users.append(user.id)
+            self.finished_users.append(slot)
             all_done = set(self.finished_users) == set(self.lobby.remaining_players)
 
-        # Both branches are outside the lock — Discord calls should not
-        # be made while holding it, and the state is already safely committed.
         if all_done:
             self.stop()
             await self.message.delete()
@@ -124,8 +141,14 @@ class BanStagesButton(discord.ui.View):
         tournament = await self.lobby.tournament_manager.get_tournament()
         file_name = f"{tournament['category_id']}_banner.jpg"
         image_path = await self.get_banner_path(tournament, file_name)
-        remaining_ids = [pid for pid in self.lobby.remaining_players if pid not in self.finished_users]
-        mentions = get_mentions(remaining_ids)
+
+        # Remaining slots are team_ids or player_ids — resolve to discord members for mentions
+        pending_slots = [pid for pid in self.lobby.remaining_players if pid not in self.finished_users]
+        if self.lobby.tournament_manager.is_teams_mode:
+            pending_discord_ids = await self.lobby.tournament_manager.resolve_team_members(pending_slots)
+        else:
+            pending_discord_ids = pending_slots
+        mentions = get_mentions(pending_discord_ids)
 
         if mentions:
             checkin_message = (

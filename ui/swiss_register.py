@@ -118,8 +118,9 @@ class SwissActiveRegisterView(discord.ui.View):
                             )
                             await lobby_data.channel.send(embed=embed)
                         # Trigger round complete check since a match just finished
-                        if self.tm.swiss_manager:
-                            await self.tm.swiss_manager.check_round_complete()
+                        fmt = self.tm.format
+                        if fmt and hasattr(fmt, 'manager') and fmt.manager:
+                            await fmt.manager.check_round_complete()
 
         # Drop from swiss event and unregister
         await self.tm.unregister_player(user_id)

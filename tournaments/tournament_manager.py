@@ -8,6 +8,7 @@ from utils.emojis import RESULT_EMOJIS, INDICATOR_EMOJIS
 from utils.discord_preset_colors import get_random_color
 from utils.get_bracket_link import get_bracket_link
 from utils.validate_stagecode import validate_stagecode
+from utils.event_logger import EventLogger
 
 from ui.checkin import CheckinView
 from ui.stage_bans import BanStagesButton
@@ -44,6 +45,7 @@ class TournamentManager:
         self.debug = self.tournament.get('debug', False)
         self.organizer_role = None
         self.format = None
+        self.logger = EventLogger(tournament['name'])
 
     # ─── Ranked API helper ────────────────────────────────────────────────────
 
@@ -78,8 +80,13 @@ class TournamentManager:
         """True if this tournament should report results to UCH Ranked."""
         return bool(self.tournament.get('config', {}).get('ranked_reporting', False))
 
+    @property
+    def is_teams_mode(self) -> bool:
+        """True if this tournament uses 2v2 teams."""
+        return bool(self.tournament.get('config', {}).get('teams_mode', False))
+
     async def report_result_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
-        """Report a match result to UCH Ranked. Called by format flush logic."""
+        print('here', winner_id, loser_id)
         try:
             result = await self.bot.uchranked_api.report_match(
                 player1_id=winner_id,
@@ -87,25 +94,54 @@ class TournamentManager:
                 score='1-0',
             )
             if not result.get('success'):
+                self.logger.ranked_failed(winner_id, loser_id, result.get('error', 'unknown error'))
                 await self._alert_ranked_api_failure(winner_id, loser_id, result.get('error'))
                 return
 
             match_id = result.get('match_id')
             if not match_id:
-                await self._alert_ranked_api_failure(winner_id, loser_id, "No match_id returned")
+                self.logger.ranked_failed(winner_id, loser_id, 'no match_id returned')
+                await self._alert_ranked_api_failure(winner_id, loser_id, 'No match_id returned')
                 return
+
+            self.logger.ranked_reported(winner_id, loser_id, match_id)
 
             try:
                 await self.bot.uchranked_api.accept_match(winner_id, match_id)
             except Exception as e:
-                print(f"[Ranked] Winner accept_match failed: {e}")
+                self.logger.warning('RANKED', f'Winner accept_match failed — {winner_id} — {e}')
             try:
                 await self.bot.uchranked_api.accept_match(loser_id, match_id)
             except Exception:
                 pass
 
         except Exception as e:
+            self.logger.ranked_failed(winner_id, loser_id, str(e))
             await self._alert_ranked_api_failure(winner_id, loser_id, str(e))
+
+    async def report_match(self, lobby, is_dq=False):
+        lobby_data = await lobby.get_lobby()
+        winner_user_id = str(lobby_data['results'][0])
+        loser_user_id  = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
+
+        def _cast_id(val):
+            if val is None:
+                return None
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return val
+
+        result = {
+            'match_id':  lobby_data['match_id'],
+            'winner_id': _cast_id(winner_user_id),
+            'loser_id':  _cast_id(loser_user_id),
+            'is_dq':     is_dq,
+        }
+        self.logger.match_result(result['match_id'], result['winner_id'], result['loser_id'], is_dq)
+        await self.format.on_result(result, lobby)
+        if hasattr(self.format, 'invalidate_pending_cache'):
+            self.format.invalidate_pending_cache()
 
     async def _alert_ranked_api_failure(self, winner_id: int, loser_id: int, error: str = None) -> None:
         print(f"[Ranked] API failure: winner={winner_id} loser={loser_id} error={error}")
@@ -213,6 +249,7 @@ class TournamentManager:
             for task in pre_transition_tasks:
                 await task
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
+            self.logger.state_transition(state, next_state)
 
     # ─── Stages ───────────────────────────────────────────────────────────────
 
@@ -330,11 +367,20 @@ class TournamentManager:
         if self.debug:
             is_swiss = self.tournament.get('format', '') in ('swiss', 'swiss filter')
             debug_player_count = 4 if is_swiss else 8
-            for i in range(debug_player_count):
-                try:
-                    await self.register_player(i)
-                except Exception as e:
-                    print(f"[open_registration] Failed to register debug player {i}: {e}")
+            if self.is_teams_mode:
+                # Pair up debug players into teams
+                for i in range(0, debug_player_count, 2):
+                    try:
+                        await self.register_player_team(i, i + 1)
+                        await self.accept_team_invite(i + 1)
+                    except Exception as e:
+                        print(f"[open_registration] Failed to register debug team ({i}, {i+1}): {e}")
+            else:
+                for i in range(debug_player_count):
+                    try:
+                        await self.register_player(i)
+                    except Exception as e:
+                        print(f"[open_registration] Failed to register debug player {i}: {e}")
         state = tournament['state']
 
         if state in ('setup', 'registration'):
@@ -435,6 +481,7 @@ class TournamentManager:
             self.tournament['_id'], user_id
         )
         if already_registered:
+            self.logger.debug('REGISTRATION', f'Player {user_id} tried to register but is already registered')
             return False
 
         tournament = await self.get_tournament()
@@ -443,10 +490,12 @@ class TournamentManager:
         if self.is_ranked and not self.debug:
             ranked_player = await self.get_ranked_player(user_id)
             if not ranked_player:
+                self.logger.warning('REGISTRATION', f'Player {user_id} blocked — no UCH Ranked account')
                 return 'no_ranked_account'
 
         if tournament.get('config', {}).get('approved_registration'):
             await self.bot.dh.add_registration_request(tournament['_id'], user_id)
+            self.logger.info('REGISTRATION', f'Player {user_id} registration pending TO approval')
             return 'pending'
 
         guild = self.guild
@@ -464,10 +513,31 @@ class TournamentManager:
         await self.format.on_player_register(user_id, user)
         if tournament.get('config', {}).get('display_entrants'):
             await self.edit_event_info()
+
+        self.logger.player_registered(user_id, user['name'] if user else str(user_id))
         return True
 
     async def unregister_player(self, user_id):
         tournament = await self.get_tournament()
+
+        if self.is_teams_mode:
+            team_id = self._find_team_id_for_player(tournament, user_id)
+            if not team_id:
+                return
+            p1_id, p2_id = self._parse_team_id(team_id)
+            guild = self.guild
+            tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
+            for pid in (p1_id, p2_id):
+                member = discord.utils.get(guild.members, id=pid)
+                if member and tournament_role:
+                    await member.remove_roles(tournament_role)
+            await self.format.on_team_unregister(team_id)
+            await self.bot.dh.unregister_team(tournament['_id'], team_id)
+            if tournament.get('config', {}).get('display_entrants'):
+                await self.edit_event_info()
+            return
+
+        # ── Solo path (unchanged) ─────────────────────────────────────────────
         entrants = tournament.get('entrants', [])
         if isinstance(entrants, dict):
             entrant_ids = [int(k) for k in entrants.keys()]
@@ -475,6 +545,7 @@ class TournamentManager:
             entrant_ids = [e['discord_id'] for e in entrants]
 
         if int(user_id) not in entrant_ids:
+            self.logger.warning('REGISTRATION', f'Unregister attempted for {user_id} but not in entrants')
             return
 
         guild = self.guild
@@ -485,6 +556,7 @@ class TournamentManager:
 
         await self.format.on_player_unregister(user_id)
         await self.bot.dh.unregister_player(tournament['_id'], user_id)
+        self.logger.player_dropped(user_id, str(user_id))
         if tournament.get('config', {}).get('display_entrants'):
             await self.edit_event_info()
 
@@ -511,6 +583,143 @@ class TournamentManager:
         if (await self.get_tournament()).get('config', {}).get('display_entrants'):
             await self.edit_event_info()
         return True
+
+    # ─── Teams registration ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _make_team_id(player1_id: int, player2_id: int) -> str:
+        """Deterministic team ID from two player IDs, always lower ID first."""
+        a, b = sorted((player1_id, player2_id))
+        return f"{a}_{b}"
+
+    @staticmethod
+    def _parse_team_id(team_id: str) -> tuple[int, int]:
+        """Parse a team_id string back into (player1_id, player2_id)."""
+        a, b = team_id.split('_')
+        return int(a), int(b)
+
+    def _find_team_id_for_player(self, tournament: dict, player_id: int) -> str | None:
+        """
+        Scan entrants to find the team_id that contains player_id.
+        Returns the team_id string, or None if not found.
+        """
+        for key in tournament.get('entrants', {}):
+            try:
+                p1, p2 = self._parse_team_id(key)
+                if player_id in (p1, p2):
+                    return key
+            except (ValueError, AttributeError):
+                continue
+        return None
+
+    async def register_player_team(self, player1_id: int, player2_id: int):
+        """
+        Initiate a 2v2 team registration. Creates a pending invite from
+        player1 to player2. Player2 must call accept_team_invite to complete.
+
+        Returns one of:
+          'self_invite'                — player1 == player2
+          'already_registered'         — player1 is already on a confirmed team
+          'partner_already_registered' — player2 is already on a confirmed team
+          'already_pending'            — player1 already has an outstanding invite
+          'pending'                    — invite created successfully
+        """
+        if player1_id == player2_id:
+            return 'self_invite'
+
+        tournament = await self.get_tournament()
+        tid = tournament['_id']
+
+        # Check confirmed registrations
+        if self._find_team_id_for_player(tournament, player1_id):
+            return 'already_registered'
+        if self._find_team_id_for_player(tournament, player2_id):
+            return 'partner_already_registered'
+
+        # Check pending invites
+        pending = await self.bot.dh.get_pending_teams(tid)
+        for pt in pending:
+            if pt['player1_id'] == player1_id or pt['player2_id'] == player1_id:
+                return 'already_pending'
+
+        await self.bot.dh.add_pending_team(tid, player1_id, player2_id)
+        return 'pending'
+
+    async def accept_team_invite(self, player2_id: int):
+        """
+        Accept a pending team invite addressed to player2_id.
+
+        Returns one of:
+          'no_invite'          — no pending invite found for this player
+          'already_registered' — player2 is already on a confirmed team
+          'registered'         — team confirmed and registered with the format
+        """
+        tournament = await self.get_tournament()
+        tid = tournament['_id']
+
+        # Guard: already on a team
+        if self._find_team_id_for_player(tournament, player2_id):
+            return 'already_registered'
+
+        # Find the pending invite where this player is player2
+        pending = await self.bot.dh.get_pending_teams(tid)
+        invite = next((pt for pt in pending if pt['player2_id'] == player2_id), None)
+        if not invite:
+            return 'no_invite'
+
+        player1_id = invite['player1_id']
+        team_id = self._make_team_id(player1_id, player2_id)
+
+        # Resolve display names for team name
+        u1 = await self.bot.dh.get_user(user_id=player1_id)
+        u2 = await self.bot.dh.get_user(user_id=player2_id)
+        name1 = u1['name'] if u1 else str(player1_id)
+        name2 = u2['name'] if u2 else str(player2_id)
+        team_name = f"{name1} / {name2}"
+
+        team_doc = {
+            'team_id': team_id,
+            'player1_id': player1_id,
+            'player2_id': player2_id,
+            'name': team_name,
+        }
+
+        # Remove the pending invite before registering
+        await self.bot.dh.remove_pending_team(tid, player1_id, player2_id)
+
+        # Grant Discord role to both members
+        guild = self.guild
+        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
+        if not self.debug:
+            for pid in (player1_id, player2_id):
+                member = discord.utils.get(guild.members, id=pid)
+                if member and tournament_role:
+                    await member.add_roles(tournament_role)
+                await self.bot.dh.register_user(member if member else pid)
+
+        # Delegate bracket registration to the format
+        await self.format.on_team_register(team_id, team_doc)
+
+        if tournament.get('config', {}).get('display_entrants'):
+            await self.edit_event_info()
+
+        return 'registered'
+
+    async def resolve_team_members(self, team_ids: list) -> list[int]:
+        """
+        Given a list of team_id strings, return all constituent discord user IDs.
+        Used by the lobby builder for channel overwrites and @mentions.
+        Raises ValueError if a team_id is malformed or not found in entrants.
+        """
+        members = []
+        tournament = await self.get_tournament()
+        entrants = tournament.get('entrants', {})
+        for team_id in team_ids:
+            if str(team_id) not in entrants:
+                raise ValueError(f"Team ID '{team_id}' not found in tournament entrants")
+            p1, p2 = self._parse_team_id(str(team_id))
+            members.extend([p1, p2])
+        return members
 
     # ─── Check-in ─────────────────────────────────────────────────────────────
 
@@ -559,14 +768,26 @@ class TournamentManager:
             return False
 
         checked_in_list = [str(player) for player in tournament.get('checked_in', [])]
-        entrant_ids = list(tournament['entrants'].keys())
-        missing_count = len(entrant_ids) - len(checked_in_list)
+        # Resolve entrant keys to individual discord IDs for ping purposes
+        individual_ids = []
+        for key in tournament['entrants'].keys():
+            key_str = str(key)
+            if '_' in key_str:
+                try:
+                    p1, p2 = key_str.split('_')
+                    individual_ids.extend([str(p1), str(p2)])
+                except ValueError:
+                    pass
+            else:
+                individual_ids.append(key_str)
+
+        missing_count = len(individual_ids) - len(checked_in_list)
 
         if missing_count > MAXIMUM_PING_CHECKINS:
             return False
 
         failed_pings = []
-        for player in entrant_ids:
+        for player in individual_ids:
             if player not in checked_in_list:
                 user = discord.utils.get(self.guild.members, id=int(player))
                 if user:
@@ -621,14 +842,32 @@ class TournamentManager:
 
         if self.debug:
             removed_players = []
+        elif self.is_teams_mode:
+            # Remove any team where at least one member didn't check in
+            checked_in_set = set(tournament['checked_in'])
+            removed_players = []
+            for team_id in tournament['entrants'].keys():
+                team_id_str = str(team_id)
+                if '_' in team_id_str:
+                    try:
+                        p1, p2 = team_id_str.split('_')
+                        if int(p1) not in checked_in_set or int(p2) not in checked_in_set:
+                            removed_players.append(team_id_str)
+                    except ValueError:
+                        pass
+                else:
+                    if int(team_id_str) not in checked_in_set:
+                        removed_players.append(team_id_str)
+            for team_id in removed_players:
+                await self.unregister_player(int(team_id.split('_')[0]))
         else:
             removed_players = [
                 player for player in tournament['entrants'].keys()
                 if int(player) not in tournament['checked_in']
             ]
-        for player_id in removed_players:
-            await self.unregister_player(int(player_id))
-
+            for player_id in removed_players:
+                self.logger.info('CHECKIN', f'Player {player_id} removed — did not check in')
+                await self.unregister_player(int(player_id))
         checkin_channel = await self.get_channel('check-in')
         if checkin_channel:
             await checkin_channel.delete()
@@ -668,6 +907,7 @@ class TournamentManager:
             self.format.invalidate_pending_cache()
         await self.send_instruction_message()
         await self.format.on_tournament_start()
+        self.logger.info('STATE', f'Tournament started — {len(tournament["entrants"])} players')
         await self.start_tournament_loop()
 
     async def send_instruction_message(self):
@@ -712,14 +952,23 @@ class TournamentManager:
     async def report_match(self, lobby, is_dq=False):
         lobby_data = await lobby.get_lobby()
         winner_user_id = str(lobby_data['results'][0])
-        loser_user_id = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
+        loser_user_id  = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
+
+        def _cast_id(val):
+            if val is None:
+                return None
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return val
 
         result = {
             'match_id':  lobby_data['match_id'],
-            'winner_id': int(winner_user_id),
-            'loser_id':  int(loser_user_id) if loser_user_id else None,
+            'winner_id': _cast_id(winner_user_id),
+            'loser_id':  _cast_id(loser_user_id),
             'is_dq':     is_dq,
         }
+        self.logger.match_result(result['match_id'], result['winner_id'], result['loser_id'], is_dq)
         await self.format.on_result(result, lobby)
         if hasattr(self.format, 'invalidate_pending_cache'):
             self.format.invalidate_pending_cache()
@@ -797,6 +1046,7 @@ class TournamentManager:
         await self.format.on_reset_report(lobby)
 
     async def reset_tournament(self, kwargs):
+        self.logger.info('STATE', 'Tournament reset initiated')
         self.tournament_reset = True
         for lobby in self.lobbies:
             await self.lobbies[lobby].delete_lobby()
@@ -807,6 +1057,7 @@ class TournamentManager:
             self.format.called_match_ids.clear()
         await self.progress_tournament()
         self.tournament_reset = False
+        self.logger.info('STATE', 'Tournament reset complete — back to registration')
         if hasattr(self.format, 'invalidate_pending_cache'):
             self.format.invalidate_pending_cache()
 
@@ -817,6 +1068,7 @@ class TournamentManager:
         for lobby in self.lobbies:
             await self.lobbies[lobby].close_lobby()
         await self.format.on_tournament_end()
+        self.logger.info('STATE', 'Tournament ended — all lobbies closed')
 
     async def finalize_tournament(self):
         """Close all lobbies, post results if not already posted, remove Discord channels."""
@@ -951,17 +1203,18 @@ class TournamentManager:
     async def disqualify_player(self, user_id):
         player_registered = await self.bot.dh.get_registration_status(self.tournament['_id'], user_id)
         if not player_registered:
+            self.logger.warning('DQ', f'DQ attempted for {user_id} but player is not registered')
             return False
+
         lobby_data = await self.bot.dh.find_player_match(self.tournament['_id'], user_id)
         if lobby_data:
             lobby = self.lobbies[lobby_data['match_id']]
             winner_id = (set(lobby_data['players']) - {user_id}).pop()
 
-            # Send DQ notification in the channel but don't close it immediately
             if lobby.channel:
                 await lobby.purge_bot_messages()
-                dq_mention      = f"<@{user_id}>"
-                winner_mention  = f"<@{winner_id}>"
+                dq_mention     = f"<@{user_id}>"
+                winner_mention = f"<@{winner_id}>"
                 embed = discord.Embed(
                     title="Player Disqualified",
                     description=(
@@ -974,6 +1227,9 @@ class TournamentManager:
                 await lobby.channel.send(embed=embed)
 
             await lobby.end_reporting(winner_id, is_dq=True)
+            self.logger.player_dq(user_id, had_active_match=True, opponent_id=winner_id)
+        else:
+            self.logger.player_dq(user_id, had_active_match=False)
 
         return await self.bot.dh.disqualify_player(self.tournament['_id'], user_id)
 
@@ -1120,18 +1376,49 @@ class TournamentManager:
         if tournament.get('config', {}).get('display_entrants'):
             entrants = tournament.get('entrants', {})
             if entrants:
-                discord_ids = [int(d) for d in entrants.keys()]
-                user_map = await self.bot.dh.get_users_bulk(discord_ids)
+                # Resolve individual discord IDs — in teams mode keys are "p1_p2" strings
+                individual_ids = []
+                for key in entrants.keys():
+                    key_str = str(key)
+                    if '_' in key_str:
+                        try:
+                            p1, p2 = key_str.split('_')
+                            individual_ids.extend([int(p1), int(p2)])
+                        except ValueError:
+                            pass
+                    else:
+                        try:
+                            individual_ids.append(int(key_str))
+                        except ValueError:
+                            pass
 
-                for discord_id_str in entrants.keys():
-                    discord_id_int = int(discord_id_str)
-                    user = user_map.get(discord_id_int)
-                    name = user['name'] if user else f'Unknown ({discord_id_str})'
-                    seed = None
-                    if not (self.format and self.format.shows_bracket_link and 'challonge_data' in tournament):
-                        seeds = tournament.get('seeds', {})
-                        seed  = seeds.get(discord_id_str) or seeds.get(discord_id_int)
-                    entrant_list.append({'discord_id': discord_id_str, 'name': name, 'seed': seed})
+                user_map = await self.bot.dh.get_users_bulk(individual_ids)
+
+                for key_str in entrants.keys():
+                    key_str = str(key_str)
+                    if '_' in key_str:
+                        try:
+                            p1, p2 = key_str.split('_')
+                            u1 = user_map.get(int(p1))
+                            u2 = user_map.get(int(p2))
+                            n1 = u1['name'] if u1 else str(p1)
+                            n2 = u2['name'] if u2 else str(p2)
+                            name = f"{n1} / {n2}"
+                        except ValueError:
+                            name = key_str
+                        entrant_list.append({'discord_id': key_str, 'name': name, 'seed': None})
+                    else:
+                        try:
+                            discord_id_int = int(key_str)
+                        except ValueError:
+                            continue
+                        user = user_map.get(discord_id_int)
+                        name = user['name'] if user else f'Unknown ({key_str})'
+                        seed = None
+                        if not (self.format and self.format.shows_bracket_link and 'challonge_data' in tournament):
+                            seeds = tournament.get('seeds', {})
+                            seed  = seeds.get(key_str) or seeds.get(discord_id_int)
+                        entrant_list.append({'discord_id': key_str, 'name': name, 'seed': seed})
 
                 if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
                     ch = self.format.ch if hasattr(self.format, 'ch') else None
@@ -1324,25 +1611,53 @@ class TournamentManager:
     # ─── Utilities ───────────────────────────────────────────────────────────
 
     async def sync_channel_order(self):
-        """Reorder channels in the tournament category to match CHANNEL_ORDER."""
+        """Reorder channels in the tournament category to match CHANNEL_ORDER.
+        
+        Only edits channels that are out of place, using the minimum number of
+        edits. Channels already forming the longest correct subsequence are left
+        untouched.
+        """
         tournament_category = self.get_tournament_category()
         if not tournament_category:
             return
 
         channels = {ch.name: ch for ch in tournament_category.channels}
-        desired  = [channels[name] for name in CHANNEL_ORDER if name in channels]
+        desired = [channels[name] for name in CHANNEL_ORDER if name in channels]
         if not desired:
             return
 
-        # Check if already in the right order — nothing to do
-        current_order = [ch for ch in tournament_category.channels if ch in desired]
-        if current_order == desired:
-            return
+        # Find which channels are already in the correct relative order (LIS).
+        # Map each channel to its target index in desired.
+        target_index = {ch: i for i, ch in enumerate(desired)}
+        current = [ch for ch in tournament_category.channels if ch in target_index]
 
-        # Build bulk position update: 0-based within the category
-        await self.guild.edit_channel_positions(
-            *[(ch, i) for i, ch in enumerate(desired)]
-        )
+        # Extract the indices of current channels in desired order and find LIS.
+        indices = [target_index[ch] for ch in current]
+
+        def longest_increasing_subsequence(seq):
+            """Returns the set of values in the LIS (not indices, values)."""
+            if not seq:
+                return set()
+            tails = []
+            for val in seq:
+                lo, hi = 0, len(tails)
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    if tails[mid] < val:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                if lo == len(tails):
+                    tails.append(val)
+                else:
+                    tails[lo] = val
+            return set(tails)
+
+        lis_indices = longest_increasing_subsequence(indices)
+        needs_edit = [ch for ch in desired if target_index[ch] not in lis_indices]
+
+        for ch in needs_edit:
+            await ch.edit(position=target_index[ch])
 
     async def revert_tournament(self):
         tournament = await self.get_tournament()
