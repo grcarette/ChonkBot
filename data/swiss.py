@@ -185,19 +185,20 @@ class SwissMethodsMixin:
         )
         return match
 
-    async def swiss_record_result(
-        self,
-        event_id: ObjectId,
-        match_id: int,
-        winner_id: int,
-        loser_id: int,
-        is_dq: bool = False,
-    ):
+    async def swiss_record_result(self, event_id, match_id, winner_id, loser_id, is_dq=False):
+        if loser_id is None:
+            raise ValueError(f"swiss_record_result called with loser_id=None for match {match_id}")
+        
         event = await self.get_swiss_event(event_id)
         winner = event['players'].get(str(winner_id))
-        loser = event['players'].get(str(loser_id))
+        loser  = event['players'].get(str(loser_id))
         if not winner or not loser:
-            return
+            print(f"[swiss_record_result] match_id={match_id!r} ({type(match_id).__name__}) | winner_id={winner_id!r} ({type(winner_id).__name__}) | loser_id={loser_id!r} ({type(loser_id).__name__}) | players_keys={list(event['players'].keys())[:10]} | winner_found={winner is not None} | loser_found={loser is not None}")
+            raise ValueError(
+                f"swiss_record_result: player not found — "
+                f"winner={winner_id} (found={winner is not None}), "
+                f"loser={loser_id} (found={loser is not None})"
+            )
 
         inc_ops = {
             f'players.{winner_id}.points': 1,

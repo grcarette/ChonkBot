@@ -105,8 +105,8 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
 
         const nameEsc = escapeHtml(e.name).replace(/'/g, "\\'");
         const dqBtn   = isDQ
-            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer(${e.discord_id})">Un-DQ</button>`
-            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer(${e.discord_id},'${nameEsc}')">DQ</button>`;
+            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer('${e.discord_id}')">Un-DQ</button>`
+            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer('${e.discord_id}','${nameEsc}')">DQ</button>`;
 
         const li = document.createElement('li');
         li.className    = 'participant-item';
@@ -286,8 +286,8 @@ function renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI) {
         else if (showCI)         statusTag = `<span class="tag tag-stuck">Not Checked In</span>`;
         const nameEsc = escapeHtml(e.name).replace(/'/g, "\\'");
         const dqBtn   = isDQ
-            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer(${e.discord_id})">Un-DQ</button>`
-            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer(${e.discord_id},'${nameEsc}')">DQ</button>`;
+            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer('${e.discord_id}')">Un-DQ</button>`
+            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer('${e.discord_id}','${nameEsc}')">DQ</button>`;
         return `<tr>
             <td style="color:var(--text-muted);font-size:12px">${i + 1}</td>
             <td><strong>${escapeHtml(e.name)}</strong></td>

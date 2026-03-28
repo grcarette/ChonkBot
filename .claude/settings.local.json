@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(source venv/Scripts/activate)",
-      "Bash(pytest tests/ -x --tb=short)"
+      "Bash(pytest tests/ -x --tb=short)",
+      "Bash(pytest tests/test_web_server.py -x -q)",
+      "Bash(pytest tests/test_web_server.py -q)"
     ]
   }
 }

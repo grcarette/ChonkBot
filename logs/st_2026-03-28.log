@@ -1,0 +1,47 @@
+[2026-03-28 16:23:55] [INFO ] [LOGGER] Log opened — logs\st_2026-03-28.log
+[2026-03-28 16:24:09] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-28 16:24:10] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-28 16:24:12] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-28 16:24:13] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-28 16:24:14] [INFO ] [STATE] setup → registration
+[2026-03-28 16:24:18] [INFO ] [REGISTRATION] Bojack (142798704703700992) registered
+[2026-03-28 16:24:25] [INFO ] [STATE] registration → checkin
+[2026-03-28 16:24:33] [INFO ] [STATE] Tournament started — 5 players
+[2026-03-28 16:24:34] [INFO ] [STATE] checkin → active
+[2026-03-28 16:24:37] [INFO ] [SWISS] Round 1 started — 5 players, 2 matches
+[2026-03-28 16:24:37] [INFO ] [SWISS] Match 399900001 created — 1 vs 0 (round 1)
+[2026-03-28 16:24:38] [INFO ] [SWISS] Match 399900002 created — 142798704703700992 vs 3 (round 1)
+[2026-03-28 16:24:40] [INFO ] [SWISS] Bye awarded to 2
+[2026-03-28 16:25:54] [INFO ] [LOGGER] Log opened — logs\st_2026-03-28.log
+[2026-03-28 16:26:07] [INFO ] [STATE] Tournament started — 5 players
+[2026-03-28 16:26:07] [INFO ] [STATE] checkin → active
+[2026-03-28 16:26:21] [INFO ] [SWISS] Round 1 started — 5 players, 2 matches
+[2026-03-28 16:26:21] [INFO ] [SWISS] Match 399900001 created — 0 vs 142798704703700992 (round 1)
+[2026-03-28 16:26:23] [INFO ] [SWISS] Match 399900002 created — 2 vs 3 (round 1)
+[2026-03-28 16:26:24] [INFO ] [SWISS] Bye awarded to 1
+[2026-03-28 16:33:34] [INFO ] [LOGGER] Log opened — logs\st_2026-03-28.log
+[2026-03-28 16:33:41] [INFO ] [STATE] Tournament started — 5 players
+[2026-03-28 16:33:41] [INFO ] [STATE] checkin → active
+[2026-03-28 16:33:44] [INFO ] [SWISS] Round 1 started — 5 players, 2 matches
+[2026-03-28 16:33:44] [INFO ] [SWISS] Match 399900001 created — 0 vs 142798704703700992 (round 1)
+[2026-03-28 16:33:46] [INFO ] [SWISS] Match 399900002 created — 2 vs 3 (round 1)
+[2026-03-28 16:33:47] [INFO ] [SWISS] Bye awarded to 1
+[2026-03-28 16:52:12] [INFO ] [LOGGER] Log opened — logs\st_2026-03-28.log
+[2026-03-28 16:52:27] [INFO ] [STATE] Tournament started — 5 players
+[2026-03-28 16:52:27] [INFO ] [STATE] checkin → active
+[2026-03-28 16:52:30] [INFO ] [SWISS] Round 1 started — 5 players, 2 matches
+[2026-03-28 16:52:30] [INFO ] [SWISS] Match 399900001 created — 0 vs 142798704703700992 (round 1)
+[2026-03-28 16:52:31] [INFO ] [SWISS] Match 399900002 created — 2 vs 3 (round 1)
+[2026-03-28 16:52:32] [INFO ] [SWISS] Bye awarded to 1
+[2026-03-28 16:52:41] [INFO ] [SWISS] Match 399900001 reported — winner: 142798704703700992, loser: 0
+[2026-03-28 16:52:49] [INFO ] [SWISS] Match 399900002 reported — winner: 3, loser: 2
+[2026-03-28 16:52:49] [INFO ] [SWISS] Round 1 complete
+[2026-03-28 16:52:56] [INFO ] [SWISS] Round 2 started — 5 players, 2 matches
+[2026-03-28 16:52:56] [INFO ] [SWISS] Match 399900003 created — 1 vs 3 (round 2)
+[2026-03-28 16:52:57] [INFO ] [SWISS] Match 399900004 created — 142798704703700992 vs 2 (round 2)
+[2026-03-28 16:52:59] [INFO ] [SWISS] Bye awarded to 0
+[2026-03-28 16:53:08] [INFO ] [REGISTRATION] 142798704703700992 (142798704703700992) dropped
+[2026-03-28 16:53:28] [INFO ] [SWISS] Match 399900003 reported — winner: 1, loser: 3
+[2026-03-28 16:54:18] [INFO ] [SWISS] Round 3 started — 3 players, 1 matches
+[2026-03-28 16:54:18] [INFO ] [SWISS] Match 399900005 created — 1 vs 0 (round 3)
+[2026-03-28 16:54:19] [INFO ] [SWISS] Bye awarded to 3

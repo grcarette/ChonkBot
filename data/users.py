@@ -44,14 +44,15 @@ class UserMethodsMixin:
                 return discord_id
         return None
 
-    async def get_users_bulk(self, user_ids: list[int]) -> dict[int, dict]:
-        """Fetch multiple users in a single query. Returns {user_id: user_doc}."""
+    async def get_users_bulk(self, user_ids: list[str | int]) -> dict[str, dict]:
+        """Fetch multiple users in a single query. Returns {str(user_id): user_doc}."""
         if not user_ids:
             return {}
+        int_ids = [int(uid) for uid in user_ids]
         users = await self.user_collection.find(
-            {'user_id': {'$in': user_ids}}
+            {'user_id': {'$in': int_ids}}
         ).to_list(None)
-        return {u['user_id']: u for u in users}
+        return {str(u['user_id']): u for u in users}
 
     async def refresh_all_avatars(self, guild):
         """Update avatar_url for all users in the database using current Discord member data."""

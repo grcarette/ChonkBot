@@ -113,8 +113,8 @@ def make_bot(tournament=None, tournaments=None):
     dh.get_active_lobbies = AsyncMock(return_value=[])
     dh.get_all_lobbies = AsyncMock(return_value=[])
     dh.get_users_bulk = AsyncMock(return_value={
-        100: {'name': 'Player100', 'avatar_url': None},
-        200: {'name': 'Player200', 'avatar_url': None},
+        '100': {'name': 'Player100', 'avatar_url': None},
+        '200': {'name': 'Player200', 'avatar_url': None},
     })
     dh.get_tournament_by_id = AsyncMock(return_value=tournament)
     dh.get_stages_from_list = AsyncMock(return_value=[])

@@ -330,14 +330,11 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             if '_' in uid_str:
                 try:
                     p1, p2 = uid_str.split('_')
-                    lobby_player_ids.extend([int(p1), int(p2)])
+                    lobby_player_ids.extend([p1, p2])
                 except ValueError:
                     pass
             else:
-                try:
-                    lobby_player_ids.append(int(uid_str))
-                except ValueError:
-                    pass
+                lobby_player_ids.append(uid_str)
 
     # Resolve entrant IDs — in teams mode keys are "p1_p2" strings
     entrant_ids = []
@@ -346,26 +343,23 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         if '_' in key_str:
             try:
                 p1, p2 = key_str.split('_')
-                entrant_ids.extend([int(p1), int(p2)])
+                entrant_ids.extend([p1, p2])
             except ValueError:
                 pass
         else:
-            try:
-                entrant_ids.append(int(key_str))
-            except ValueError:
-                pass
+            entrant_ids.append(key_str)
 
     all_ids  = list(set(entrant_ids + lobby_player_ids))
     user_map = await bot.dh.get_users_bulk(all_ids)
 
     # ── Seed data ─────────────────────────────────────────────────────────────
 
-    seed_by_discord:         dict[int, int | None] = {}
-    challonge_id_by_discord: dict[int, int | None] = {}
+    seed_by_discord:         dict[str, int | None] = {}
+    challonge_id_by_discord: dict[str, int | None] = {}
     if is_bracket_fmt:
         if 'challonge_data' in tournament:
             challonge_to_discord = {
-                int(cid): int(did)
+                int(cid): str(did)
                 for did, cid in tournament.get('entrants', {}).items()
                 if cid is not None
             }
@@ -375,25 +369,26 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
                     seed_by_discord[discord_id]         = p.get('seed')
                     challonge_id_by_discord[discord_id] = p['id']
         else:
-            native_seeds = tournament.get('seeds', {})
-            entrant_keys = {str(k): k for k in [int(d) for d in tournament.get('entrants', {}).keys()]}
+            native_seeds    = tournament.get('seeds', {})
+            entrant_key_set = {str(k) for k in tournament.get('entrants', {}).keys()}
             for discord_id_str, seed in native_seeds.items():
-                matched_id = entrant_keys.get(discord_id_str)
-                if matched_id is not None:
-                    seed_by_discord[matched_id] = seed
+                key_str = str(discord_id_str)
+                if key_str in entrant_key_set:
+                    seed_by_discord[key_str] = seed
 
     # ── Entrants ──────────────────────────────────────────────────────────────
 
     entrants = []
     for key_str in tournament.get('entrants', {}).keys():
-        if '_' in str(key_str):
+        key_str = str(key_str)
+        if '_' in key_str:
             # Teams mode — show team name
             try:
-                p1, p2 = str(key_str).split('_')
-                u1 = user_map.get(int(p1))
-                u2 = user_map.get(int(p2))
-                n1 = u1['name'] if u1 else str(p1)
-                n2 = u2['name'] if u2 else str(p2)
+                p1, p2 = key_str.split('_')
+                u1 = user_map.get(p1)
+                u2 = user_map.get(p2)
+                n1 = u1['name'] if u1 else p1
+                n2 = u2['name'] if u2 else p2
                 entrants.append({
                     'discord_id': key_str,
                     'name':       f"{n1} / {n2}",
@@ -404,13 +399,12 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             except ValueError:
                 pass
         else:
-            discord_id_int = int(key_str)
-            user = user_map.get(discord_id_int)
+            user = user_map.get(key_str)
             entrants.append({
-                'discord_id':   str(discord_id_int),
-                'name':         user['name'] if user else str(discord_id_int),
-                'seed':         seed_by_discord.get(discord_id_int),
-                'challonge_id': challonge_id_by_discord.get(discord_id_int),
+                'discord_id':   key_str,
+                'name':         user['name'] if user else key_str,
+                'seed':         seed_by_discord.get(key_str),
+                'challonge_id': challonge_id_by_discord.get(key_str),
                 'avatar_url':   user.get('avatar_url') if user else None,
             })
     if is_bracket_fmt:
@@ -427,20 +421,19 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             if '_' in uid_str:
                 try:
                     p1, p2 = uid_str.split('_')
-                    u1 = user_map.get(int(p1))
-                    u2 = user_map.get(int(p2))
-                    n1 = u1['name'] if u1 else str(p1)
-                    n2 = u2['name'] if u2 else str(p2)
+                    u1 = user_map.get(p1)
+                    u2 = user_map.get(p2)
+                    n1 = u1['name'] if u1 else p1
+                    n2 = u2['name'] if u2 else p2
                     player_names.append(f"{n1} / {n2}")
                     player_ids.append(uid_str)
                 except ValueError:
                     player_names.append(uid_str)
                     player_ids.append(uid_str)
             else:
-                uid_int = int(uid_str)
-                user    = user_map.get(uid_int)
-                player_names.append(user['name'] if user else str(uid))
-                player_ids.append(uid_int)
+                user = user_map.get(uid_str)
+                player_names.append(user['name'] if user else uid_str)
+                player_ids.append(uid_str)
 
         # Resolve winner name from results[0] if present
         winner_id  = None
@@ -452,20 +445,20 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             if '_' in uid_str:
                 try:
                     p1, p2 = uid_str.split('_')
-                    u1 = user_map.get(int(p1))
-                    u2 = user_map.get(int(p2))
-                    n1 = u1['name'] if u1 else str(p1)
-                    n2 = u2['name'] if u2 else str(p2)
+                    u1 = user_map.get(p1)
+                    u2 = user_map.get(p2)
+                    n1 = u1['name'] if u1 else p1
+                    n2 = u2['name'] if u2 else p2
                     winner_name = f"{n1} / {n2}"
                     winner_id = uid_str
                 except ValueError:
                     pass
             else:
                 try:
-                    wid = int(raw_winner)
-                    wu = user_map.get(wid)
-                    winner_name = wu['name'] if wu else str(wid)
-                    winner_id = wid
+                    uid_str_w = str(int(raw_winner))
+                    wu = user_map.get(uid_str_w)
+                    winner_name = wu['name'] if wu else uid_str_w
+                    winner_id = uid_str_w
                 except (ValueError, TypeError):
                     pass
 
@@ -527,7 +520,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
 
     registration_requests = []
     for rid in (request_ids or []):
-        user = user_map.get(rid) or await bot.dh.get_user(user_id=rid)
+        user = user_map.get(str(rid)) or await bot.dh.get_user(user_id=int(rid))
         registration_requests.append({
             'discord_id': str(rid),
             'name':       user['name'] if user else str(rid),
@@ -687,7 +680,6 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     {'error': 'match_id and target_state are required'}, status=400
                 )
 
-            # Match by string comparison to avoid JS integer precision loss on large Swiss IDs
             match_id_str = str(match_id)
             match_lobby  = next(
                 (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
@@ -700,13 +692,30 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
             if target_state == 'winner':
-                # Guard: don't re-score an already-finished lobby
                 lobby_data = await match_lobby.get_lobby()
                 if lobby_data.get('state') == 'finished':
                     return web.json_response(
                         {'error': 'Lobby is already finished — cannot force-advance again'},
                         status=400
                     )
+
+                # Resolve winner_id to the exact key stored in the swiss event,
+                # since large Discord IDs can lose precision passing through JS JSON.
+                # We match by string comparison of integer values.
+                if winner_id is not None:
+                    fmt = tournament.get('format', '')
+                    if fmt in ('swiss', 'swiss filter'):
+                        swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+                        if swiss_event:
+                            stored_keys = list(swiss_event.get('players', {}).keys())
+                            try:
+                                winner_id = next(
+                                    k for k in stored_keys
+                                    if int(k) == int(winner_id)
+                                )
+                            except (StopIteration, ValueError):
+                                pass  # fall through with original value
+
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
             else:
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
@@ -1005,16 +1014,72 @@ async def handle_set_seed(request: web.Request) -> web.Response:
 
 @require_auth
 async def handle_get_bracket(request: web.Request) -> web.Response:
-    """
-    Return all bracket matches for a DE/SE tournament, enriched with
-    lobby state from our own DB and player display names.
-    """
     tournament_id = request.match_info['tournament_id']
     bot           = request.app['bot']
 
     tournament = await bot.dh.get_tournament_by_id(tournament_id)
     if not tournament:
         return web.json_response({'error': 'Tournament not found'}, status=404)
+
+    fmt = tournament.get('format', '')
+
+    # ── Swiss: return current-round matches as a flat bracket ─────────────────
+    if fmt == 'swiss':
+        swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if not swiss_event:
+            return web.json_response({'format': fmt, 'matches': [], 'round': 0})
+
+        current_round = swiss_event.get('current_round', 0)
+        all_matches   = swiss_event.get('matches', [])
+
+        # Collect all player IDs referenced in any match this round
+        round_matches = [m for m in all_matches if m.get('round_number') == current_round]
+        player_ids    = list({str(m['player_1']) for m in round_matches} |
+                             {str(m['player_2']) for m in round_matches})
+        user_map      = await bot.dh.get_users_bulk(player_ids) if player_ids else {}
+
+        raw_lobbies   = await bot.dh.get_all_lobbies(tournament['_id'])
+        lobby_by_match = {l['match_id']: l for l in (raw_lobbies or [])}
+
+        matches = []
+        for m in round_matches:
+            p1_id  = str(m['player_1'])
+            p2_id  = str(m['player_2'])
+            u1     = user_map.get(p1_id)
+            u2     = user_map.get(p2_id)
+            lobby  = lobby_by_match.get(m['match_id'])
+
+            winner_id   = m.get('winner')
+            winner_disc = str(winner_id) if winner_id else None
+
+            matches.append({
+                'match_id':          m['match_id'],
+                'round':             current_round,
+                'bracket':           '',
+                'state':             'complete' if m.get('state') == 'finished' else 'open',
+                'lobby_state':       lobby['state'] if lobby else None,
+                'p1_name':           u1['name'] if u1 else p1_id,
+                'p2_name':           u2['name'] if u2 else p2_id,
+                'p1_discord_id':     p1_id,
+                'p2_discord_id':     p2_id,
+                'p1_avatar_url':     u1.get('avatar_url') if u1 else None,
+                'p2_avatar_url':     u2.get('avatar_url') if u2 else None,
+                'winner_name':       user_map.get(winner_disc, {}).get('name') if winner_disc else None,
+                'winner_discord_id': winner_disc,
+                'picked_stage':      lobby.get('picked_stage') if lobby else None,
+                'prereq_ids':        [],
+                'has_lobby':         lobby is not None,
+                'hold_when_ready':   False,
+            })
+
+        return web.json_response({
+            'format':        fmt,
+            'matches':       matches,
+            'round':         current_round,
+            'round_limit':   swiss_event.get('round_limit', 8),
+        })
+
+    # ── DE/SE: existing Challonge bracket path ────────────────────────────────
 
     fmt = tournament.get('format', '')
     if fmt not in ('single elimination', 'double elimination'):
@@ -1051,22 +1116,19 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         if '_' in key_str:
             try:
                 p1, p2 = key_str.split('_')
-                individual_ids.extend([int(p1), int(p2)])
+                individual_ids.extend([p1, p2])
             except ValueError:
                 pass
         else:
-            try:
-                individual_ids.append(int(key_str))
-            except ValueError:
-                pass
+            individual_ids.append(key_str)
 
     user_map = await bot.dh.get_users_bulk(individual_ids)
 
     discord_to_name   = {}
     discord_to_avatar = {}
-    for discord_id_int, user in user_map.items():
-        discord_to_name[discord_id_int]   = user['name']
-        discord_to_avatar[discord_id_int] = user.get('avatar_url')
+    for discord_id_str, user in user_map.items():
+        discord_to_name[discord_id_str]   = user['name']
+        discord_to_avatar[discord_id_str] = user.get('avatar_url')
 
     try:
         ch = bot.th.tournaments.get(tournament['_id'])
@@ -1097,18 +1159,14 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
         if '_' in key_str:
             try:
                 p1, p2 = key_str.split('_')
-                u1 = discord_to_name.get(int(p1), str(p1))
-                u2 = discord_to_name.get(int(p2), str(p2))
-                av = discord_to_avatar.get(int(p1))
+                u1 = discord_to_name.get(p1, p1)
+                u2 = discord_to_name.get(p2, p2)
+                av = discord_to_avatar.get(p1)
                 return f"{u1} / {u2}", key_str, av
             except ValueError:
                 return key_str, key_str, None
         else:
-            try:
-                did = int(key_str)
-                return discord_to_name.get(did, f'#{key_str}'), key_str, discord_to_avatar.get(did)
-            except ValueError:
-                return key_str, key_str, None
+            return discord_to_name.get(key_str, f'#{key_str}'), key_str, discord_to_avatar.get(key_str)
 
     def player_name(challonge_pid):
         if challonge_pid is None:
@@ -1274,14 +1332,14 @@ async def handle_get_pending_matches(request: web.Request) -> web.Response:
         return web.json_response({'error': str(e)}, status=500)
 
     all_player_ids = list(
-        {m['player_1_id'] for m in pending} | {m['player_2_id'] for m in pending}
+        {str(m['player_1_id']) for m in pending} | {str(m['player_2_id']) for m in pending}
     )
     user_map = await bot.dh.get_users_bulk(all_player_ids)
 
     result = []
     for m in pending:
-        p1 = user_map.get(m['player_1_id'])
-        p2 = user_map.get(m['player_2_id'])
+        p1 = user_map.get(str(m['player_1_id']))
+        p2 = user_map.get(str(m['player_2_id']))
         result.append({
             'match_id': m['match_id'],
             'round':    m['round'],

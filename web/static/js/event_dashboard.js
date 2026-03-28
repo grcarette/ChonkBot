@@ -211,11 +211,13 @@ async function loadTournament({ force = false } = {}) {
             api('GET', `/api/tournament/${TOURNAMENT_ID}`).then(r => {
                 _timing.end('fetch_tournament');
                 return r;
+            }).catch(err => {
+                _timing.end('fetch_tournament');
+                throw err; // still propagate — but see below
             }),
-            api('GET', `/api/tournament/${TOURNAMENT_ID}/pending_matches`).catch(() => ({ pending: [] })).then(r => {
-                _timing.end('fetch_pending');
-                return r;
-            }),
+            api('GET', `/api/tournament/${TOURNAMENT_ID}/pending_matches`)
+                .catch(() => ({ pending: [] }))
+                .then(r => { _timing.end('fetch_pending'); return r; }),
         ]);
 
         _timing.start('loadTournament_render');

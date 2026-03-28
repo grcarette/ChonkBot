@@ -161,7 +161,7 @@ function renderMatches(lobbies, pending, autocall, swiss, dqs) {
     container.querySelectorAll('.match-dq-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             btn.disabled = true;
-            const pid  = parseInt(btn.dataset.pid, 10);
+            const pid  = btn.dataset.pid;
             const name = btn.dataset.name;
             if (await showConfirm(
                 'Disqualify Player?',
@@ -343,11 +343,11 @@ async function matchAction_forceAdvance(matchId, playerNames, playerIds, btn) {
                 resolve(selected);
             };
         });
-
+        
         if (!winnerId) return;
         await _matchActionAndRefresh(matchId, 'force_advance', {
             target_state: 'winner',
-            winner_id:    winnerId,
+            winner_id:    String(winnerId),
         });
 
     } else {

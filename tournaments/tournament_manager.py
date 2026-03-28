@@ -121,7 +121,13 @@ class TournamentManager:
     async def report_match(self, lobby, is_dq=False):
         lobby_data = await lobby.get_lobby()
         winner_user_id = str(lobby_data['results'][0])
-        loser_user_id  = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
+        
+        # Derive loser from the lobby's player list rather than results[1],
+        # which may be absent if the lobby was force-advanced before reporting
+        all_players = [str(p) for p in lobby_data.get('players', [])]
+        loser_user_id = next(
+            (p for p in all_players if p != winner_user_id), None
+        )
 
         result = {
             'match_id':  lobby_data['match_id'],
@@ -1380,14 +1386,11 @@ class TournamentManager:
                     if '_' in key_str:
                         try:
                             p1, p2 = key_str.split('_')
-                            individual_ids.extend([int(p1), int(p2)])
+                            individual_ids.extend([p1, p2])
                         except ValueError:
                             pass
                     else:
-                        try:
-                            individual_ids.append(int(key_str))
-                        except ValueError:
-                            pass
+                        individual_ids.append(key_str)
 
                 user_map = await self.bot.dh.get_users_bulk(individual_ids)
 
@@ -1396,25 +1399,21 @@ class TournamentManager:
                     if '_' in key_str:
                         try:
                             p1, p2 = key_str.split('_')
-                            u1 = user_map.get(int(p1))
-                            u2 = user_map.get(int(p2))
-                            n1 = u1['name'] if u1 else str(p1)
-                            n2 = u2['name'] if u2 else str(p2)
+                            u1 = user_map.get(p1)
+                            u2 = user_map.get(p2)
+                            n1 = u1['name'] if u1 else p1
+                            n2 = u2['name'] if u2 else p2
                             name = f"{n1} / {n2}"
                         except ValueError:
                             name = key_str
                         entrant_list.append({'discord_id': key_str, 'name': name, 'seed': None})
                     else:
-                        try:
-                            discord_id_int = int(key_str)
-                        except ValueError:
-                            continue
-                        user = user_map.get(discord_id_int)
+                        user = user_map.get(key_str)
                         name = user['name'] if user else f'Unknown ({key_str})'
                         seed = None
                         if not (self.format and self.format.shows_bracket_link and 'challonge_data' in tournament):
                             seeds = tournament.get('seeds', {})
-                            seed  = seeds.get(key_str) or seeds.get(discord_id_int)
+                            seed  = seeds.get(key_str)
                         entrant_list.append({'discord_id': key_str, 'name': name, 'seed': seed})
 
                 if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
