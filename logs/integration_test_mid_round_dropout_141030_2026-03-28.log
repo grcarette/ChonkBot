@@ -1,0 +1,29 @@
+[2026-03-28 14:10:30] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_141030_2026-03-28.log
+[2026-03-28 14:10:30] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+[2026-03-28 14:10:30] [INFO ] [SWISS] Match 246400001 created — 1 vs 8 (round 1)
+[2026-03-28 14:10:30] [INFO ] [SWISS] Match 246400002 created — 2 vs 3 (round 1)
+[2026-03-28 14:10:30] [INFO ] [SWISS] Match 246400003 created — 4 vs 5 (round 1)
+[2026-03-28 14:10:30] [INFO ] [SWISS] Match 246400004 created — 6 vs 7 (round 1)
+[2026-03-28 14:10:31] [INFO ] [SWISS] Match 246400001 reported — winner: 8, loser: 1
+[2026-03-28 14:10:31] [INFO ] [REGISTRATION] 1 (1) dropped
+[2026-03-28 14:10:31] [DEBUG] [TEST] Reporting match 246400002 — winner: 2, loser: 3
+[2026-03-28 14:10:31] [INFO ] [SWISS] Match 246400002 reported — winner: 2, loser: 3
+[2026-03-28 14:10:31] [DEBUG] [TEST] Reporting match 246400003 — winner: 4, loser: 5
+[2026-03-28 14:10:31] [INFO ] [SWISS] Match 246400003 reported — winner: 4, loser: 5
+[2026-03-28 14:10:31] [DEBUG] [TEST] Reporting match 246400004 — winner: 6, loser: 7
+[2026-03-28 14:10:31] [INFO ] [SWISS] Match 246400004 reported — winner: 6, loser: 7
+[2026-03-28 14:10:31] [INFO ] [SWISS] Round 1 complete
+[2026-03-28 14:10:32] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400005 created — 8 vs 2 (round 2)
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400006 created — 3 vs 6 (round 2)
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400007 created — 4 vs 7 (round 2)
+[2026-03-28 14:10:32] [INFO ] [SWISS] Bye awarded to 5
+[2026-03-28 14:10:32] [DEBUG] [TEST] Reporting match 246400005 — winner: 8, loser: 2
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400005 reported — winner: 8, loser: 2
+[2026-03-28 14:10:32] [DEBUG] [TEST] Reporting match 246400006 — winner: 3, loser: 6
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400006 reported — winner: 3, loser: 6
+[2026-03-28 14:10:32] [DEBUG] [TEST] Reporting match 246400007 — winner: 4, loser: 7
+[2026-03-28 14:10:32] [INFO ] [SWISS] Match 246400007 reported — winner: 4, loser: 7
+[2026-03-28 14:10:32] [INFO ] [SWISS] Round 2 complete
+[2026-03-28 14:10:32] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-28 14:10:32] [INFO ] [STATE] active → finished

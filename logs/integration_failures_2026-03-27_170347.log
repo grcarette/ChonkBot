@@ -1,0 +1,6 @@
+=== Integration Test Failures — 2026-03-27_170347 ===
+
+
+SCORE FAILURES (chaos):
+  Player 9 after round 2: losses expected=2, actual=1
+

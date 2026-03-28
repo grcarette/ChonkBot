@@ -441,43 +441,44 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
                 user    = user_map.get(uid_int)
                 player_names.append(user['name'] if user else str(uid))
                 player_ids.append(uid_int)
-            # Resolve winner name from results[0] if present
-            winner_id  = None
-            winner_name = None
-            results = l.get('results', [])
-            if results:
-                raw_winner = results[0]
-                uid_str = str(raw_winner)
-                if '_' in uid_str:
-                    try:
-                        p1, p2 = uid_str.split('_')
-                        u1 = user_map.get(int(p1))
-                        u2 = user_map.get(int(p2))
-                        n1 = u1['name'] if u1 else str(p1)
-                        n2 = u2['name'] if u2 else str(p2)
-                        winner_name = f"{n1} / {n2}"
-                        winner_id = uid_str
-                    except ValueError:
-                        pass
-                else:
-                    try:
-                        wid = int(raw_winner)
-                        wu = user_map.get(wid)
-                        winner_name = wu['name'] if wu else str(wid)
-                        winner_id = wid
-                    except (ValueError, TypeError):
-                        pass
 
-            lobbies.append({
-                'match_id':     str(l.get('match_id')),
-                'lobby_name':   l.get('lobby_name', ''),
-                'state':        l.get('state', ''),
-                'player_names': player_names,
-                'player_ids':   player_ids,
-                'round':        l.get('round'),
-                'winner_id':    winner_id,
-                'winner_name':  winner_name,
-            })
+        # Resolve winner name from results[0] if present
+        winner_id  = None
+        winner_name = None
+        results = l.get('results', [])
+        if results:
+            raw_winner = results[0]
+            uid_str = str(raw_winner)
+            if '_' in uid_str:
+                try:
+                    p1, p2 = uid_str.split('_')
+                    u1 = user_map.get(int(p1))
+                    u2 = user_map.get(int(p2))
+                    n1 = u1['name'] if u1 else str(p1)
+                    n2 = u2['name'] if u2 else str(p2)
+                    winner_name = f"{n1} / {n2}"
+                    winner_id = uid_str
+                except ValueError:
+                    pass
+            else:
+                try:
+                    wid = int(raw_winner)
+                    wu = user_map.get(wid)
+                    winner_name = wu['name'] if wu else str(wid)
+                    winner_id = wid
+                except (ValueError, TypeError):
+                    pass
+
+        lobbies.append({
+            'match_id':     str(l.get('match_id')),
+            'lobby_name':   l.get('lobby_name', ''),
+            'state':        l.get('state', ''),
+            'player_names': player_names,
+            'player_ids':   player_ids,
+            'round':        l.get('round'),
+            'winner_id':    winner_id,
+            'winner_name':  winner_name,
+        })
 
     # ── Stagelist ─────────────────────────────────────────────────────────────
 
@@ -495,32 +496,31 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
 
     # ── Swiss data ────────────────────────────────────────────────────────────
 
+    tm = bot.th.tournaments.get(tournament['_id'])
     swiss_data = None
-    if swiss_event:
+    if swiss_event and tm and tm.format:
+        swiss_data = await tm.format.get_dashboard_state()
+    elif swiss_event:
+        # Fallback if tm not loaded (shouldn't happen during active events)
         players           = swiss_event.get('players', {})
         active_matches    = sum(
             1 for p in players.values()
             if p.get('active_match_id') is not None and not p.get('dropped')
         ) // 2
         players_remaining = sum(1 for p in players.values() if not p.get('dropped'))
-        round_ready = (
-            tournament.get('state') == 'active'
-            and active_matches == 0
-            and players_remaining > 1
-            and swiss_event.get('current_round', 0) < swiss_event.get('round_limit', 8)
-        )
+        current_round     = swiss_event.get('current_round', 0)
+        round_limit       = swiss_event.get('round_limit', tournament.get('round_limit', 8))
         swiss_data = {
-            'current_round':     swiss_event.get('current_round', 0),
-            'round_limit':       swiss_event.get('round_limit', tournament.get('round_limit', 8)),
-            'active_matches':    active_matches,
-            'players_remaining': players_remaining,
-            'round_ready':       round_ready,
-            'final_round_acitve':swiss_event.get('current_round', 0) >= swiss_event.get('round_limit', 8)
+            'current_round':      current_round,
+            'round_limit':        round_limit,
+            'active_matches':     active_matches,
+            'players_remaining':  players_remaining,
+            'round_ready':        False,  # Safe default when TM not loaded
+            'final_round_active': current_round >= round_limit,
         }
 
     # ── autocall / hold_when_ready (Challonge formats only) ──────────────────
 
-    tm = bot.th.tournaments.get(tournament['_id'])
     autocall_matches = getattr(tm.format, 'autocall_matches', False) if tm and tm.format else False
 
     # ── Registration requests ─────────────────────────────────────────────────
@@ -651,6 +651,8 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 return web.json_response({'error': 'next_round is only valid for Swiss'}, status=400)
             if not tm.format:
                 return web.json_response({'error': 'Format not initialised'}, status=500)
+            if tm.format.manager._get_pairing_lock().locked():
+                return web.json_response({'error': 'Round is already being started'}, status=409)
             await tm.format.manager.run_pairing_cycle()
 
         elif action == 'dq_player':
@@ -687,9 +689,6 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             # Match by string comparison to avoid JS integer precision loss on large Swiss IDs
             match_id_str = str(match_id)
-            # ↓ add these two lines here
-            print(f"[force_advance] received match_id={match_id!r} (type={type(match_id).__name__})")
-            print(f"[force_advance] lobbies keys: {[(k, type(k).__name__) for k in tm.lobbies.keys()]}")
             match_lobby  = next(
                 (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
                 None
@@ -701,7 +700,13 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 )
 
             if target_state == 'winner':
-                await match_lobby.dh.update_lobby_state(match_lobby.match_id, 'finished')
+                # Guard: don't re-score an already-finished lobby
+                lobby_data = await match_lobby.get_lobby()
+                if lobby_data.get('state') == 'finished':
+                    return web.json_response(
+                        {'error': 'Lobby is already finished — cannot force-advance again'},
+                        status=400
+                    )
                 await match_lobby.force_advance(target_state, winner_id=winner_id)
             else:
                 await match_lobby.force_advance(target_state, winner_id=winner_id)

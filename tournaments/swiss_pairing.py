@@ -135,8 +135,16 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
 
 def select_bye_candidate(unpaired: list[dict]) -> dict | None:
     """
-    Select the bye candidate: fewest points, fewest wins as tiebreaker.
+    Select the bye candidate:
+    1. Prefer players who have NOT had a bye yet
+    2. Fewest points
+    3. Fewest wins as tiebreaker
+    If everyone has had a bye, fall back to fewest points.
     """
     if not unpaired:
         return None
-    return min(unpaired, key=lambda p: (p['points'], p.get('wins', 0)))
+    return min(unpaired, key=lambda p: (
+        p.get('has_bye', False),  # False (0) sorts before True (1)
+        p['points'],
+        p.get('wins', 0),
+    ))

@@ -95,9 +95,11 @@ class SwissMethodsMixin:
             'points': float(bonus_points),
             'wins': 0,
             'losses': 0,
+            'byes': 0,
             'rounds_played': 0,
             'active_match_id': None,
             'dropped': False,
+            'has_bye': False,
             'match_history': [],
             'joined_at': _now(),
         }
@@ -110,22 +112,12 @@ class SwissMethodsMixin:
     async def swiss_drop_player(self, event_id: ObjectId, discord_id: int):
         """
         Drop a player from the swiss event.
-        If they have never played a match (rounds_played == 0), remove them
-        from the scoreboard entirely via $unset.
-        If they have played matches, preserve their record and mark dropped=True.
+        Always marks dropped=True to preserve the record for rejoin.
         """
-        event = await self.get_swiss_event(event_id)
-        player = event.get('players', {}).get(str(discord_id))
-        if player and player.get('rounds_played', 0) == 0:
-            await self.swiss_collection.update_one(
-                {'_id': ObjectId(event_id)},
-                {'$unset': {f'players.{discord_id}': ''}}
-            )
-        else:
-            await self.swiss_collection.update_one(
-                {'_id': ObjectId(event_id)},
-                {'$set': {f'players.{discord_id}.dropped': True}}
-            )
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {'$set': {f'players.{discord_id}.dropped': True}}
+        )
     async def swiss_set_active_match(
         self,
         event_id: ObjectId,
@@ -202,36 +194,40 @@ class SwissMethodsMixin:
         event = await self.get_swiss_event(event_id)
         winner = event['players'].get(str(winner_id))
         loser = event['players'].get(str(loser_id))
-
-        print(f"swiss_record_result called: match_id={match_id} ({type(match_id)})")
-        print(f"  winner={winner_id}, found={winner is not None}")
-        print(f"  loser={loser_id}, found={loser is not None}")
-        stored_ids = [(m['match_id'], type(m['match_id'])) for m in event.get('matches', [])]
-        print(f"  stored match_ids: {stored_ids}")
-
         if not winner or not loser:
-            print("  ERROR: winner or loser not found in players dict")
             return
 
-        result = await self.swiss_collection.update_one(
+        inc_ops = {
+            f'players.{winner_id}.points': 1,
+            f'players.{winner_id}.wins': 1,
+            f'players.{winner_id}.rounds_played': 1,
+            f'players.{loser_id}.losses': 1,
+            f'players.{loser_id}.rounds_played': 1,
+        }
+        if is_dq:
+            inc_ops[f'players.{loser_id}.points'] = 0
+
+        await self.swiss_collection.update_one(
             {'_id': ObjectId(event_id)},
             {
                 '$set': {
                     'matches.$[m].winner': winner_id,
                     'matches.$[m].state': 'finished',
                     f'players.{winner_id}.active_match_id': None,
-                    f'players.{winner_id}.points': winner['points'] + 1,
-                    f'players.{winner_id}.wins': winner['wins'] + 1,
-                    f'players.{winner_id}.rounds_played': winner['rounds_played'] + 1,
                     f'players.{loser_id}.active_match_id': None,
-                    f'players.{loser_id}.points': (loser['points'] - 1) if is_dq else loser['points'],
-                    f'players.{loser_id}.losses': loser['losses'] + 1,
-                    f'players.{loser_id}.rounds_played': loser['rounds_played'] + 1,
                 },
+                '$inc': inc_ops,
             },
             array_filters=[{'m.match_id': match_id}]
         )
-        print(f"  matched={result.matched_count}, modified={result.modified_count}")
+
+    async def swiss_mark_match_flushed(self, event_id: ObjectId, match_id: int):
+        """Mark a match as having had its ranked result reported."""
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {'$set': {'matches.$[m].flushed': True}},
+            array_filters=[{'m.match_id': match_id}]
+        )
 
     # ─── Bye management ───────────────────────────────────────────────────────
 
@@ -256,18 +252,20 @@ class SwissMethodsMixin:
         Counts as a round played and grants 1 point.
         Clears active_match_id so the player is not stuck.
         """
-        event = await self.get_swiss_event(event_id)
-        player = event['players'][str(discord_id)]
         await self.swiss_collection.update_one(
             {'_id': ObjectId(event_id)},
             {
                 '$set': {
-                    f'players.{discord_id}.points': player['points'] + 1,
-                    f'players.{discord_id}.rounds_played': player['rounds_played'] + 1,
                     f'players.{discord_id}.active_match_id': None,
+                    f'players.{discord_id}.has_bye': True,
                     'bye_queue': None,
                     'bye_task_started_at': None,
-                }
+                },
+                '$inc': {
+                    f'players.{discord_id}.points': 1,
+                    f'players.{discord_id}.rounds_played': 1,
+                    f'players.{discord_id}.byes': 1,
+                },
             }
         )
 
@@ -405,7 +403,9 @@ class SwissMethodsMixin:
             player_updates[f'players.{discord_id}.points']          = 0.0
             player_updates[f'players.{discord_id}.wins']            = 0
             player_updates[f'players.{discord_id}.losses']          = 0
+            player_updates[f'players.{discord_id}.byes']            = 0
             player_updates[f'players.{discord_id}.rounds_played']   = 0
+            player_updates[f'players.{discord_id}.has_bye']         = False
             player_updates[f'players.{discord_id}.match_history']   = []
 
         await self.swiss_collection.update_one(
@@ -429,8 +429,6 @@ class SwissMethodsMixin:
 
         winner_id = match['winner']
         loser_id  = next(p for p in [match['player_1'], match['player_2']] if p != winner_id)
-        winner    = event['players'].get(str(winner_id))
-        loser     = event['players'].get(str(loser_id))
 
         await self.swiss_collection.update_one(
             {'_id': ObjectId(event_id)},
@@ -439,13 +437,15 @@ class SwissMethodsMixin:
                     'matches.$[m].winner': None,
                     'matches.$[m].state':  'active',
                     f'players.{winner_id}.active_match_id': match_id,
-                    f'players.{winner_id}.points':          winner['points'] - 1,
-                    f'players.{winner_id}.wins':            winner['wins'] - 1,
-                    f'players.{winner_id}.rounds_played':   winner['rounds_played'] - 1,
                     f'players.{loser_id}.active_match_id':  match_id,
-                    f'players.{loser_id}.losses':           loser['losses'] - 1,
-                    f'players.{loser_id}.rounds_played':    loser['rounds_played'] - 1,
-                }
+                },
+                '$inc': {
+                    f'players.{winner_id}.points':       -1,
+                    f'players.{winner_id}.wins':          -1,
+                    f'players.{winner_id}.rounds_played': -1,
+                    f'players.{loser_id}.losses':         -1,
+                    f'players.{loser_id}.rounds_played':  -1,
+                },
             },
             array_filters=[{'m.match_id': match_id}]
         )

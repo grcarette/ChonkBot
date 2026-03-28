@@ -1,0 +1,27 @@
+[2026-03-27 16:24:35] [INFO ] [LOGGER] Log opened — logs\integration_test_odd_players_162435_2026-03-27.log
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 1 started — 7 players, 3 matches
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700001 created — 1 vs 2 (round 1)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700002 created — 3 vs 5 (round 1)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700003 created — 6 vs 7 (round 1)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700001 reported — winner: 1, loser: 2
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700002 reported — winner: 3, loser: 5
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700003 reported — winner: 6, loser: 7
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700004 created — 1 vs 3 (round 2)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700005 created — 2 vs 6 (round 2)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700006 created — 5 vs 7 (round 2)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700004 reported — winner: 1, loser: 3
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700005 reported — winner: 2, loser: 6
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700006 reported — winner: 5, loser: 7
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 2 complete
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 3 started — 7 players, 3 matches
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700007 created — 1 vs 7 (round 3)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700008 created — 2 vs 3 (round 3)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700009 created — 5 vs 6 (round 3)
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700007 reported — winner: 1, loser: 7
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700008 reported — winner: 2, loser: 3
+[2026-03-27 16:24:36] [INFO ] [SWISS] Match 2700009 reported — winner: 5, loser: 6
+[2026-03-27 16:24:36] [INFO ] [SWISS] Round 3 complete
+[2026-03-27 16:24:36] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:24:36] [INFO ] [STATE] active → finished

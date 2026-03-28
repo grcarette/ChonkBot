@@ -86,7 +86,6 @@ class TournamentManager:
         return bool(self.tournament.get('config', {}).get('teams_mode', False))
 
     async def report_result_to_ranked_api(self, winner_id: int, loser_id: int) -> None:
-        print('here', winner_id, loser_id)
         try:
             result = await self.bot.uchranked_api.report_match(
                 player1_id=winner_id,
@@ -1239,7 +1238,19 @@ class TournamentManager:
         if user_id not in tournament.get('dqs', []):
             return False
 
-        return await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
+        result = await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
+
+        # Mark as dropped in swiss so they must explicitly rejoin
+        if tournament.get('format') == 'swiss' and self.format:
+            swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
+            if swiss_event and str(user_id) in swiss_event.get('players', {}):
+                await self.bot.dh.swiss_collection.update_one(
+                    {'_id': swiss_event['_id']},
+                    {'$set': {f'players.{user_id}.dropped': True}}
+                )
+                self.logger.info('DQ', f'Player {user_id} un-DQ\'d — must rejoin to play')
+
+        return result
 
     async def reopen_lobby(self, match_id_str: str):
         match_lobby = next(

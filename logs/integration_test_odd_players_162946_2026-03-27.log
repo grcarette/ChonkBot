@@ -1,0 +1,36 @@
+[2026-03-27 16:29:46] [INFO ] [LOGGER] Log opened — logs\integration_test_odd_players_162946_2026-03-27.log
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 created — 1 vs 2 (round 1)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400002 created — 3 vs 5 (round 1)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400003 created — 6 vs 7 (round 1)
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400001 — winner: 1, loser: 2
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 reported — winner: 1, loser: 2
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400002 — winner: 3, loser: 5
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400002 reported — winner: 3, loser: 5
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400003 — winner: 6, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400003 reported — winner: 6, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 created — 1 vs 3 (round 2)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400005 created — 2 vs 6 (round 2)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400006 created — 5 vs 7 (round 2)
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400004 — winner: 1, loser: 3
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 reported — winner: 1, loser: 3
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400005 — winner: 2, loser: 6
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400005 reported — winner: 2, loser: 6
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400006 — winner: 5, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400006 reported — winner: 5, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 complete
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 3 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400007 created — 1 vs 7 (round 3)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400008 created — 2 vs 3 (round 3)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400009 created — 5 vs 6 (round 3)
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400007 — winner: 1, loser: 7
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400007 reported — winner: 1, loser: 7
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400008 — winner: 2, loser: 3
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400008 reported — winner: 2, loser: 3
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400009 — winner: 5, loser: 6
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400009 reported — winner: 5, loser: 6
+[2026-03-27 16:29:47] [INFO ] [SWISS] Round 3 complete
+[2026-03-27 16:29:47] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:29:47] [INFO ] [STATE] active → finished

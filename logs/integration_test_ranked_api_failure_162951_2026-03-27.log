@@ -1,0 +1,13 @@
+[2026-03-27 16:29:51] [INFO ] [LOGGER] Log opened — logs\integration_test_ranked_api_failure_162951_2026-03-27.log
+[2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200001 created — 1 vs 2 (round 1)
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200002 created — 3 vs 4 (round 1)
+[2026-03-27 16:29:51] [DEBUG] [TEST] Reporting match 92200001 — winner: 1, loser: 2
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200001 reported — winner: 1, loser: 2
+[2026-03-27 16:29:51] [DEBUG] [TEST] Reporting match 92200002 — winner: 3, loser: 4
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200002 reported — winner: 3, loser: 4
+[2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 1, loser: 2 — Mock API failure
+[2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 3, loser: 4 — Mock API failure
+[2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:29:51] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:29:51] [INFO ] [STATE] active → finished

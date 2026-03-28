@@ -1,0 +1,39 @@
+[2026-03-27 17:01:00] [INFO ] [LOGGER] Log opened — logs\integration_test_odd_players_170100_2026-03-27.log
+[2026-03-27 17:01:00] [INFO ] [SWISS] Round 1 started — 7 players, 3 matches
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200001 created — 1 vs 2 (round 1)
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200002 created — 3 vs 5 (round 1)
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200003 created — 6 vs 7 (round 1)
+[2026-03-27 17:01:00] [INFO ] [SWISS] Bye awarded to 4
+[2026-03-27 17:01:00] [DEBUG] [TEST] Reporting match 200001 — winner: 1, loser: 2
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200001 reported — winner: 1, loser: 2
+[2026-03-27 17:01:00] [DEBUG] [TEST] Reporting match 200002 — winner: 3, loser: 5
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200002 reported — winner: 3, loser: 5
+[2026-03-27 17:01:00] [DEBUG] [TEST] Reporting match 200003 — winner: 6, loser: 7
+[2026-03-27 17:01:00] [INFO ] [SWISS] Match 200003 reported — winner: 6, loser: 7
+[2026-03-27 17:01:00] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 17:01:01] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200004 created — 1 vs 3 (round 2)
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200005 created — 2 vs 6 (round 2)
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200006 created — 4 vs 7 (round 2)
+[2026-03-27 17:01:01] [INFO ] [SWISS] Bye awarded to 5
+[2026-03-27 17:01:01] [DEBUG] [TEST] Reporting match 200004 — winner: 1, loser: 3
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200004 reported — winner: 1, loser: 3
+[2026-03-27 17:01:01] [DEBUG] [TEST] Reporting match 200005 — winner: 2, loser: 6
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200005 reported — winner: 2, loser: 6
+[2026-03-27 17:01:01] [DEBUG] [TEST] Reporting match 200006 — winner: 4, loser: 7
+[2026-03-27 17:01:01] [INFO ] [SWISS] Match 200006 reported — winner: 4, loser: 7
+[2026-03-27 17:01:01] [INFO ] [SWISS] Round 2 complete
+[2026-03-27 17:01:02] [INFO ] [SWISS] Round 3 started — 7 players, 3 matches
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200007 created — 1 vs 4 (round 3)
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200008 created — 2 vs 3 (round 3)
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200009 created — 5 vs 6 (round 3)
+[2026-03-27 17:01:02] [INFO ] [SWISS] Bye awarded to 7
+[2026-03-27 17:01:02] [DEBUG] [TEST] Reporting match 200007 — winner: 1, loser: 4
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200007 reported — winner: 1, loser: 4
+[2026-03-27 17:01:02] [DEBUG] [TEST] Reporting match 200008 — winner: 2, loser: 3
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200008 reported — winner: 2, loser: 3
+[2026-03-27 17:01:02] [DEBUG] [TEST] Reporting match 200009 — winner: 5, loser: 6
+[2026-03-27 17:01:02] [INFO ] [SWISS] Match 200009 reported — winner: 5, loser: 6
+[2026-03-27 17:01:02] [INFO ] [SWISS] Round 3 complete
+[2026-03-27 17:01:02] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 17:01:02] [INFO ] [STATE] active → finished

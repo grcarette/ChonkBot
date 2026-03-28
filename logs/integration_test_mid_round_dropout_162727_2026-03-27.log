@@ -1,0 +1,25 @@
+[2026-03-27 16:27:27] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162727_2026-03-27.log
+[2026-03-27 16:27:27] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900001 created — 1 vs 8 (round 1)
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900002 created — 2 vs 3 (round 1)
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900003 created — 4 vs 5 (round 1)
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900004 created — 6 vs 7 (round 1)
+[2026-03-27 16:27:27] [INFO ] [REGISTRATION] 1 (1) dropped
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900001 — winner: 1, loser: 8
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900001 reported — winner: 1, loser: 8
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900002 — winner: 2, loser: 3
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900002 reported — winner: 2, loser: 3
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900003 — winner: 4, loser: 5
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900003 reported — winner: 4, loser: 5
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900004 — winner: 6, loser: 7
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900004 reported — winner: 6, loser: 7
+[2026-03-27 16:27:27] [INFO ] [SWISS] Round 2 started — 6 players, 3 matches
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900005 created — 2 vs 4 (round 2)
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900006 created — 3 vs 6 (round 2)
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900007 created — 5 vs 7 (round 2)
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900005 — winner: 2, loser: 4
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900005 reported — winner: 2, loser: 4
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900006 — winner: 3, loser: 6
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900006 reported — winner: 3, loser: 6
+[2026-03-27 16:27:27] [DEBUG] [TEST] Reporting match 671900007 — winner: 5, loser: 7
+[2026-03-27 16:27:27] [INFO ] [SWISS] Match 671900007 reported — winner: 5, loser: 7

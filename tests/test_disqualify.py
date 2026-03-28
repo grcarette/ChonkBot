@@ -237,12 +237,13 @@ class TestDQActiveLobby:
             await mixin.swiss_record_result('eid', 42, winner_id=200, loser_id=100, is_dq=True)
 
         update_call = dh.swiss_collection.update_one.call_args
-        set_ops = update_call[0][1]['$set']
+        update_op = update_call[0][1]
+        inc_ops = update_op.get('$inc', {})
 
-        assert set_ops['players.100.points'] == -1.0, (
+        assert inc_ops.get('players.100.points') == -1, (
             "DQ'd player must receive -1 points, not 0"
         )
-        assert set_ops['players.200.points'] == 1.0, (
+        assert inc_ops.get('players.200.points') == 1, (
             "Winner must still receive +1 point"
         )
 
@@ -767,5 +768,116 @@ class TestDQCannotRejoin:
         tm.bot.dh.get_registration_status = AsyncMock(return_value=False)
 
         result = await tm.disqualify_player(100)
+
+        assert result is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ISSUE 14 — undq marks player dropped so they must explicitly rejoin
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestUndqRequiresRejoin:
+
+    @pytest.mark.asyncio
+    async def test_undq_swiss_player_sets_dropped_true(self):
+        """
+        undisqualify_player on a Swiss tournament must set dropped=True on the
+        player's swiss event record so they cannot be paired until they rejoin.
+        """
+        from tournaments.tournament_manager import TournamentManager
+
+        tournament = {
+            '_id': 'tid',
+            'format': 'swiss',
+            'dqs': [100],
+        }
+        swiss_event = {
+            '_id': 'eid',
+            'players': {
+                '100': {'dropped': False, 'points': 0.0, 'active_match_id': None},
+            },
+        }
+
+        tm = object.__new__(TournamentManager)
+        tm.tournament = tournament
+        tm.debug = False
+        tm.organizer_role = None
+        tm.lobbies = {}
+
+        tm.bot = MagicMock()
+        tm.bot.dh = AsyncMock()
+        tm.bot.dh.undisqualify_player = AsyncMock(return_value=True)
+        tm.bot.dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
+        tm.bot.dh.swiss_collection = AsyncMock()
+        tm.bot.dh.swiss_collection.update_one = AsyncMock()
+
+        tm.get_tournament = AsyncMock(return_value=tournament)
+        tm.format = MagicMock()  # format is truthy
+
+        from utils.event_logger import EventLogger
+        tm.logger = EventLogger('test')
+
+        await tm.undisqualify_player(100)
+
+        tm.bot.dh.swiss_collection.update_one.assert_awaited_once()
+        call_args = tm.bot.dh.swiss_collection.update_one.call_args
+        update_op = call_args[0][1]
+        assert update_op.get('$set', {}).get('players.100.dropped') is True, (
+            "Un-DQ'd Swiss player must be set to dropped=True to require explicit rejoin"
+        )
+
+    @pytest.mark.asyncio
+    async def test_undq_non_swiss_does_not_set_dropped(self):
+        """undisqualify_player on a non-Swiss tournament must not touch swiss event."""
+        from tournaments.tournament_manager import TournamentManager
+
+        tournament = {
+            '_id': 'tid',
+            'format': 'double elimination',
+            'dqs': [100],
+        }
+
+        tm = object.__new__(TournamentManager)
+        tm.tournament = tournament
+        tm.debug = False
+        tm.organizer_role = None
+        tm.lobbies = {}
+
+        tm.bot = MagicMock()
+        tm.bot.dh = AsyncMock()
+        tm.bot.dh.undisqualify_player = AsyncMock(return_value=True)
+        tm.bot.dh.swiss_collection = AsyncMock()
+        tm.bot.dh.swiss_collection.update_one = AsyncMock()
+
+        tm.get_tournament = AsyncMock(return_value=tournament)
+        tm.format = MagicMock()
+
+        from utils.event_logger import EventLogger
+        tm.logger = EventLogger('test')
+
+        await tm.undisqualify_player(100)
+
+        tm.bot.dh.swiss_collection.update_one.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_undq_player_not_in_dqs_returns_false(self):
+        """undisqualify_player must return False if the player is not in dqs."""
+        from tournaments.tournament_manager import TournamentManager
+
+        tournament = {
+            '_id': 'tid',
+            'format': 'swiss',
+            'dqs': [],  # player not DQ'd
+        }
+
+        tm = object.__new__(TournamentManager)
+        tm.tournament = tournament
+        tm.get_tournament = AsyncMock(return_value=tournament)
+        tm.bot = MagicMock()
+        tm.bot.dh = AsyncMock()
+        from utils.event_logger import EventLogger
+        tm.logger = EventLogger('test')
+
+        result = await tm.undisqualify_player(100)
 
         assert result is False

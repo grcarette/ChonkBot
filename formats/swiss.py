@@ -1,5 +1,6 @@
 # formats/swiss.py
 
+import asyncio
 import discord
 
 from formats.base import BaseFormat
@@ -27,6 +28,13 @@ class SwissFormat(BaseFormat):
         super().__init__(tm)
         self.manager = SwissManager(tm)
         self.pending_results: list[dict] = []
+
+    def _get_flush_lock(self) -> asyncio.Lock:
+        lock = getattr(self, '_flush_lock_instance', None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._flush_lock_instance = lock
+        return lock
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -71,13 +79,13 @@ class SwissFormat(BaseFormat):
 
     async def on_player_register(self, user_id: int, user: dict) -> None:
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+        rejoined = False
         if swiss_event:
             rejoined = await self.dh.swiss_rejoin_player(swiss_event['_id'], user_id)
             if not rejoined:
-                # Check if player is DQ'd before adding as fresh player
                 tournament = await self.tm.get_tournament()
                 if user_id in tournament.get('dqs', []):
-                    return  # DQ'd players cannot rejoin
+                    return
                 ranked_player = await self.tm.get_ranked_player(user_id)
                 elo = ranked_player['elo'] if ranked_player else 1200
                 username = user['name'] if user else f"Player {user_id}"
@@ -155,17 +163,30 @@ class SwissFormat(BaseFormat):
     async def flush_pending_results(self) -> None:
         """
         Report all pending match results to UCH Ranked.
+        Protected by a lock to prevent double-flush from concurrent
+        check_round_complete calls. Marks each match as flushed in the DB
+        so bot restarts don't double-report.
         """
-        if not self.pending_results:
-            return
+        async with self._get_flush_lock():
+            if not self.pending_results:
+                return
 
-        for result in self.pending_results:
-            # report_result_to_ranked_api handles its own SUCCESS/FAIL logging internally
-            await self.tm.report_result_to_ranked_api(
-                result['winner_id'], result['loser_id']
-            )
+            to_flush = list(self.pending_results)
+            self.pending_results.clear()
 
-        self.pending_results.clear()
+            swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
+            if not swiss_event:
+                return
+
+            for result in to_flush:
+                await self.tm.report_result_to_ranked_api(
+                    result['winner_id'], result['loser_id']
+                )
+                match_id = result.get('match_id')
+                if match_id is not None:
+                    await self.dh.swiss_mark_match_flushed(
+                        swiss_event['_id'], match_id
+                    )
 
     async def on_tournament_end(self) -> None:
         """Flush any remaining results then post final standings."""
@@ -225,6 +246,8 @@ class SwissFormat(BaseFormat):
         final_round_active = current_round >= round_limit
         round_ready = (
             tournament.get('state') == 'active'
+            and active_matches == 0
+            and players_remaining > 1
             and swiss_event.get('current_round', 0) < swiss_event.get('round_limit', 8)
         )
         return {
@@ -240,7 +263,21 @@ class SwissFormat(BaseFormat):
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if not swiss_event:
             return
+
+        # Block reopen if other matches in this round are still active
         match_id = lobby.match_id
+        players = swiss_event.get('players', {})
+        other_active = any(
+            p.get('active_match_id') is not None and p.get('active_match_id') != match_id
+            for p in players.values()
+            if not p.get('dropped')
+        )
+        if other_active:
+            raise ValueError(
+                'Cannot reopen a match while other matches in this round are still active. '
+                'Wait for all matches to finish first.'
+            )
+
         await self.dh.swiss_unrecord_result(swiss_event['_id'], match_id)
         for player_id in lobby_db.get('players', []):
             await self.dh.swiss_set_active_match(swiss_event['_id'], player_id, match_id)

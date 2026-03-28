@@ -1,0 +1,18 @@
+[2026-03-27 16:24:37] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162437_2026-03-27.log
+[2026-03-27 16:24:37] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300001 created — 1 vs 8 (round 1)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300002 created — 2 vs 3 (round 1)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300003 created — 4 vs 5 (round 1)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300004 created — 6 vs 7 (round 1)
+[2026-03-27 16:24:37] [INFO ] [REGISTRATION] 1 (1) dropped
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300001 reported — winner: 1, loser: 8
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300002 reported — winner: 2, loser: 3
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300003 reported — winner: 4, loser: 5
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300004 reported — winner: 6, loser: 7
+[2026-03-27 16:24:37] [INFO ] [SWISS] Round 2 started — 6 players, 3 matches
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300005 created — 2 vs 4 (round 2)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300006 created — 3 vs 6 (round 2)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300007 created — 5 vs 7 (round 2)
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300005 reported — winner: 2, loser: 4
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300006 reported — winner: 3, loser: 6
+[2026-03-27 16:24:37] [INFO ] [SWISS] Match 465300007 reported — winner: 5, loser: 7

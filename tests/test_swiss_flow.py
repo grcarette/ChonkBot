@@ -15,11 +15,9 @@ Covers:
 - check_round_complete: calls end_event when event is complete
 - on_player_joined: triggers pairing when between rounds
 - on_player_joined: does nothing when matches are active
-- on_player_joined: cancels bye wait when a new player joins
+- on_player_joined: does nothing (new players wait for next round)
 - on_player_dropped: triggers round complete check when current_round > 0
 - on_player_dropped: does nothing at round 0
-- Bye timer: awards bye after wait if player still in queue
-- Bye timer: does not award bye if queue was cleared
 """
 
 import pytest
@@ -118,7 +116,7 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
     sm.randomize_stagelist = AsyncMock()
     sm.end_event = AsyncMock()
     sm.post_round_complete = AsyncMock()
-    sm.start_bye_wait = AsyncMock()
+    sm.award_bye = AsyncMock()
 
     return sm, dh, swiss_event, tournament
 
@@ -179,14 +177,14 @@ async def test_pairing_cycle_ends_event_when_complete():
 
 
 @pytest.mark.asyncio
-async def test_pairing_cycle_starts_bye_wait_for_single_player():
+async def test_pairing_cycle_awards_immediate_bye_for_single_player():
     players = {'1': make_player_doc(1)}
     sm, dh, swiss_event, _ = make_swiss_manager(players=players)
     dh.swiss_get_available_players = AsyncMock(return_value=[
         {'discord_id': 1, **players['1']}
     ])
     await sm.run_pairing_cycle()
-    sm.start_bye_wait.assert_awaited_once()
+    sm.award_bye.assert_awaited_once()
     sm.call_match.assert_not_awaited()
 
 
@@ -249,15 +247,13 @@ async def test_round_complete_ends_event_when_complete():
 # ─── on_player_joined ────────────────────────────────────────────────────────-
 
 @pytest.mark.asyncio
-async def test_player_joining_mid_round_does_not_trigger_pairing():
-    players = {
-        '1': make_player_doc(1, active_match_id=100),
-        '2': make_player_doc(2, active_match_id=100),
-    }
+async def test_player_joining_does_not_trigger_any_action():
+    """New players wait for the next round — on_player_joined is a no-op."""
+    players = {'1': make_player_doc(1)}
     sm, dh, swiss_event, _ = make_swiss_manager(players=players)
-    sm.run_pairing_cycle = AsyncMock()
     await sm.on_player_joined()
-    sm.run_pairing_cycle.assert_not_awaited()
+    sm.award_bye.assert_not_awaited()
+    sm.call_match.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -290,45 +286,3 @@ async def test_player_dropping_before_rounds_start_does_nothing():
     await sm.on_player_dropped()
     sm.check_round_complete.assert_not_awaited()
 
-
-# ─── Bye timer ────────────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_bye_timer_awards_bye_when_player_still_in_queue():
-    sm, dh, swiss_event, _ = make_swiss_manager()
-    swiss_event['bye_queue'] = 42
-    dh.get_swiss_event = AsyncMock(return_value=swiss_event)
-    sm.check_round_complete = AsyncMock()
-
-    with patch('tournaments.swiss_manager.BYE_WAIT_SECONDS', 0):
-        await sm._bye_timer(42, 'eid')
-
-    dh.swiss_award_bye.assert_awaited_once_with('eid', 42)
-
-
-@pytest.mark.asyncio
-async def test_bye_timer_does_not_award_bye_when_queue_cleared():
-    sm, dh, swiss_event, _ = make_swiss_manager()
-    swiss_event['bye_queue'] = None  # someone else joined
-    dh.get_swiss_event = AsyncMock(return_value=swiss_event)
-
-    with patch('tournaments.swiss_manager.BYE_WAIT_SECONDS', 0):
-        await sm._bye_timer(42, 'eid')
-
-    dh.swiss_award_bye.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_bye_timer_cancelled_does_not_award_bye():
-    sm, dh, swiss_event, _ = make_swiss_manager()
-
-    async def immediate_cancel(discord_id, event_id):
-        raise asyncio.CancelledError()
-
-    with patch.object(sm, '_bye_timer', immediate_cancel):
-        try:
-            await sm._bye_timer(42, 'eid')
-        except asyncio.CancelledError:
-            pass
-
-    dh.swiss_award_bye.assert_not_awaited()

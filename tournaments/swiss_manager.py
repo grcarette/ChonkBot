@@ -7,9 +7,6 @@ from tournaments.swiss_pairing import pair_players, select_bye_candidate
 from utils.messages import get_mentions
 from tournaments.match_service import MatchService
 
-BYE_WAIT_SECONDS = 300  # 5 minutes
-
-
 class SwissManager:
     """
     Handles all match calling logic for swiss format tournaments.
@@ -22,8 +19,14 @@ class SwissManager:
         self.bot = tournament_manager.bot
         self.dh = tournament_manager.bot.dh
         self.guild = tournament_manager.guild
-        self.bye_task = None
         self.running = False
+
+    def _get_pairing_lock(self) -> asyncio.Lock:
+        lock = getattr(self, '_pairing_lock_instance', None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._pairing_lock_instance = lock
+        return lock
 
     # ─── Start ────────────────────────────────────────────────────────────────
 
@@ -35,6 +38,14 @@ class SwissManager:
     # ─── Main pairing cycle ───────────────────────────────────────────────────
 
     async def run_pairing_cycle(self):
+        lock = self._get_pairing_lock()
+        if lock.locked():
+            self.tm.logger.warning('SWISS', 'Pairing cycle already in progress — ignoring duplicate call')
+            return
+        async with lock:
+            await self._run_pairing_cycle_inner()
+
+    async def _run_pairing_cycle_inner(self):
         if not self.running:
             return
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
@@ -47,8 +58,9 @@ class SwissManager:
         available = await self.dh.swiss_get_available_players(swiss_event['_id'])
 
         if len(available) < 2:
-            if len(available) == 1 and self.bye_task is None:
-                await self.start_bye_wait(available[0], swiss_event)
+            if len(available) == 1:
+                await self.award_bye(available[0], swiss_event)
+                await self.check_round_complete()
             return
 
         await self.close_previous_round_channels(swiss_event['_id'])
@@ -71,8 +83,8 @@ class SwissManager:
 
         if unpaired:
             candidate = select_bye_candidate(unpaired)
-            if candidate and self.bye_task is None:
-                await self.start_bye_wait(candidate, swiss_event)
+            if candidate:
+                await self.award_bye(candidate, swiss_event)
 
     # ─── Channel cleanup ─────────────────────────────────────────────────────
 
@@ -112,7 +124,7 @@ class SwissManager:
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
             standings_text = "\n".join(
-                f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L)"
+                f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L-{p.get('byes', 0)}B)"
                 for i, p in enumerate(standings)
             )
             embed = discord.Embed(
@@ -174,49 +186,19 @@ class SwissManager:
 
     # ─── Bye logic ────────────────────────────────────────────────────────────
 
-    async def start_bye_wait(self, candidate: dict, swiss_event: dict):
-        """Start a 5-minute wait before awarding a bye to the candidate."""
-        await self.dh.swiss_set_bye_queue(swiss_event['_id'], candidate['discord_id'])
+    async def award_bye(self, candidate: dict, swiss_event: dict):
+        """Award an immediate bye to the unpaired player."""
+        discord_id = candidate['discord_id']
+        await self.dh.swiss_award_bye(swiss_event['_id'], discord_id)
+        self.tm.logger.bye_awarded(discord_id)
 
         match_call_channel = await self.tm.get_channel('match-calling')
         if match_call_channel:
-            mention = f"<@{candidate['discord_id']}>"
+            mention = f"<@{discord_id}>"
             await match_call_channel.send(
-                f"{mention} You currently have no opponent. "
-                f"If no one becomes available in 5 minutes, you will receive a bye."
+                f"{mention} No opponent is available this round. "
+                f"You have been awarded a bye (+1 point)."
             )
-
-        self.bye_task = asyncio.create_task(
-            self._bye_timer(candidate['discord_id'], swiss_event['_id'])
-        )
-
-    async def _bye_timer(self, discord_id: int, event_id):
-        """Wait then award the bye if the player is still in the queue."""
-        try:
-            await asyncio.sleep(BYE_WAIT_SECONDS)
-        except asyncio.CancelledError:
-            return
-
-        event = await self.dh.get_swiss_event(event_id)
-        if event.get('bye_queue') == discord_id:
-            await self.dh.swiss_award_bye(event_id, discord_id)
-            self.bye_task = None
-
-            match_call_channel = await self.tm.get_channel('match-calling')
-            if match_call_channel:
-                mention = f"<@{discord_id}>"
-                await match_call_channel.send(
-                    f"{mention} No opponent was found. You have been awarded a bye (+1 point)."
-                )
-
-            await self.check_round_complete()
-
-    async def cancel_bye_wait(self, event_id):
-        """Cancel a pending bye wait."""
-        if self.bye_task and not self.bye_task.done():
-            self.bye_task.cancel()
-            self.bye_task = None
-        await self.dh.swiss_set_bye_queue(event_id, None)
 
     # ─── Called after a match finishes ───────────────────────────────────────
 
@@ -229,15 +211,9 @@ class SwissManager:
     async def on_player_joined(self):
         """
         Called when a player registers during an active swiss event.
-        They will be considered in the next run_pairing_cycle call.
+        They will be paired in the next round — no mid-round intervention.
         """
-        if not self.running:
-            return
-
-        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
-
-        if swiss_event.get('bye_queue') is not None:
-            await self.cancel_bye_wait(swiss_event['_id'])
+        pass
 
     # ─── Called when a player drops ───────────────────────────────────────────
 
@@ -271,7 +247,7 @@ class SwissManager:
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
             standings_text = "\n".join(
-                f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L)"
+                f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L-{p.get('byes', 0)}B)"
                 for i, p in enumerate(standings)
             )
             embed = discord.Embed(

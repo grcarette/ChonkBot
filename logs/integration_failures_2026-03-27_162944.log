@@ -1,0 +1,190 @@
+=== Integration Test Failures � 2026-03-27_162944 ===
+
+============================================================
+FAILED: odd_players
+============================================================
+[2026-03-27 16:29:46] [INFO ] [LOGGER] Log opened — logs\integration_test_odd_players_162946_2026-03-27.log
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 created — 1 vs 2 (round 1)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400002 created — 3 vs 5 (round 1)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400003 created — 6 vs 7 (round 1)
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400001 — winner: 1, loser: 2
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 reported — winner: 1, loser: 2
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400002 — winner: 3, loser: 5
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400002 reported — winner: 3, loser: 5
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400003 — winner: 6, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400003 reported — winner: 6, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 created — 1 vs 3 (round 2)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400005 created — 2 vs 6 (round 2)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400006 created — 5 vs 7 (round 2)
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400004 — winner: 1, loser: 3
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 reported — winner: 1, loser: 3
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400005 — winner: 2, loser: 6
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400005 reported — winner: 2, loser: 6
+[2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400006 — winner: 5, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400006 reported — winner: 5, loser: 7
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 complete
+[2026-03-27 16:29:46] [INFO ] [SWISS] Round 3 started — 7 players, 3 matches
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400007 created — 1 vs 7 (round 3)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400008 created — 2 vs 3 (round 3)
+[2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400009 created — 5 vs 6 (round 3)
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400007 — winner: 1, loser: 7
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400007 reported — winner: 1, loser: 7
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400008 — winner: 2, loser: 3
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400008 reported — winner: 2, loser: 3
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400009 — winner: 5, loser: 6
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400009 reported — winner: 5, loser: 6
+[2026-03-27 16:29:47] [INFO ] [SWISS] Round 3 complete
+[2026-03-27 16:29:47] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:29:47] [INFO ] [STATE] active → finished
+
+
+Missing patterns:
+  Missing pattern: \[SWISS\] Bye awarded to \S+
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:46] [INFO ] [LOGGER] Log opened — logs\integration_test_odd_players_162946_2026-03-27.log
+        L1: [2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 started — 7 players, 3 matches
+        L2: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 created — 1 vs 2 (round 1)
+        L3: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400002 created — 3 vs 5 (round 1)
+        L4: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400003 created — 6 vs 7 (round 1)
+        L5: [2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400001 — winner: 1, loser: 2
+        L6: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400001 reported — winner: 1, loser: 2
+  Missing pattern: \[SWISS\] Bye awarded to \S+
+      Expected after line 13. Nearby log lines:
+        L11: [2026-03-27 16:29:46] [INFO ] [SWISS] Round 1 complete
+        L12: [2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+        L13: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 created — 1 vs 3 (round 2)
+        L14: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400005 created — 2 vs 6 (round 2)
+        L15: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400006 created — 5 vs 7 (round 2)
+        L16: [2026-03-27 16:29:46] [DEBUG] [TEST] Reporting match 692400004 — winner: 1, loser: 3
+        L17: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400004 reported — winner: 1, loser: 3
+  Missing pattern: \[SWISS\] Bye awarded to \S+
+      Expected after line 24. Nearby log lines:
+        L22: [2026-03-27 16:29:46] [INFO ] [SWISS] Round 2 complete
+        L23: [2026-03-27 16:29:46] [INFO ] [SWISS] Round 3 started — 7 players, 3 matches
+        L24: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400007 created — 1 vs 7 (round 3)
+        L25: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400008 created — 2 vs 3 (round 3)
+        L26: [2026-03-27 16:29:46] [INFO ] [SWISS] Match 692400009 created — 5 vs 6 (round 3)
+        L27: [2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 692400007 — winner: 1, loser: 7
+        L28: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 692400007 reported — winner: 1, loser: 7
+
+============================================================
+FAILED: mid_round_dropout
+============================================================
+[2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+[2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+[2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 922600001 — winner: 1, loser: 8
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 reported — winner: 1, loser: 8
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 922600002 — winner: 2, loser: 3
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 reported — winner: 2, loser: 3
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 922600003 — winner: 4, loser: 5
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 reported — winner: 4, loser: 5
+[2026-03-27 16:29:47] [DEBUG] [TEST] Reporting match 922600004 — winner: 6, loser: 7
+[2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 reported — winner: 6, loser: 7
+[2026-03-27 16:29:48] [INFO ] [SWISS] Round 2 started — 6 players, 3 matches
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600005 created — 2 vs 4 (round 2)
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600006 created — 3 vs 6 (round 2)
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600007 created — 5 vs 7 (round 2)
+[2026-03-27 16:29:48] [DEBUG] [TEST] Reporting match 922600005 — winner: 2, loser: 4
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600005 reported — winner: 2, loser: 4
+[2026-03-27 16:29:48] [DEBUG] [TEST] Reporting match 922600006 — winner: 3, loser: 6
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600006 reported — winner: 3, loser: 6
+[2026-03-27 16:29:48] [DEBUG] [TEST] Reporting match 922600007 — winner: 5, loser: 7
+[2026-03-27 16:29:48] [INFO ] [SWISS] Match 922600007 reported — winner: 5, loser: 7
+
+
+Missing patterns:
+  Missing pattern: \[REGISTRATION\] \S+ dropped
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+  Missing pattern: \[SWISS\] Round 1 complete
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+  Missing pattern: \[SWISS\] Round 2 started — 7 players, 3 matches
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+  Missing pattern: \[SWISS\] Bye awarded to \S+
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+  Missing pattern: \[SWISS\] Round 2 complete
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+  Missing pattern: \[STATE\] active → finished
+      Expected after line 2. Nearby log lines:
+        L0: [2026-03-27 16:29:47] [INFO ] [LOGGER] Log opened — logs\integration_test_mid_round_dropout_162947_2026-03-27.log
+        L1: [2026-03-27 16:29:47] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+        L2: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600001 created — 1 vs 8 (round 1)
+        L3: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600002 created — 2 vs 3 (round 1)
+        L4: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600003 created — 4 vs 5 (round 1)
+        L5: [2026-03-27 16:29:47] [INFO ] [SWISS] Match 922600004 created — 6 vs 7 (round 1)
+        L6: [2026-03-27 16:29:47] [INFO ] [REGISTRATION] 1 (1) dropped
+
+============================================================
+FAILED: ranked_api_failure
+============================================================
+[2026-03-27 16:29:51] [INFO ] [LOGGER] Log opened — logs\integration_test_ranked_api_failure_162951_2026-03-27.log
+[2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200001 created — 1 vs 2 (round 1)
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200002 created — 3 vs 4 (round 1)
+[2026-03-27 16:29:51] [DEBUG] [TEST] Reporting match 92200001 — winner: 1, loser: 2
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200001 reported — winner: 1, loser: 2
+[2026-03-27 16:29:51] [DEBUG] [TEST] Reporting match 92200002 — winner: 3, loser: 4
+[2026-03-27 16:29:51] [INFO ] [SWISS] Match 92200002 reported — winner: 3, loser: 4
+[2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 1, loser: 2 — Mock API failure
+[2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 3, loser: 4 — Mock API failure
+[2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:29:51] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:29:51] [INFO ] [STATE] active → finished
+
+
+Missing patterns:
+  Missing pattern: \[ERROR\].*\[RANKED\] API failure
+      Expected after line 11. Nearby log lines:
+        L9: [2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 3, loser: 4 — Mock API failure
+        L10: [2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 complete
+        L11: [2026-03-27 16:29:51] [INFO ] [STATE] Tournament ended — all lobbies closed
+        L12: [2026-03-27 16:29:51] [INFO ] [STATE] active → finished
+  Missing pattern: \[ERROR\].*\[RANKED\] API failure
+      Expected after line 11. Nearby log lines:
+        L9: [2026-03-27 16:29:51] [ERROR] [RANKED] API failure — winner: 3, loser: 4 — Mock API failure
+        L10: [2026-03-27 16:29:51] [INFO ] [SWISS] Round 1 complete
+        L11: [2026-03-27 16:29:51] [INFO ] [STATE] Tournament ended — all lobbies closed
+        L12: [2026-03-27 16:29:51] [INFO ] [STATE] active → finished
+

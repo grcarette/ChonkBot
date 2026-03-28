@@ -1,0 +1,22 @@
+[2026-03-27 16:24:38] [INFO ] [LOGGER] Log opened — logs\integration_test_dq_mid_round_162438_2026-03-27.log
+[2026-03-27 16:24:38] [INFO ] [SWISS] Round 1 started — 8 players, 4 matches
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800001 created — 1 vs 8 (round 1)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800002 created — 2 vs 3 (round 1)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800003 created — 4 vs 5 (round 1)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800004 created — 6 vs 7 (round 1)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800002 reported — winner: 3, loser: 2 [DQ]
+[2026-03-27 16:24:38] [INFO ] [DQ] Player 2 disqualified — active match ended, 3 wins by default
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800001 reported — winner: 1, loser: 8
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800003 reported — winner: 4, loser: 5
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800004 reported — winner: 6, loser: 7
+[2026-03-27 16:24:38] [INFO ] [SWISS] Round 1 complete
+[2026-03-27 16:24:38] [INFO ] [SWISS] Round 2 started — 7 players, 3 matches
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800005 created — 1 vs 3 (round 2)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800006 created — 8 vs 6 (round 2)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800007 created — 4 vs 7 (round 2)
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800005 reported — winner: 1, loser: 3
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800006 reported — winner: 8, loser: 6
+[2026-03-27 16:24:38] [INFO ] [SWISS] Match 315800007 reported — winner: 4, loser: 7
+[2026-03-27 16:24:38] [INFO ] [SWISS] Round 2 complete
+[2026-03-27 16:24:38] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-27 16:24:38] [INFO ] [STATE] active → finished

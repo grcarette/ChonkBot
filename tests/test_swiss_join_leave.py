@@ -158,9 +158,8 @@ async def test_rejoin_preserves_accumulated_points_and_wins():
 @pytest.mark.asyncio
 async def test_leave_with_no_matches_played_removes_from_scoreboard():
     """
-    A player who leaves having never played a match must be fully removed
-    from the swiss event (not just dropped=True) so they don't appear on
-    the standings.
+    A player who leaves having never played a match must be marked dropped=True
+    so their record is preserved for potential rejoin, preventing double elo bonus.
     """
     from data.swiss import SwissMethodsMixin
 
@@ -192,13 +191,12 @@ async def test_leave_with_no_matches_played_removes_from_scoreboard():
     with patch('data.swiss.ObjectId', side_effect=lambda x: x):
         await mixin.swiss_drop_player('eid', 100)
 
-    # For a player with rounds_played == 0, the update must $unset their record
     update_call = mixin.swiss_collection.update_one.call_args
     update_op = update_call[0][1]
-    assert '$unset' in update_op, (
-        "Player with no matches must be fully removed via $unset, not just dropped=True"
+    assert '$set' in update_op
+    assert update_op['$set'].get('players.100.dropped') is True, (
+        "Player must be marked dropped=True even with no matches played"
     )
-    assert f'players.100' in update_op['$unset']
 
 
 @pytest.mark.asyncio
@@ -423,7 +421,8 @@ async def test_leave_mid_match_leaving_player_not_penalized():
     with patch('data.swiss.ObjectId', side_effect=lambda x: x):
         await mixin.swiss_record_result('eid', 42, winner_id=200, loser_id=100, is_dq=False)
 
-    set_ops = mixin.swiss_collection.update_one.call_args[0][1]['$set']
-    assert set_ops['players.100.points'] == 1.0, (
-        "Leaving player's points must not be reduced — voluntary leave is not a DQ"
+    update_op = mixin.swiss_collection.update_one.call_args[0][1]
+    inc_ops = update_op.get('$inc', {})
+    assert f'players.100.points' not in inc_ops, (
+        "Leaving player's points must not be decremented — voluntary leave is not a DQ"
     )
