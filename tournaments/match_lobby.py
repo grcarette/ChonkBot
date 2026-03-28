@@ -57,6 +57,7 @@ class MatchLobby:
             await self.setup_lobby()
         lobby = await self.get_lobby()
         self.remaining_players = set([player for player in self.players if player not in lobby['results']])
+        self.resolve = False
 
         return self
 
@@ -221,6 +222,10 @@ class MatchLobby:
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
     
     async def end_reporting(self, winner_id, is_dq=False):
+        if self.resolved:
+            return
+        self.resolved = True
+
         winner_id = str(winner_id)
         import time
         t0 = time.perf_counter()

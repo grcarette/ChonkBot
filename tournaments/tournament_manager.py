@@ -1276,6 +1276,7 @@ class TournamentManager:
         )
 
         match_lobby.remaining_players = set(lobby_db.get('players', []))
+        match_lobby.resolved = False
 
         # Notify channel if present
         if match_lobby.channel:
@@ -1856,6 +1857,7 @@ class TournamentManager:
                     # Notify the lobby channel
                     lobby = self.lobbies.get(active_match_id)
                     if lobby and lobby.channel:
+                        lobby.resolve = True
                         embed = discord.Embed(
                             title="Player Left",
                             description=(
