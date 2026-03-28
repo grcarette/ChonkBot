@@ -176,12 +176,7 @@ class LobbyMethodsMixin:
     
     async def report_match(self, match_id, winner_id):
         query = {'match_id': match_id}
-        # Store as int if possible (solo mode), otherwise as string (teams mode)
-        try:
-            stored_id = int(winner_id)
-        except (ValueError, TypeError):
-            stored_id = str(winner_id)
-        update = {'$push': {'results': stored_id}}
+        update = {'$push': {'results': str(winner_id)}}
         result = await self.lobby_collection.update_one(query, update)
         lobby = await self.lobby_collection.find_one(query)
         return lobby
@@ -306,7 +301,7 @@ class LobbyMethodsMixin:
         query = {
             'tournament': ObjectId(tournament_id),
             'state': {'$nin': ['closed', 'finished']},
-            'players': {'$in': [user_id]}
+            'players': {'$in': [str(user_id)]}
         }
         active_match = await self.lobby_collection.find_one(query)
         return active_match

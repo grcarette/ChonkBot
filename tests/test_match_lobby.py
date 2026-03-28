@@ -33,8 +33,8 @@ def make_lobby(is_dq=False, num_winners=1, stages=None):
     lobby.match_id = 10
     lobby.lobby_name = 'wr1-A vs B'
     lobby.bracket = 'Winners'
-    lobby.players = [100, 200]
-    lobby.remaining_players = {100, 200}
+    lobby.players = ['100', '200']
+    lobby.remaining_players = {'100', '200'}
     lobby.stages = stages or ['s1', 's2', 's3']
     lobby.num_winners = num_winners
     lobby.channel = AsyncMock()
@@ -58,15 +58,15 @@ def make_lobby(is_dq=False, num_winners=1, stages=None):
 
     lobby.dh = AsyncMock()
     lobby.dh.get_lobby = AsyncMock(return_value={
-        'results': [100],
-        'players': [100, 200],
+        'results': ['100'],
+        'players': ['100', '200'],
         'picked_stage': 's1',
         'checked_in': [],
     })
     lobby.dh.update_lobby_state = AsyncMock()
     lobby.dh.delete_lobby = AsyncMock()
     lobby.dh.pick_lobby_stage = AsyncMock()
-    lobby.dh.reset_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': None})
+    lobby.dh.reset_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': None})
     lobby.dh.get_stage = AsyncMock(return_value={'name': 'Test Stage', 'code': 's1'})
 
     lobby.send_player_instructions = AsyncMock()
@@ -185,7 +185,7 @@ async def test_end_reporting_calls_match_service_when_present():
 
     await MatchLobby.end_reporting(real_lobby, winner_id=100)
 
-    real_lobby.match_service.record_result.assert_awaited_once_with(100, 200, False)
+    real_lobby.match_service.record_result.assert_awaited_once_with('100', '200', False)
 
 
 @pytest.mark.asyncio
@@ -319,8 +319,8 @@ async def test_force_advance_reporting_resets_db():
     lobby = make_lobby()
     real_lobby = object.__new__(MatchLobby)
     real_lobby.__dict__.update(lobby.__dict__)
-    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': 's1'})
-    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': 's1'})
+    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': 's1'})
+    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': 's1'})
 
     await MatchLobby.force_advance(real_lobby, 'reporting')
 
@@ -333,8 +333,8 @@ async def test_force_advance_reporting_picks_stage_when_none():
     lobby = make_lobby()
     real_lobby = object.__new__(MatchLobby)
     real_lobby.__dict__.update(lobby.__dict__)
-    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': None})
-    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': None})
+    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': None})
+    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': None})
 
     await MatchLobby.force_advance(real_lobby, 'reporting')
 
@@ -347,8 +347,8 @@ async def test_force_advance_reporting_does_not_overwrite_existing_stage():
     lobby = make_lobby()
     real_lobby = object.__new__(MatchLobby)
     real_lobby.__dict__.update(lobby.__dict__)
-    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': 's2'})
-    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': [100, 200], 'picked_stage': 's2'})
+    real_lobby.dh.get_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': 's2'})
+    real_lobby.dh.reset_lobby = AsyncMock(return_value={'players': ['100', '200'], 'picked_stage': 's2'})
 
     await MatchLobby.force_advance(real_lobby, 'reporting')
 

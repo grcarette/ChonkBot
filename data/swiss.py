@@ -149,8 +149,8 @@ class SwissMethodsMixin:
         self,
         event_id: ObjectId,
         match_id: int,
-        player_1: int,
-        player_2: int,
+        player_1,
+        player_2,
         round_number: int,
     ) -> dict:
         """
@@ -158,10 +158,12 @@ class SwissMethodsMixin:
         Also marks both players as having an active match
         and records them in each other's match history.
         """
+        p1 = str(player_1)
+        p2 = str(player_2)
         match = {
             'match_id': match_id,
-            'player_1': player_1,
-            'player_2': player_2,
+            'player_1': p1,
+            'player_2': p2,
             'winner': None,
             'state': 'active',
             'round_number': round_number,
@@ -172,12 +174,12 @@ class SwissMethodsMixin:
             {
                 '$push': {'matches': match},
                 '$set': {
-                    f'players.{player_1}.active_match_id': match_id,
-                    f'players.{player_2}.active_match_id': match_id,
+                    f'players.{p1}.active_match_id': match_id,
+                    f'players.{p2}.active_match_id': match_id,
                 },
                 '$addToSet': {
-                    f'players.{player_1}.match_history': player_2,
-                    f'players.{player_2}.match_history': player_1,
+                    f'players.{p1}.match_history': p2,
+                    f'players.{p2}.match_history': p1,
                 }
             }
         )
@@ -211,7 +213,7 @@ class SwissMethodsMixin:
             {'_id': ObjectId(event_id)},
             {
                 '$set': {
-                    'matches.$[m].winner': winner_id,
+                    'matches.$[m].winner': str(winner_id),
                     'matches.$[m].state': 'finished',
                     f'players.{winner_id}.active_match_id': None,
                     f'players.{loser_id}.active_match_id': None,
@@ -234,11 +236,11 @@ class SwissMethodsMixin:
     async def swiss_set_bye_queue(
         self,
         event_id: ObjectId,
-        discord_id: int | None,
+        discord_id,
     ):
         """Set or clear the player waiting for a bye."""
         update = {
-            'bye_queue': discord_id,
+            'bye_queue': str(discord_id) if discord_id is not None else None,
             'bye_task_started_at': _now() if discord_id is not None else None,
         }
         await self.swiss_collection.update_one(
@@ -281,7 +283,7 @@ class SwissMethodsMixin:
         """
         event = await self.get_swiss_event(event_id)
         tournament = await self.get_tournament_by_id(event['tournament_id'])
-        dqs = set(tournament.get('dqs', [])) if tournament else set()
+        dqs = set(str(x) for x in tournament.get('dqs', [])) if tournament else set()
 
         available = []
         for player_id, player in event['players'].items():
@@ -289,13 +291,13 @@ class SwissMethodsMixin:
                 continue
             if '_' in player_id:
                 p1, p2 = player_id.split('_')
-                if int(p1) in dqs or int(p2) in dqs:
+                if p1 in dqs or p2 in dqs:
                     continue
                 available.append({'discord_id': player_id, **player})
             else:
-                if int(player_id) in dqs:
+                if player_id in dqs:
                     continue
-                available.append({'discord_id': int(player_id), **player})
+                available.append({'discord_id': player_id, **player})
         return available
 
     async def swiss_get_standings(self, event_id: ObjectId) -> list[dict]:

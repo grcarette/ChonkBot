@@ -298,7 +298,7 @@ class ChallongeFormat(BaseFormat):
 
         tournament = await self.tm.get_tournament()
         player_1, player_2 = await self.get_players_from_match(match_data)
-        players    = [player_1['user_id'], player_2['user_id']]
+        players    = [str(player_1['user_id']), str(player_2['user_id'])]
         lobby_name = await self.get_lobby_name(match_data)
 
         async def on_complete(result):
@@ -336,9 +336,9 @@ class ChallongeFormat(BaseFormat):
                       f"should_hold={should_hold}")
                 self.hold_when_ready.discard(match_data['match_id'])
 
-                if player_1['user_id'] in tournament['dqs']:
+                if str(player_1['user_id']) in tournament['dqs']:
                     await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
-                elif player_2['user_id'] in tournament['dqs']:
+                elif str(player_2['user_id']) in tournament['dqs']:
                     await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
                 else:
                     await match_lobby.initialize_match(should_hold)

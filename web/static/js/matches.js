@@ -214,8 +214,9 @@ async function _matchActionAndRefresh(matchId, action, extra = {}) {
 
     _timing.start(`loadTournament_after_action[${matchId}]`);
     const refreshPromises = [loadTournament({ force: true })];
-    if (action === 'force_advance' ||
-        document.getElementById('section-bracket')?.classList.contains('active')) {
+    const bracketSection = document.getElementById('section-bracket');
+    if (bracketSection && (action === 'force_advance' ||
+        bracketSection.classList.contains('active'))) {
         refreshPromises.push(loadBracket());
     }
     await Promise.all(refreshPromises);

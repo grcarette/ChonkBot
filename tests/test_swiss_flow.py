@@ -71,7 +71,7 @@ def make_swiss_manager(players=None, current_round=0, round_limit=3):
     dh.get_swiss_event_by_tournament = AsyncMock(return_value=swiss_event)
     dh.get_swiss_event = AsyncMock(return_value=swiss_event)
     dh.swiss_get_available_players = AsyncMock(return_value=[
-        {'discord_id': int(k), **v}
+        {'discord_id': k, **v}
         for k, v in players.items()
         if not v['dropped'] and v['active_match_id'] is None
     ])
@@ -181,7 +181,7 @@ async def test_pairing_cycle_awards_immediate_bye_for_single_player():
     players = {'1': make_player_doc(1)}
     sm, dh, swiss_event, _ = make_swiss_manager(players=players)
     dh.swiss_get_available_players = AsyncMock(return_value=[
-        {'discord_id': 1, **players['1']}
+        {'discord_id': '1', **players['1']}
     ])
     await sm.run_pairing_cycle()
     sm.award_bye.assert_awaited_once()

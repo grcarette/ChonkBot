@@ -33,13 +33,13 @@ class MatchReportView(discord.ui.View):
                 player = await self.lobby.dh.get_user(user_id=int(user_id))
                 if player is None:
                     print(f"[MatchReportView] Could not find user {user_id} in DB")
-                    self.players[int(user_id)] = str(user_id)
+                    self.players[str(user_id)] = str(user_id)
                 else:
-                    self.players[int(user_id)] = player['name']
+                    self.players[str(user_id)] = player['name']
 
         options = []
         for player_id, name in self.players.items():
-            options.append(discord.SelectOption(label=name, value=str(player_id)))
+            options.append(discord.SelectOption(label=name, value=player_id))
 
         self.select_menu = discord.ui.Select(
             placeholder="Select the winner of the match",
@@ -50,10 +50,7 @@ class MatchReportView(discord.ui.View):
         
     async def select_winner(self, interaction: discord.Interaction):
         self.winner = self.select_menu.values[0]
-        self.select_menu.placeholder = self.players[
-            int(self.winner) if not self.lobby.tournament_manager.is_teams_mode
-            else self.winner
-        ]
+        self.select_menu.placeholder = self.players[self.winner]
         for child in self.children:
             if child.custom_id == 'report_submit':
                 child.disabled = False

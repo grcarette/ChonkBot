@@ -11,6 +11,7 @@ async function loadBracket() {
         if (document.getElementById('section-bracket').classList.contains('active'))
             renderBracket(data);
     } catch (err) {
+        if (err.message?.includes('only available for DE/SE')) return;
         document.getElementById('bracket-wrap').innerHTML =
             `<div class="bracket-unavailable"><p>${escapeHtml(err.message)}</p></div>`;
     }

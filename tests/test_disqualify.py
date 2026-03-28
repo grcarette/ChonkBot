@@ -33,7 +33,7 @@ def make_swiss_tm():
         'format': 'swiss',
         'state': 'active',
         'entrants': {'100': None, '200': None},
-        'checked_in': [100, 200],
+        'checked_in': ['100', '200'],
         'dqs': [],
         'stagelist': [],
         'organizers': [999],
@@ -74,6 +74,8 @@ def make_swiss_tm():
     fmt.manager.on_player_dropped = AsyncMock()
     tm.format = fmt
 
+    from utils.event_logger import EventLogger
+    tm.logger = EventLogger('test')
     tm.get_tournament = AsyncMock(return_value=tournament)
 
     return tm, tournament
@@ -89,7 +91,7 @@ def make_challonge_tm():
         'format': 'double elimination',
         'state': 'active',
         'entrants': {'100': 10, '200': 20},   # discord_id: challonge_id
-        'checked_in': [100, 200],
+        'checked_in': ['100', '200'],
         'dqs': [],
         'stagelist': [],
         'organizers': [999],
@@ -125,6 +127,8 @@ def make_challonge_tm():
     fmt._pending_cache = None
     tm.format = fmt
 
+    from utils.event_logger import EventLogger
+    tm.logger = EventLogger('test')
     tm.get_tournament = AsyncMock(return_value=tournament)
 
     return tm, tournament
@@ -140,7 +144,7 @@ class TestDQActiveLobby:
     async def test_swiss_dq_with_active_lobby_calls_end_reporting_with_opponent_as_winner(self):
         """Opponent must be declared winner when a Swiss player is DQ'd mid-match."""
         tm, _ = make_swiss_tm()
-        lobby_doc = {'match_id': 42, 'players': [100, 200]}
+        lobby_doc = {'match_id': 42, 'players': ['100', '200']}
         tm.bot.dh.find_player_match = AsyncMock(return_value=lobby_doc)
 
         mock_lobby = AsyncMock()
@@ -151,13 +155,13 @@ class TestDQActiveLobby:
         mock_lobby.end_reporting.assert_awaited_once()
         args, kwargs = mock_lobby.end_reporting.call_args
         winner_id = args[0] if args else kwargs.get('winner_id')
-        assert winner_id == 200, "Opponent (200) must be the winner, not the DQ'd player"
+        assert winner_id == '200', "Opponent (200) must be the winner, not the DQ'd player"
 
     @pytest.mark.asyncio
     async def test_challonge_dq_with_active_lobby_calls_end_reporting_with_opponent_as_winner(self):
         """Opponent must be declared winner when a Challonge player is DQ'd mid-match."""
         tm, _ = make_challonge_tm()
-        lobby_doc = {'match_id': 42, 'players': [100, 200]}
+        lobby_doc = {'match_id': 42, 'players': ['100', '200']}
         tm.bot.dh.find_player_match = AsyncMock(return_value=lobby_doc)
 
         mock_lobby = AsyncMock()
@@ -168,7 +172,7 @@ class TestDQActiveLobby:
         mock_lobby.end_reporting.assert_awaited_once()
         args, kwargs = mock_lobby.end_reporting.call_args
         winner_id = args[0] if args else kwargs.get('winner_id')
-        assert winner_id == 200
+        assert winner_id == '200'
 
     @pytest.mark.asyncio
     async def test_dq_end_reporting_is_flagged_as_dq(self):
@@ -265,7 +269,7 @@ class TestDQActiveLobby:
 
         # Player 100 is in match 42, player 300 vs 400 are in match 99
         tm.bot.dh.find_player_match = AsyncMock(
-            return_value={'match_id': 42, 'players': [100, 200]}
+            return_value={'match_id': 42, 'players': ['100', '200']}
         )
 
         lobby_42 = AsyncMock()
@@ -305,14 +309,14 @@ class TestDQExcludedFromPairings:
 
         mixin = object.__new__(SwissMethodsMixin)
         mixin.get_swiss_event = AsyncMock(return_value=event)
-        mixin.get_tournament_by_id = AsyncMock(return_value={'dqs': [100]})
+        mixin.get_tournament_by_id = AsyncMock(return_value={'dqs': ['100']})
 
         available = await mixin.swiss_get_available_players('eid')
         available_ids = [p['discord_id'] for p in available]
 
-        assert 100 not in available_ids, "DQ'd player must be excluded even if dropped=False"
-        assert 200 in available_ids
-        assert 300 in available_ids
+        assert '100' not in available_ids, "DQ'd player must be excluded even if dropped=False"
+        assert '200' in available_ids
+        assert '300' in available_ids
         
     @pytest.mark.asyncio
     async def test_swiss_dq_does_not_call_on_player_unregister(self):
@@ -378,9 +382,9 @@ class TestDQExcludedFromPairings:
         available = await mixin.swiss_get_available_players('eid')
         available_ids = [p['discord_id'] for p in available]
 
-        assert 100 not in available_ids, "DQ'd (dropped) player must not be available for pairing"
-        assert 200 in available_ids
-        assert 300 in available_ids
+        assert '100' not in available_ids, "DQ'd (dropped) player must not be available for pairing"
+        assert '200' in available_ids
+        assert '300' in available_ids
 
     @pytest.mark.asyncio
     async def test_challonge_dq_does_not_call_on_player_unregister(self):
@@ -440,7 +444,7 @@ class TestChallongeDQAutoLose:
         tournament = {
             '_id': 'tid',
             'entrants': {'100': 10, '200': 20},
-            'dqs': [100],   # player 100 is DQ'd
+            'dqs': ['100'],   # player 100 is DQ'd
             'stagelist': [],
             'challonge_data': {'id': 'chid', 'url': 'test-url'},
             'format': 'double elimination',
@@ -493,7 +497,7 @@ class TestChallongeDQAutoLose:
 
         mock_lobby.end_reporting.assert_awaited_once()
         _, kwargs = mock_lobby.end_reporting.call_args
-        assert kwargs.get('winner_id') == 200
+        assert kwargs.get('winner_id') == '200'
         assert kwargs.get('is_dq') is True
 
     @pytest.mark.asyncio
@@ -507,7 +511,7 @@ class TestChallongeDQAutoLose:
         tournament = {
             '_id': 'tid',
             'entrants': {'100': 10, '200': 20},
-            'dqs': [200],   # player 200 is DQ'd
+            'dqs': ['200'],   # player 200 is DQ'd
             'stagelist': [],
             'challonge_data': {'id': 'chid', 'url': 'test-url'},
             'format': 'double elimination',
@@ -559,7 +563,7 @@ class TestChallongeDQAutoLose:
 
         mock_lobby.end_reporting.assert_awaited_once()
         _, kwargs = mock_lobby.end_reporting.call_args
-        assert kwargs.get('winner_id') == 100
+        assert kwargs.get('winner_id') == '100'
         assert kwargs.get('is_dq') is True
 
     @pytest.mark.asyncio
@@ -642,7 +646,7 @@ class TestDQCannotRejoin:
         tournament = {
             '_id': 'tid',
             'state': 'active',
-            'dqs': [100],
+            'dqs': ['100'],
         }
 
         dh = AsyncMock()
@@ -681,7 +685,7 @@ class TestDQCannotRejoin:
         tournament = {
             '_id': 'tid',
             'state': 'active',
-            'dqs': [100],
+            'dqs': ['100'],
         }
 
         dh = AsyncMock()
@@ -789,7 +793,7 @@ class TestUndqRequiresRejoin:
         tournament = {
             '_id': 'tid',
             'format': 'swiss',
-            'dqs': [100],
+            'dqs': ['100'],
         }
         swiss_event = {
             '_id': 'eid',
@@ -834,7 +838,7 @@ class TestUndqRequiresRejoin:
         tournament = {
             '_id': 'tid',
             'format': 'double elimination',
-            'dqs': [100],
+            'dqs': ['100'],
         }
 
         tm = object.__new__(TournamentManager)

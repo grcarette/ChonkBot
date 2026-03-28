@@ -84,7 +84,7 @@ class SwissFormat(BaseFormat):
             rejoined = await self.dh.swiss_rejoin_player(swiss_event['_id'], user_id)
             if not rejoined:
                 tournament = await self.tm.get_tournament()
-                if user_id in tournament.get('dqs', []):
+                if str(user_id) in tournament.get('dqs', []):
                     return
                 ranked_player = await self.tm.get_ranked_player(user_id)
                 elo = ranked_player['elo'] if ranked_player else 1200

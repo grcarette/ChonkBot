@@ -102,7 +102,7 @@ class ForceWinnerView(discord.ui.View):
         self.add_item(winner_select)
 
     async def on_winner_select(self, interaction: discord.Interaction):
-        winner_id = int(interaction.data['values'][0])
+        winner_id = interaction.data['values'][0]
         await interaction.response.defer()
         try:
             await self.match_lobby.force_advance('winner', winner_id=winner_id)

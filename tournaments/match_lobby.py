@@ -63,11 +63,11 @@ class MatchLobby:
     async def get_discord_members(self) -> list[int]:
         """
         Return the flat list of discord user IDs for all players in this lobby.
-        In solo mode: self.players already contains discord IDs, returned as-is.
+        In solo mode: self.players contains string discord IDs; convert to int for Discord API.
         In teams mode: each entry is a team_id string; resolve to both member IDs.
         """
         if not self.tournament_manager.is_teams_mode:
-            return list(self.players)
+            return [int(p) for p in self.players]
         return await self.tournament_manager.resolve_team_members(self.players)
 
     async def get_remaining_discord_members(self) -> list[int]:
@@ -75,17 +75,18 @@ class MatchLobby:
         Same as get_discord_members but scoped to remaining_players (not yet reported).
         """
         if not self.tournament_manager.is_teams_mode:
-            return list(self.remaining_players)
+            return [int(p) for p in self.remaining_players]
         return await self.tournament_manager.resolve_team_members(list(self.remaining_players))
 
     async def _resolve_checkin_slot(self, user_id: int):
         """
         Return the slot identifier this user maps to in remaining_players.
-        Solo mode: returns user_id if present, else None.
+        Solo mode: returns the string player_id if present, else None.
         Teams mode: returns the team_id if user_id is a member of a remaining team, else None.
         """
         if not self.tournament_manager.is_teams_mode:
-            return user_id if user_id in self.remaining_players else None
+            user_id_str = str(user_id)
+            return user_id_str if user_id_str in self.remaining_players else None
         for team_id in self.remaining_players:
             try:
                 p1, p2 = self.tournament_manager._parse_team_id(str(team_id))
@@ -220,6 +221,7 @@ class MatchLobby:
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
     
     async def end_reporting(self, winner_id, is_dq=False):
+        winner_id = str(winner_id)
         import time
         t0 = time.perf_counter()
 

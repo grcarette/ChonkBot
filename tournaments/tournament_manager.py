@@ -123,18 +123,10 @@ class TournamentManager:
         winner_user_id = str(lobby_data['results'][0])
         loser_user_id  = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
 
-        def _cast_id(val):
-            if val is None:
-                return None
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return val
-
         result = {
             'match_id':  lobby_data['match_id'],
-            'winner_id': _cast_id(winner_user_id),
-            'loser_id':  _cast_id(loser_user_id),
+            'winner_id': winner_user_id,
+            'loser_id':  loser_user_id,
             'is_dq':     is_dq,
         }
         self.logger.match_result(result['match_id'], result['winner_id'], result['loser_id'], is_dq)
@@ -536,14 +528,15 @@ class TournamentManager:
                 await self.edit_event_info()
             return
 
-        # ── Solo path (unchanged) ─────────────────────────────────────────────
-        entrants = tournament.get('entrants', [])
+        # ── Solo path ────────────────────────────────────────────────────────────
+        entrants = tournament.get('entrants', {})
         if isinstance(entrants, dict):
-            entrant_ids = [int(k) for k in entrants.keys()]
+            if str(user_id) not in entrants:
+                pass
         else:
-            entrant_ids = [e['discord_id'] for e in entrants]
+            entrants = {str(e['discord_id']): None for e in entrants}
 
-        if int(user_id) not in entrant_ids:
+        if str(user_id) not in entrants:
             self.logger.warning('REGISTRATION', f'Unregister attempted for {user_id} but not in entrants')
             return
 
@@ -843,26 +836,27 @@ class TournamentManager:
             removed_players = []
         elif self.is_teams_mode:
             # Remove any team where at least one member didn't check in
-            checked_in_set = set(tournament['checked_in'])
+            checked_in_set = set(str(x) for x in tournament['checked_in'])
             removed_players = []
             for team_id in tournament['entrants'].keys():
                 team_id_str = str(team_id)
                 if '_' in team_id_str:
                     try:
                         p1, p2 = team_id_str.split('_')
-                        if int(p1) not in checked_in_set or int(p2) not in checked_in_set:
+                        if p1 not in checked_in_set or p2 not in checked_in_set:
                             removed_players.append(team_id_str)
                     except ValueError:
                         pass
                 else:
-                    if int(team_id_str) not in checked_in_set:
+                    if team_id_str not in checked_in_set:
                         removed_players.append(team_id_str)
             for team_id in removed_players:
                 await self.unregister_player(int(team_id.split('_')[0]))
         else:
+            checked_in_set = set(str(x) for x in tournament['checked_in'])
             removed_players = [
                 player for player in tournament['entrants'].keys()
-                if int(player) not in tournament['checked_in']
+                if str(player) not in checked_in_set
             ]
             for player_id in removed_players:
                 self.logger.info('CHECKIN', f'Player {player_id} removed — did not check in')
@@ -953,18 +947,10 @@ class TournamentManager:
         winner_user_id = str(lobby_data['results'][0])
         loser_user_id  = str(lobby_data['results'][1]) if len(lobby_data['results']) > 1 else None
 
-        def _cast_id(val):
-            if val is None:
-                return None
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return val
-
         result = {
             'match_id':  lobby_data['match_id'],
-            'winner_id': _cast_id(winner_user_id),
-            'loser_id':  _cast_id(loser_user_id),
+            'winner_id': winner_user_id,
+            'loser_id':  loser_user_id,
             'is_dq':     is_dq,
         }
         self.logger.match_result(result['match_id'], result['winner_id'], result['loser_id'], is_dq)
@@ -1208,7 +1194,7 @@ class TournamentManager:
         lobby_data = await self.bot.dh.find_player_match(self.tournament['_id'], user_id)
         if lobby_data:
             lobby = self.lobbies[lobby_data['match_id']]
-            winner_id = (set(lobby_data['players']) - {user_id}).pop()
+            winner_id = (set(lobby_data['players']) - {str(user_id)}).pop()
 
             if lobby.channel:
                 await lobby.purge_bot_messages()
@@ -1235,7 +1221,7 @@ class TournamentManager:
     async def undisqualify_player(self, user_id):
         tournament = await self.get_tournament()
 
-        if user_id not in tournament.get('dqs', []):
+        if str(user_id) not in tournament.get('dqs', []):
             return False
 
         result = await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
@@ -1263,10 +1249,10 @@ class TournamentManager:
         lobby_db = await match_lobby.get_lobby()
         tournament = await self.get_tournament()
 
-        dq_players = [p for p in lobby_db.get('players', []) if p in tournament.get('dqs', [])]
+        dq_players = [p for p in lobby_db.get('players', []) if str(p) in tournament.get('dqs', [])]
         # Un-DQ any DQ'd players in this lobby
         for player_id in lobby_db.get('players', []):
-            if player_id in tournament.get('dqs', []):
+            if str(player_id) in tournament.get('dqs', []):
                 await self.undisqualify_player(player_id)
 
         # Format-specific result unrecording

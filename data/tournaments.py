@@ -204,8 +204,8 @@ class TournamentMethodsMixin:
         if str(user_id) in tournament.get('entrants', {}):
             update.setdefault('$unset', {})[f'entrants.{user_id}'] = ""
         
-        if 'checked_in' in tournament and user_id in tournament['checked_in']:
-            update.setdefault('$pull', {})['checked_in'] = user_id
+        if 'checked_in' in tournament and str(user_id) in tournament['checked_in']:
+            update.setdefault('$pull', {})['checked_in'] = str(user_id)
             
         if update:
             result = await self.tournament_collection.update_one(query, update)
@@ -246,7 +246,7 @@ class TournamentMethodsMixin:
 
         update = {
             '$addToSet': {
-                'dqs': user_id
+                'dqs': str(user_id)
             }
         }
         result = await self.tournament_collection.update_one(query, update)
@@ -258,7 +258,7 @@ class TournamentMethodsMixin:
         }
         update = {
             '$pull': {
-                'dqs': user_id
+                'dqs': str(user_id)
             }
         }
         result = await self.tournament_collection.update_one(query, update)
@@ -281,7 +281,7 @@ class TournamentMethodsMixin:
         }
         update = {
             '$addToSet': {
-                'checked_in': user_id
+                'checked_in': str(user_id)
             }
         }
         result = await self.tournament_collection.update_one(query, update)
