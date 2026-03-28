@@ -89,7 +89,7 @@ class SwissFormat(BaseFormat):
                 ranked_player = await self.tm.get_ranked_player(user_id)
                 elo = ranked_player['elo'] if ranked_player else 1200
                 username = user['name'] if user else f"Player {user_id}"
-                await self.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo)
+                await self.dh.swiss_add_player(swiss_event['_id'], user_id, username, elo, ranked=self.tm.is_ranked)
 
         await self.dh.register_player(self.tm.tournament['_id'], user_id, None)
 
@@ -110,10 +110,8 @@ class SwissFormat(BaseFormat):
         """Register the team as a single swiss player entry using the team name."""
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if swiss_event:
-            # Teams mode doesn't support ranked reporting, so elo is always default
-            await self.dh.swiss_add_player(
-                swiss_event['_id'], team_id, team_doc['name'], elo=1200
-            )
+            team_name = team_doc.get('name', str(team_id))
+            await self.dh.swiss_add_player(swiss_event['_id'], team_id, team_name, 1200, ranked=False)
         await self.dh.register_team(self.tm.tournament['_id'], team_id, None)
 
         tournament = await self.tm.get_tournament()
@@ -194,9 +192,9 @@ class SwissFormat(BaseFormat):
         if not self.tm.debug:
             await self.tm.post_final_results()
 
-    async def on_tournament_delete(self) -> None:
-        """Swiss has no external bracket to clean up."""
-        pass
+    async def on_tournament_delete(self):
+        tournament = await self.tm.get_tournament()
+        await self.dh.delete_swiss_event_by_tournament(tournament['_id'])
 
     async def on_match_calling_loop(self) -> None:
         """SwissManager.start() handles everything — nothing to do here."""
@@ -259,28 +257,31 @@ class SwissFormat(BaseFormat):
             'final_round_active': final_round_active,
         }
 
-    async def on_lobby_reopen(self, lobby, lobby_db: dict) -> None:
+    async def on_lobby_reopen(self, match_lobby, lobby_db):
+        """Undo the swiss result so the match can be replayed."""
         swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
         if not swiss_event:
-            return
+            raise ValueError('Swiss event not found')
 
-        # Block reopen if other matches in this round are still active
-        match_id = lobby.match_id
-        players = swiss_event.get('players', {})
-        other_active = any(
-            p.get('active_match_id') is not None and p.get('active_match_id') != match_id
-            for p in players.values()
-            if not p.get('dropped')
+        # Find which round this match belongs to
+        match_doc = next(
+            (m for m in swiss_event.get('matches', [])
+            if m['match_id'] == match_lobby.match_id),
+            None,
         )
-        if other_active:
+        if not match_doc:
+            raise ValueError('Match not found in swiss event')
+
+        # Block reopen if the next round has already started
+        match_round = match_doc.get('round_number', 0)
+        current_round = swiss_event.get('current_round', 0)
+        if match_round < current_round:
             raise ValueError(
-                'Cannot reopen a match while other matches in this round are still active. '
-                'Wait for all matches to finish first.'
+                f'Cannot reopen a match from round {match_round} — round {current_round} has already started'
             )
 
-        await self.dh.swiss_unrecord_result(swiss_event['_id'], match_id)
-        for player_id in lobby_db.get('players', []):
-            await self.dh.swiss_set_active_match(swiss_event['_id'], player_id, match_id)
+        # Undo the recorded result (reverses wins/losses/points, restores active_match_id)
+        await self.dh.swiss_unrecord_result(swiss_event['_id'], match_lobby.match_id)
 
     # ─── Properties ───────────────────────────────────────────────────────────
 
@@ -316,4 +317,5 @@ class SwissFormat(BaseFormat):
                     user_id,
                     ranked_player['username'] if ranked_player else f'Player {user_id}',
                     ranked_player['elo'] if ranked_player else 1200,
+                    ranked=self.tm.is_ranked,
                 )

@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (bracketData) renderBracket(bracketData);
                 else loadBracket();
                 if (!bracketRefreshInterval)
-                    bracketRefreshInterval = setInterval(loadBracket, 15000);
+                    bracketRefreshInterval = setInterval(loadBracket, 5000);
             } else {
                 if (bracketRefreshInterval) {
                     clearInterval(bracketRefreshInterval);

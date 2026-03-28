@@ -76,11 +76,11 @@ function renderHalf(container, matches, title, isLosers) {
         isLosers ? Math.abs(a) - Math.abs(b) : a - b
     );
 
-    const CARD_H = 80, CARD_W = 180, COL_GAP = 48, LABEL_H = 28;
+    const CARD_H = 80, CARD_W = 180, COL_GAP = 48, LABEL_H = 28, CARD_GAP = 24;
     const posMap = {};
 
     roundMap[rounds[0]].forEach((m, i) => {
-        const y = LABEL_H + i * (CARD_H + 16);
+        const y = LABEL_H + i * (CARD_H + CARD_GAP);
         posMap[m.match_id] = { x: 0, y, centerY: y + CARD_H / 2 };
     });
 
@@ -94,12 +94,12 @@ function renderHalf(container, matches, title, isLosers) {
                     ? (p1.centerY + p2.centerY) / 2
                     : p1 ? p1.centerY
                     : p2 ? p2.centerY
-                    : LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + 16);
+                    : LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + CARD_GAP);
             } else if (m.prereq_ids && m.prereq_ids.length === 1) {
                 const p1 = posMap[m.prereq_ids[0]];
                 centerY = p1 ? p1.centerY : LABEL_H + CARD_H / 2;
             } else {
-                centerY = LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + 16);
+                centerY = LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + CARD_GAP);
             }
             posMap[m.match_id] = { x: colX, y: centerY - CARD_H / 2, centerY };
         }
@@ -107,7 +107,7 @@ function renderHalf(container, matches, title, isLosers) {
 
     const allPos = Object.values(posMap);
     const totalW = rounds.length * (CARD_W + COL_GAP) - COL_GAP;
-    const totalH = Math.max(...allPos.map(p => p.y + CARD_H)) + 16;
+    const totalH = Math.max(...allPos.map(p => p.y + CARD_H)) + CARD_GAP;
 
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `position:relative;width:${totalW}px;height:${totalH}px;`;
@@ -201,9 +201,17 @@ function buildMatchCard(m) {
     const p1Avatar = m.p1_name
         ? _playerAvatar(m.p1_name, m.p1_avatar_url, p1Cls)
         : '';
-    const p2Avatar = m.p2_name
-        ? _playerAvatar(m.p2_name, m.p2_avatar_url, p2Cls)
-        : '';
+    const p2Avatar = m.is_bye
+        ? ''
+        : m.p2_name
+            ? _playerAvatar(m.p2_name, m.p2_avatar_url, p2Cls)
+            : '';
+
+    const p2Content = m.is_bye
+        ? '<span class="match-player-tbd" style="font-style:normal;opacity:.5">Bye</span>'
+        : m.p2_name
+            ? `<span class="match-player-name">${escapeHtml(m.p2_name)}</span>`
+            : '<span class="match-player-tbd">TBD</span>';
 
     card.innerHTML = `
         <div class="match-player ${p1Cls}">
@@ -214,15 +222,15 @@ function buildMatchCard(m) {
         </div>
         <div class="match-player ${p2Cls}">
             ${p2Avatar}
-            ${m.p2_name
-                ? `<span class="match-player-name">${escapeHtml(m.p2_name)}</span>`
-                : '<span class="match-player-tbd">TBD</span>'}
+            ${p2Content}
         </div>
         <div class="match-card-footer">
-            <span class="match-lobby-tag ${lobbyTagClass(m)}">${lobbyTagLabel(m)}</span>
-            <span class="match-card-id">#${m.match_id}</span>
+            <span class="match-lobby-tag ${m.is_bye ? 'lobby-tag-complete' : lobbyTagClass(m)}">${m.is_bye ? 'Bye' : lobbyTagLabel(m)}</span>
+            <span class="match-card-id">${m.is_bye ? '' : '#' + m.match_id}</span>
         </div>`;
-    card.addEventListener('click', () => openDrawer(m));
+    if (!m.is_bye) {
+        card.addEventListener('click', () => openDrawer(m));
+    }
     return card;
 }
 
@@ -537,7 +545,7 @@ async function drawerResetLobby(matchId) {
         await loadTournament({ force: true });
     }
 }
-function startBracketRapidPoll(durationMs = 15000, intervalMs = 1500) {
+function startBracketRapidPoll(durationMs = 5000, intervalMs = 1500) {
     // Already polling rapidly
     if (_bracketRapidPollTimer) return;
 

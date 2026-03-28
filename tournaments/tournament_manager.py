@@ -1813,3 +1813,64 @@ class TournamentManager:
                 pass
 
         await self.disqualify_player(loser_id)
+
+    async def drop_swiss_player(self, user_id):
+        """
+        Handle a voluntary leave from an active swiss event.
+        If the player is mid-match, their opponent wins by default.
+        The result is recorded in swiss standings only — not reported to UCH Ranked.
+        """
+        tournament = await self.get_tournament()
+
+        registered = await self.bot.dh.get_registration_status(tournament['_id'], user_id)
+        if not registered:
+            return False
+
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+        if swiss_event:
+            player_data = swiss_event['players'].get(str(user_id))
+            if player_data and player_data.get('active_match_id') is not None:
+                active_match_id = player_data['active_match_id']
+
+                # Find opponent from the swiss match document (all strings — no type mismatch)
+                match_doc = next(
+                    (m for m in swiss_event.get('matches', [])
+                    if m['match_id'] == active_match_id),
+                    None,
+                )
+                if match_doc:
+                    opponent_id = (
+                        match_doc['player_2']
+                        if str(user_id) == str(match_doc['player_1'])
+                        else match_doc['player_1']
+                    )
+
+                    # Record opponent win in swiss DB only — not UCH Ranked
+                    await self.bot.dh.swiss_record_result(
+                        swiss_event['_id'],
+                        active_match_id,
+                        opponent_id,
+                        str(user_id),
+                    )
+
+                    # Notify the lobby channel
+                    lobby = self.lobbies.get(active_match_id)
+                    if lobby and lobby.channel:
+                        embed = discord.Embed(
+                            title="Player Left",
+                            description=(
+                                f"<@{user_id}> has left the tournament.\n"
+                                f"<@{opponent_id}> wins this match by default.\n\n"
+                                "This win counts toward tournament standings "
+                                "but will not be reported to UCH Ranked."
+                            ),
+                            color=discord.Color.orange(),
+                        )
+                        await lobby.channel.send(embed=embed)
+
+                    # Check if the round is now complete
+                    if self.format and hasattr(self.format, 'manager') and self.format.manager:
+                        await self.format.manager.check_round_complete()
+
+        await self.unregister_player(user_id)
+        return True

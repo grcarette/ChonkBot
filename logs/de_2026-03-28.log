@@ -1,0 +1,13 @@
+[2026-03-28 17:24:28] [INFO ] [LOGGER] Log opened — logs\de_2026-03-28.log
+[2026-03-28 17:24:42] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-28 17:24:43] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-28 17:24:44] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-28 17:24:45] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-28 17:24:46] [INFO ] [REGISTRATION] Debug User 4 (4) registered
+[2026-03-28 17:24:48] [INFO ] [REGISTRATION] Debug User 5 (5) registered
+[2026-03-28 17:24:49] [INFO ] [REGISTRATION] Debug User 6 (6) registered
+[2026-03-28 17:24:50] [INFO ] [REGISTRATION] Debug User 7 (7) registered
+[2026-03-28 17:24:51] [INFO ] [STATE] setup → registration
+[2026-03-28 17:25:28] [INFO ] [STATE] registration → checkin
+[2026-03-28 17:25:48] [INFO ] [STATE] Tournament started — 8 players
+[2026-03-28 17:25:48] [INFO ] [STATE] checkin → active

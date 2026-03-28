@@ -73,7 +73,6 @@ class SwissActiveRegisterView(discord.ui.View):
         user_id = interaction.user.id
         tournament = await self.tm.get_tournament()
 
-        # Check registered
         registered = await self.tm.bot.dh.get_registration_status(
             tournament['_id'], user_id
         )
@@ -83,49 +82,9 @@ class SwissActiveRegisterView(discord.ui.View):
             )
             return
 
-        # Handle mid-match leave
-        swiss_event = await self.tm.bot.dh.get_swiss_event_by_tournament(tournament['_id'])
-        if swiss_event:
-            player_data = swiss_event['players'].get(str(user_id))
-            if player_data and player_data.get('active_match_id') is not None:
-                active_match_id = player_data['active_match_id']
-                # Find the opponent
-                lobby_data = self.tm.lobbies.get(active_match_id)
-                if lobby_data:
-                    opponent_id = next(
-                        (p for p in lobby_data.players if p != user_id), None
-                    )
-                    if opponent_id:
-                        # Record win for opponent in swiss DB only, not UCH Ranked
-                        await self.tm.bot.dh.swiss_record_result(
-                            swiss_event['_id'],
-                            active_match_id,
-                            opponent_id,
-                            user_id,
-                        )
-                        # Notify the lobby and close it
-                        if lobby_data.channel:
-                            opponent_mention = f"<@{opponent_id}>"
-                            leaving_mention = f"<@{user_id}>"
-                            embed = discord.Embed(
-                                title="Player Left",
-                                description=(
-                                    f"{leaving_mention} has left the tournament.\n"
-                                    f"{opponent_mention} wins this match by default.\n\n"
-                                    "This win counts toward tournament standings but will not be reported to UCH Ranked."
-                                ),
-                                color=discord.Color.orange()
-                            )
-                            await lobby_data.channel.send(embed=embed)
-                        # Trigger round complete check since a match just finished
-                        fmt = self.tm.format
-                        if fmt and hasattr(fmt, 'manager') and fmt.manager:
-                            await fmt.manager.check_round_complete()
-
-        # Drop from swiss event and unregister
-        await self.tm.unregister_player(user_id)
+        await self.tm.drop_swiss_player(user_id)
 
         await interaction.followup.send(
             f"You have left **{tournament['name']}**. Your results so far stand.",
-            ephemeral=True
+            ephemeral=True,
         )

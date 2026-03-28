@@ -81,13 +81,16 @@ class SwissMethodsMixin:
         discord_id: int,
         username: str,
         elo: int,
+        ranked: bool = True,
     ) -> dict:
         """
         Add a player to the swiss event.
-        Assigns tier and bonus points based on elo.
+        Assigns tier and bonus points based on elo (only if ranked).
         Returns the created player dict.
         """
         tier, bonus_points = get_tier(elo)
+        if not ranked:
+            bonus_points = 0
         player_data = {
             'username': username,
             'elo': elo,
@@ -193,7 +196,6 @@ class SwissMethodsMixin:
         winner = event['players'].get(str(winner_id))
         loser  = event['players'].get(str(loser_id))
         if not winner or not loser:
-            print(f"[swiss_record_result] match_id={match_id!r} ({type(match_id).__name__}) | winner_id={winner_id!r} ({type(winner_id).__name__}) | loser_id={loser_id!r} ({type(loser_id).__name__}) | players_keys={list(event['players'].keys())[:10]} | winner_found={winner is not None} | loser_found={loser is not None}")
             raise ValueError(
                 f"swiss_record_result: player not found — "
                 f"winner={winner_id} (found={winner is not None}), "
@@ -470,3 +472,7 @@ class SwissMethodsMixin:
                 )
                 return True
             return False
+
+    async def delete_swiss_event_by_tournament(self, tournament_id: ObjectId):
+        """Delete the swiss event document associated with a tournament."""
+        await self.swiss_collection.delete_one({'tournament_id': ObjectId(tournament_id)})
