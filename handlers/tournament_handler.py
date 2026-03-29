@@ -32,6 +32,9 @@ class TournamentHandler():
         self.events: dict = {}   # ObjectId → EventManager
 
     async def initialize_active_events(self):
+        from data.migration_swiss_filter_schema import migrate_swiss_filter_schema
+        await migrate_swiss_filter_schema(self.bot.dh.tournament_collection)
+
         active_events = await self.bot.dh.get_active_events()
         for event in active_events:
             em = EventManager(self.bot, event)

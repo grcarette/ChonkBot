@@ -126,6 +126,13 @@ class EventManager:
         # Bracket label prefix for lobby channel naming (e.g. 'pro', 'int', 'beg')
         doc['lobby_prefix'] = phase.get('label', '').lower()[:3]
 
+        # Carry over challonge_data and entrants so ChallongeFormat.on_initialize()
+        # can rehydrate from the existing bracket instead of creating a new one.
+        if phase.get('challonge_data'):
+            doc['challonge_data'] = phase['challonge_data']
+        if phase.get('entrants'):
+            doc['entrants'] = phase['entrants']
+
         return doc
 
     # ── Phase lifecycle ────────────────────────────────────────────────────────
@@ -328,7 +335,7 @@ class EventManager:
             challonge_url = ch_data['url']
             challonge_id  = ch_data['id']
 
-            for discord_id in to_add_to_pro:
+            for discord_id in sorted(to_add_to_pro, key=lambda did: seeds.get(str(did), 9999)):
                 print(f'[FLOAT] adding {discord_id} to Pro bracket ({challonge_url})')
                 try:
                     user = await self.bot.dh.get_user(user_id=int(discord_id))
@@ -374,13 +381,21 @@ class EventManager:
     async def create_bracket_shells(self):
         """
         Create empty Challonge brackets for all bracket phases.
-        Called at publish time so bracket links exist during registration.
-        The brackets stay in Challonge 'pending' state — players are added
-        and brackets are started later at phase transition.
+        Triggered manually from the dashboard. Idempotent — skips any
+        phase that already has challonge_data.
         """
         from tournaments.challonge_handler import ChallongeHandler
 
+        # Always refresh from DB so the challonge_data guard is reliable
+        self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
         event = self.event
+
+        # Fast exit: if every bracket phase already has challonge_data, nothing to do
+        bracket_phases = [p for p in event.get('phases', [])
+                         if p['type'] in ('single elimination', 'double elimination')]
+        if bracket_phases and all(p.get('challonge_data') for p in bracket_phases):
+            print(f'[BRACKETS] create_bracket_shells() — all brackets already exist, skipping')
+            return
         print(f'[BRACKETS] create_bracket_shells() starting for event: {event["name"]} (id={event["_id"]})')
         print(f'[BRACKETS] phases: {[{"label": p.get("label"), "type": p["type"], "has_challonge": bool(p.get("challonge_data"))} for p in event.get("phases", [])]}')
 

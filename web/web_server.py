@@ -664,6 +664,18 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'phases':                phases_data,
         'active_phase':          tournament.get('active_phase', 0),
         'is_multi_phase':        len(phases_data) > 1,
+        'brackets_created':      (
+            fmt == 'swiss filter'
+            and all(
+                p.get('challonge_data') is not None
+                for p in tournament.get('phases', [])
+                if p.get('type') in ('single elimination', 'double elimination')
+            )
+            and any(
+                p.get('type') in ('single elimination', 'double elimination')
+                for p in tournament.get('phases', [])
+            )
+        ),
     })
 
 
@@ -693,7 +705,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
     VALID_ACTIONS = {
         'progress', 'open_registration', 'close_registration',
         'ping_checkin', 'next_round',
-        'dq_player', 'undq_player',
+        'dq_player', 'undq_player', 'unregister_player',
         'force_advance', 'update_config',
         'reset_match', 'delete_tournament',
         'publish_stagelist',
@@ -715,6 +727,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'unpublish_tournament',
         'reopen_lobby',
         'transition_phase',
+        'create_bracket_shells',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -800,6 +813,14 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 discord_id = int(discord_id)
                 await tm.undisqualify_player(discord_id)
 
+            elif action == 'unregister_player':
+                need_tm()
+                discord_id = body.get('discord_id')
+                if discord_id is None:
+                    return web.json_response({'error': 'discord_id is required'}, status=400)
+                discord_id = int(discord_id)
+                await tm.unregister_player(discord_id)
+
             elif action == 'force_advance':
                 need_tm()
                 match_id     = body.get('match_id')
@@ -881,19 +902,68 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     except (TypeError, ValueError):
                         val = 0
                     updates['config.top_seed_floating_count'] = max(0, min(val, 999))
+                if 'info_links' in body:
+                    raw = body['info_links']
+                    if not isinstance(raw, list):
+                        return web.json_response({'error': 'info_links must be a list'}, status=400)
+                    links = []
+                    for item in raw:
+                        label = str(item.get('label') or '').strip()[:80]
+                        url   = str(item.get('url')   or '').strip()
+                        if not label or not url:
+                            continue
+                        if not url.startswith(('http://', 'https://')):
+                            return web.json_response(
+                                {'error': f'Invalid URL (must start with http:// or https://): {url}'},
+                                status=400
+                            )
+                        links.append({'label': label, 'url': url})
+                    updates['config.info_links'] = links
                 if updates:
                     await bot.dh.edit_tournament_config(tournament['_id'], **updates)
-                    if tm and 'config.display_entrants' in updates:
-                        if tournament.get('category_id') and tm.get_tournament_category():
+                    needs_embed_refresh = {'config.display_entrants', 'config.info_links'} & updates.keys()
+                    print(f'[update_config] updates={list(updates.keys())} needs_embed_refresh={bool(needs_embed_refresh)} tm={tm!r}')
+                    if tm and needs_embed_refresh:
+                        has_category = bool(tournament.get('category_id'))
+                        has_category_obj = bool(tm.get_tournament_category())
+                        print(f'[update_config] has_category={has_category} has_category_obj={has_category_obj} tournament_id={tournament["_id"]}')
+                        if has_category and has_category_obj:
+                            print(f'[update_config] calling edit_event_info()')
                             await tm.edit_event_info()
 
             elif action == 'delete_tournament':
                 need_tm()
-                if tournament.get('format') == 'swiss filter':
-                    em = bot.th.events.get(tournament['_id'])
-                    if em:
-                        await em.destroy_bracket_shells()
+
+                # Delete ALL Challonge brackets from this event, regardless of
+                # EventManager state. Reads directly from the DB document so
+                # this works even if the EM isn't loaded or is stale.
+                from tournaments.challonge_handler import ChallongeHandler
+                ch = ChallongeHandler()
+
+                # Phase-level brackets (swiss filter Pro/Intermediate/Beginner)
+                for phase in tournament.get('phases', []):
+                    ch_data = phase.get('challonge_data')
+                    if ch_data:
+                        try:
+                            await ch.delete_tournament(ch_data['id'])
+                            print(f'[DELETE] Deleted Challonge bracket: {ch_data["url"]}')
+                        except Exception as e:
+                            print(f'[DELETE] Failed to delete Challonge bracket {ch_data.get("url")}: {e}')
+
+                # Top-level bracket (single/double elim events)
+                top_ch = tournament.get('challonge_data')
+                if top_ch:
+                    try:
+                        await ch.delete_tournament(top_ch['id'])
+                        print(f'[DELETE] Deleted top-level Challonge bracket: {top_ch["url"]}')
+                    except Exception as e:
+                        print(f'[DELETE] Failed to delete top-level Challonge bracket {top_ch.get("url")}: {e}')
+
                 await tm.delete_tournament()
+
+                # Also clean up the EventManager reference
+                bot.th.events.pop(tournament['_id'], None)
+
                 return web.json_response({'ok': True})
 
             elif action == 'publish_stagelist':
@@ -1112,6 +1182,22 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 need_tm()
                 match_id_str = str(body.get('match_id'))
                 await tm.reopen_lobby(match_id_str)
+
+            elif action == 'create_bracket_shells':
+                if tournament.get('format') != 'swiss filter':
+                    return web.json_response({'error': 'Only swiss filter events have bracket shells'}, status=400)
+                em = bot.th.events.get(tournament['_id'])
+                if not em:
+                    return web.json_response({'error': 'Event manager not loaded'}, status=400)
+                # Refresh EM from DB so the challonge_data guard is reliable
+                em.event = await bot.dh.get_tournament_by_id(tournament['_id'])
+                bracket_phases = [
+                    p for p in em.event.get('phases', [])
+                    if p.get('type') in ('single elimination', 'double elimination')
+                ]
+                if bracket_phases and all(p.get('challonge_data') for p in bracket_phases):
+                    return web.json_response({'error': 'Bracket shells already exist'}, status=400)
+                await em.create_bracket_shells()
 
             elif action == 'transition_phase':
                 em = bot.th.events.get(tournament['_id'])

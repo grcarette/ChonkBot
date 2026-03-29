@@ -314,6 +314,24 @@
                 </div>
             </div>
 
+            <div class="panel" style="margin-top:8px">
+                <div class="panel-header"><span class="panel-title">Embed Links</span></div>
+                <div style="padding:18px">
+                    <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px">
+                        Extra link buttons added to the event-info embed. Appear after the Ruleset button.
+                    </p>
+                    <div id="cfg-links-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center">
+                        <input class="field-input" type="text" id="cfg-link-label" placeholder="Button label" maxlength="80">
+                        <input class="field-input" type="url"  id="cfg-link-url"   placeholder="https://...">
+                        <button class="btn btn-primary btn-sm" id="cfg-link-add">Add</button>
+                    </div>
+                    <div class="config-save-row" style="margin-top:12px">
+                        <button class="btn btn-primary btn-sm" id="cfg-save-links">Save Links</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="panel" style="border-color:rgba(237,66,69,.3);margin-top:8px">
                 <div class="panel-header">
                     <span class="panel-title" style="color:var(--red)">Danger Zone</span>

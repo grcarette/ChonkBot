@@ -10,6 +10,34 @@ let _seedsRendered         = false;
 let _loadTournamentInFlight = false;
 let _dangerZoneOpen = false;
 let _nextRoundInFlight = false;
+let _infoLinks = [];
+let _infoLinksDirty = false;
+
+function _setIfUnfocused(id, value) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = value;
+}
+
+function _renderInfoLinks() {
+    const list = document.getElementById('cfg-links-list');
+    if (!list) return;
+    if (!_infoLinks.length) {
+        list.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No custom links yet.</div>';
+        return;
+    }
+    list.innerHTML = _infoLinks.map((link, i) => `
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center">
+            <span style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(link.label)}</span>
+            <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(link.url)}</span>
+            <button class="btn btn-danger btn-sm" onclick="_removeInfoLink(${i})">Remove</button>
+        </div>`).join('');
+}
+
+function _removeInfoLink(i) {
+    _infoLinks.splice(i, 1);
+    _infoLinksDirty = true;
+    _renderInfoLinks();
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     initAvatar(USERNAME, AVATAR_URL);
@@ -92,6 +120,24 @@ document.addEventListener('DOMContentLoaded', () => {
             ) || 0;
         }
         await doAction('update_config', payload);
+    };
+    // Embed links
+    document.getElementById('cfg-link-add').onclick = () => {
+        const label = document.getElementById('cfg-link-label').value.trim();
+        const url   = document.getElementById('cfg-link-url').value.trim();
+        if (!label) { showToast('Button label is required', 'error'); return; }
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            showToast('URL must start with http:// or https://', 'error'); return;
+        }
+        _infoLinks.push({ label, url });
+        _infoLinksDirty = true;
+        document.getElementById('cfg-link-label').value = '';
+        document.getElementById('cfg-link-url').value   = '';
+        _renderInfoLinks();
+    };
+    document.getElementById('cfg-save-links').onclick = async () => {
+        await doAction('update_config', { info_links: _infoLinks });
+        _infoLinksDirty = false;
     };
     // Image uploads — wired once, not on every populateConfig call
     document.getElementById('cfg-banner-upload').addEventListener('change', async (e) => {
@@ -345,6 +391,32 @@ function renderActionArea(t) {
                     Publish Tournament
                 </button>
             </div></div>`;
+        if (format === 'swiss filter') {
+            const bracketsExist = t.brackets_created;
+            area.innerHTML += `<div class="action-panel" style="margin-top:8px">
+                <div class="action-panel-title">Bracket Setup</div>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                    Create empty Challonge brackets for the Pro, Intermediate, and Beginner phases. Players are added later during the phase transition.
+                </p>
+                <div class="action-row">
+                    <button class="btn ${bracketsExist ? 'btn-secondary' : 'btn-primary'}" id="btn-create-brackets"
+                        ${bracketsExist ? 'disabled' : ''}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                            <polyline points="16 3 12 7 8 3"/>
+                        </svg>
+                        ${bracketsExist ? '✓ Brackets Created' : 'Create Challonge Brackets'}
+                    </button>
+                </div>
+            </div>`;
+            if (!bracketsExist) {
+                document.getElementById('btn-create-brackets').onclick = async () => {
+                    if (await showConfirm('Create Challonge Brackets?',
+                        'This will create empty bracket shells on Challonge for Pro, Intermediate, and Beginner. You can do this at any time before the phase transition.'))
+                        await doAction('create_bracket_shells');
+                };
+            }
+        }
         document.getElementById('btn-publish').onclick = async () => {
             if (await showConfirm('Publish Tournament?',
                 'Makes all tournament channels visible and opens registration.'))
@@ -367,7 +439,8 @@ function renderActionArea(t) {
                     </svg>
                     ${stagelistReady ? '✓ Stagelist Published' : 'Publish Stagelist'}
                 </button>` : ''}
-                <button class="btn btn-primary" id="btn-start-checkin">
+                <button class="btn btn-primary" id="btn-start-checkin"
+                    ${format === 'swiss filter' && !t.brackets_created ? 'disabled title="Create Challonge brackets first"' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <polyline points="20 6 9 17 4 12"/>
                     </svg>
@@ -381,6 +454,32 @@ function renderActionArea(t) {
                     Unpublish
                 </button>
             </div></div>`;
+        if (format === 'swiss filter') {
+            const bracketsExist = t.brackets_created;
+            area.innerHTML += `<div class="action-panel" style="margin-top:8px">
+                <div class="action-panel-title">Bracket Setup</div>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                    Create empty Challonge brackets for the Pro, Intermediate, and Beginner phases. Players are added later during the phase transition.
+                </p>
+                <div class="action-row">
+                    <button class="btn ${bracketsExist ? 'btn-secondary' : 'btn-primary'}" id="btn-create-brackets"
+                        ${bracketsExist ? 'disabled' : ''}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                            <polyline points="16 3 12 7 8 3"/>
+                        </svg>
+                        ${bracketsExist ? '✓ Brackets Created' : 'Create Challonge Brackets'}
+                    </button>
+                </div>
+            </div>`;
+            if (!bracketsExist) {
+                document.getElementById('btn-create-brackets').onclick = async () => {
+                    if (await showConfirm('Create Challonge Brackets?',
+                        'This will create empty bracket shells on Challonge for Pro, Intermediate, and Beginner. You can do this at any time before the phase transition.'))
+                        await doAction('create_bracket_shells');
+                };
+            }
+        }
         document.getElementById('btn-toggle-reg').onclick = () =>
             doAction(registration_open ? 'close_registration' : 'open_registration');
         document.getElementById('btn-start-checkin').onclick = async () => {
@@ -742,8 +841,8 @@ function renderActionArea(t) {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 function populateConfig(t) {
-    document.getElementById('cfg-name').value               = t.name  || '';
-    document.getElementById('cfg-date').value               = t.date  || '';
+    _setIfUnfocused('cfg-name', t.name  || '');
+    _setIfUnfocused('cfg-date', t.date  || '');
     document.getElementById('cfg-approved').checked         = t.config?.approved_registration ?? false;
     document.getElementById('cfg-random-stage').checked     = t.config?.randomized_stagelist  ?? false;
     document.getElementById('cfg-display-entrants').checked = t.config?.display_entrants       ?? false;
@@ -804,6 +903,13 @@ function populateConfig(t) {
         floatingCount.value    = t.config?.top_seed_floating_count ?? 0;
         floatingCount.disabled = bracketsStarted;
     }
+
+    if (!_infoLinksDirty) {
+        _infoLinks = (t.config?.info_links || []).map(l => ({ label: l.label, url: l.url }));
+        _renderInfoLinks();
+    }
+    _setIfUnfocused('cfg-link-label', '');
+    _setIfUnfocused('cfg-link-url',   '');
 }
 
 // ── Registration requests ─────────────────────────────────────────────────────

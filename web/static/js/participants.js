@@ -108,9 +108,7 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
         else if (showCI && isCI) tag = `<span class="tag tag-checkin">✓</span>`;
 
         const nameEsc  = escapeHtml(e.name).replace(/'/g, "\\'");
-        const dqBtn    = isDQ
-            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer('${e.discord_id}')">Un-DQ</button>`
-            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer('${e.discord_id}','${nameEsc}')">DQ</button>`;
+        const dqBtn    = `<button class="btn btn-danger btn-sm" onclick="removePlayer('${e.discord_id}','${nameEsc}')">Remove</button>`;
         const isLocked = _lockedSeeds.has(e.discord_id);
         const lockBtn  = `<button class="seed-lock-btn${isLocked ? ' is-locked' : ''}" onclick="toggleSeedLock('${e.discord_id}')" title="${isLocked ? 'Unlock seed' : 'Lock seed'}">${isLocked ? _SVG_LOCK : _SVG_UNLOCK}</button>`;
 
@@ -312,14 +310,10 @@ function getLockedSeedsPayload() {
         .filter(({ discord_id }) => _lockedSeeds.has(discord_id));
 }
 
-// ── DQ actions ────────────────────────────────────────────────────────────────
+// ── Remove action ─────────────────────────────────────────────────────────────
 
-async function dqPlayer(discordId, name) {
-    if (await showConfirm('Disqualify Player?',
-        `${name} will be DQ'd. If they have an active match, their opponent wins.`, 'danger'))
-        await doAction('dq_player', { discord_id: discordId, ...(typeof _phasePayload === 'function' ? _phasePayload() : {}) });
-}
-
-async function undqPlayer(discordId) {
-    await doAction('undq_player', { discord_id: discordId });
+async function removePlayer(discordId, name) {
+    if (await showConfirm('Remove Player?',
+        `${name} will be unregistered from the event.`, 'danger'))
+        await doAction('unregister_player', { discord_id: discordId });
 }

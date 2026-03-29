@@ -253,19 +253,6 @@ class TournamentManager:
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
             self.logger.state_transition(state, next_state)
 
-            # Create Challonge bracket shells after state update so a Challonge
-            # failure can't block the publish state transition.
-            if state == 'setup' and tournament.get('format') == 'swiss filter':
-                em = self.bot.th.events.get(tournament['_id'])
-                if em:
-                    try:
-                        await em.create_bracket_shells()
-                    except Exception as e:
-                        import traceback
-                        print(f'[ERROR] swiss filter bracket shell creation failed: {e}')
-                        traceback.print_exc()
-                else:
-                    print(f'[ERROR] EventManager not found for tournament {tournament["_id"]} — bracket shells not created')
 
     # ─── Stages ───────────────────────────────────────────────────────────────
 
@@ -1203,7 +1190,10 @@ class TournamentManager:
         if tournament.get('category_id'):
             await self.remove_tournament_from_discord()
         await self._cleanup_lobbies()
-        await self.format.on_tournament_delete()
+        try:
+            await self.format.on_tournament_delete()
+        except Exception as e:
+            print(f'[DELETE] on_tournament_delete failed (continuing): {e}')
         await self.bot.dh.delete_tournament(tournament['_id'])
         self.bot.th.tournaments.pop(tournament['_id'], None)
 
@@ -1502,29 +1492,32 @@ class TournamentManager:
         # ── Bracket link view ─────────────────────────────────────────────────
         UCH_RULESET_URL = 'https://docs.google.com/document/d/1Z9FcjZPDYJVVLo90GeTZSMHd4HNE8Ms8/edit?usp=sharing&ouid=116452753972353491775&rtpof=true&sd=true'
 
+        from utils.emojis import INDICATOR_EMOJIS
+        view = discord.ui.View()
         if self.format and self.format.shows_bracket_link and 'challonge_data' in tournament:
             from utils.get_bracket_link import get_bracket_link
-            from utils.emojis import INDICATOR_EMOJIS
             bracket_link = await get_bracket_link(tournament['challonge_data']['url'])
-            view = discord.ui.View()
             view.add_item(discord.ui.Button(
                 label=f"{INDICATOR_EMOJIS['link']} Bracket",
                 url=bracket_link,
                 style=discord.ButtonStyle.link
             ))
-            view.add_item(discord.ui.Button(
-                label=f"{INDICATOR_EMOJIS['link']} Ruleset",
-                url=UCH_RULESET_URL,
-                style=discord.ButtonStyle.link
-            ))
-        else:
-            from utils.emojis import INDICATOR_EMOJIS
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label=f"{INDICATOR_EMOJIS['link']} Ruleset",
-                url=UCH_RULESET_URL,
-                style=discord.ButtonStyle.link
-            ))
+        view.add_item(discord.ui.Button(
+            label=f"{INDICATOR_EMOJIS['link']} Ruleset",
+            url=UCH_RULESET_URL,
+            style=discord.ButtonStyle.link
+        ))
+        info_links = tournament.get('config', {}).get('info_links', [])
+        print(f'[_build_event_info_embed] info_links from DB={info_links}')
+        for link in info_links:
+            label = (link.get('label') or '').strip()
+            url   = (link.get('url')   or '').strip()
+            if label and url:
+                view.add_item(discord.ui.Button(
+                    label=label,
+                    url=url,
+                    style=discord.ButtonStyle.link
+                ))
 
         # ── Build embed ───────────────────────────────────────────────────────
         embed = discord.Embed(color=color)
@@ -1588,10 +1581,18 @@ class TournamentManager:
 
     async def edit_event_info(self):
         """Edit the existing event-info message in place. Call on registration/seed changes."""
+        await self.get_tournament()  # ensure self.tournament has latest category_id etc.
+        cat_id = self.tournament.get('category_id')
+        print(f'[edit_event_info] tournament={self.tournament["_id"]} category_id={cat_id}')
+
         channel = await self.get_channel('event-info')
+        print(f'[edit_event_info] channel={channel}')
         if not channel:
             return
+
         embed, view, banner_file = await self._build_event_info_embed()
+        info_links = self.tournament.get('config', {}).get('info_links', [])
+        print(f'[edit_event_info] view_items={len(view.children)} info_links={info_links}')
 
         bot_id = self.bot.user.id
         existing = None
@@ -1600,7 +1601,9 @@ class TournamentManager:
                 existing = msg
                 break
 
+        print(f'[edit_event_info] existing_msg={existing.id if existing else None}')
         if not existing:
+            print(f'[edit_event_info] no existing message — calling post_event_info()')
             await self.post_event_info()
             return
 
@@ -1610,7 +1613,9 @@ class TournamentManager:
                     embed.set_image(url=att.url)
                     break
 
+        print(f'[edit_event_info] editing message {existing.id}')
         await existing.edit(embed=embed, view=view)
+        print(f'[edit_event_info] done')
 
     # ─── Stagelist ────────────────────────────────────────────────────────────
 
