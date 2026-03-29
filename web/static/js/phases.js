@@ -177,6 +177,10 @@ async function renderPhaseBracket(container, phase) {
         return;
     }
 
+    if (_activePhaseBracketIndex === phase.index && _phaseBracketPollTimer) {
+        return;
+    }
+
     // Stop any existing poll before starting a new one
     _stopPhaseBracketPoll();
 

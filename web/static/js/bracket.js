@@ -49,10 +49,23 @@ function renderBracketInto(data, wrap) {
         return;
     }
     if (isDE) {
+        let winners = data.matches.filter(m => m.bracket === 'Winners');
+        const losers = data.matches.filter(m => m.bracket === 'Losers');
+
+        // Hide the bracket reset (highest winners round, single match) while pending.
+        // It only becomes 'open' if the losers player wins grand finals set 1.
+        if (winners.length > 1) {
+            const maxRound = Math.max(...winners.map(m => m.round));
+            const lastRound = winners.filter(m => m.round === maxRound);
+            if (lastRound.length === 1 && lastRound[0].state === 'pending') {
+                winners = winners.filter(m => m.round !== maxRound);
+            }
+        }
+
         const wEl = document.createElement('div'); wEl.className = 'bracket-half';
         const lEl = document.createElement('div'); lEl.className = 'bracket-half';
-        renderHalf(wEl, data.matches.filter(m => m.bracket === 'Winners'), 'Winners Bracket', false);
-        renderHalf(lEl, data.matches.filter(m => m.bracket === 'Losers'),  'Losers Bracket',  true);
+        renderHalf(wEl, winners, 'Winners Bracket', false);
+        renderHalf(lEl, losers,  'Losers Bracket',  true);
         wrap.appendChild(wEl);
         wrap.appendChild(lEl);
     } else {
@@ -60,11 +73,86 @@ function renderBracketInto(data, wrap) {
         renderHalf(el, data.matches, '', false);
         wrap.appendChild(el);
     }
+    _enableDragScroll(wrap); 
+}
+
+// ── Drag-to-scroll ────────────────────────────────────────────────────────────
+
+function _enableDragScroll(el) {
+    if (el._dragScrollEnabled) return;
+    el._dragScrollEnabled = true;
+
+    // The bracket wrap scrolls horizontally; vertical scroll is on .main
+    const vScroller = el.closest('.main') || el;
+
+    el.style.overflow = 'auto';
+    el.style.cursor = 'grab';
+
+    let dragging = false, startX, startY, scrollL, scrollT, moved;
+
+    el.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        dragging = true;
+        moved = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        scrollL = el.scrollLeft;
+        scrollT = vScroller.scrollTop;
+        el.style.cursor = 'grabbing';
+        el.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+        el.scrollLeft      = scrollL - dx;
+        vScroller.scrollTop = scrollT - dy;
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        el.style.cursor = 'grab';
+        el.style.userSelect = '';
+    });
+
+    el.addEventListener('click', e => {
+        if (moved) { e.stopPropagation(); moved = false; }
+    }, true);
 }
 
 function renderBracket(data) {
     renderBracketInto(data, document.getElementById('bracket-wrap'));
 }
+
+// ── FIXED renderHalf function ─────────────────────────────────────────────────
+// Replace the entire renderHalf function in web/static/js/bracket.js with this.
+//
+// ROOT CAUSE (traced from actual bracket debug data):
+//
+// In DE losers bracket, some columns have MORE matches than the first column
+// (e.g. LR1 has 3 matches, LR2 has 4). Some of those extra matches have
+// both prereqs in the WINNERS bracket — invisible to the losers posMap.
+//
+// With the first column spaced at the minimum stride (104px), there's
+// physically not enough vertical room for 4 matches between 3 parents.
+// The fallback position for no-prereq matches collides with correctly-
+// positioned ones, and the overlap correction cascades downward, breaking
+// alignment for everything below.
+//
+// THREE FIXES:
+//
+// 1. DYNAMIC ROUND-0 STRIDE: Widen the first column's spacing when any
+//    later column has more matches. stride0 = ceil(maxCol/r0Count) * STRIDE.
+//
+// 2. TWO-PASS POSITIONING: For each later column, first position matches
+//    that have at least one prereq in posMap. Then interpolate the rest
+//    into the gaps between their nearest positioned neighbors.
+//
+// 3. PER-COLUMN OVERLAP CORRECTION: Run inside the loop so later columns
+//    read corrected positions.
 
 function renderHalf(container, matches, title, isLosers) {
     if (!matches.length) return;
@@ -84,55 +172,101 @@ function renderHalf(container, matches, title, isLosers) {
         isLosers ? Math.abs(a) - Math.abs(b) : a - b
     );
 
+    // Sort each round by match_id — Challonge assigns IDs in bracket order
+    for (const arr of Object.values(roundMap)) {
+        arr.sort((a, b) => a.match_id - b.match_id);
+    }
+
     const CARD_H = 80, CARD_W = 180, COL_GAP = 48, LABEL_H = 28, CARD_GAP = 24;
+    const STRIDE = CARD_H + CARD_GAP; // 104
     const posMap = {};
 
+    // ── Dynamic stride for round 0 ──────────────────────────────────────────
+    // If any later column has more matches than round 0, widen round 0's
+    // spacing so there's room for those matches without overlap.
+    const r0Count    = roundMap[rounds[0]].length;
+    const maxColSize = Math.max(...rounds.map(r => roundMap[r].length));
+    const stride0    = Math.ceil(maxColSize / Math.max(r0Count, 1)) * STRIDE;
+
+    // ── Round 0: sequential layout with dynamic stride ──────────────────────
     roundMap[rounds[0]].forEach((m, i) => {
-        const y = LABEL_H + i * (CARD_H + CARD_GAP);
+        const y = LABEL_H + i * stride0;
         posMap[m.match_id] = { x: 0, y, centerY: y + CARD_H / 2 };
     });
 
+    // ── Rounds 1+: two-pass positioning ─────────────────────────────────────
     for (let ri = 1; ri < rounds.length; ri++) {
         const colX = ri * (CARD_W + COL_GAP);
-        for (const m of roundMap[rounds[ri]]) {
+        const colMatches = roundMap[rounds[ri]]; // sorted by match_id
+
+        // ── Pass 1: position matches that have at least one visible prereq ──
+        const positioned = new Set();
+        for (const m of colMatches) {
+            if (!m.prereq_ids || m.prereq_ids.length === 0) continue;
+            const found = m.prereq_ids.map(id => posMap[id]).filter(Boolean);
+            if (found.length === 0) continue; // defer to pass 2
+
             let centerY;
-            if (m.prereq_ids && m.prereq_ids.length >= 2) {
-                const p1 = posMap[m.prereq_ids[0]], p2 = posMap[m.prereq_ids[1]];
-                centerY = p1 && p2
-                    ? (p1.centerY + p2.centerY) / 2
-                    : p1 ? p1.centerY
-                    : p2 ? p2.centerY
-                    : LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + CARD_GAP);
-            } else if (m.prereq_ids && m.prereq_ids.length === 1) {
-                const p1 = posMap[m.prereq_ids[0]];
-                centerY = p1 ? p1.centerY : LABEL_H + CARD_H / 2;
+            if (found.length >= 2) {
+                centerY = (found[0].centerY + found[1].centerY) / 2;
             } else {
-                centerY = LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + CARD_GAP);
+                centerY = found[0].centerY;
             }
             posMap[m.match_id] = { x: colX, y: centerY - CARD_H / 2, centerY };
+            positioned.add(m.match_id);
         }
-    }
 
-    // Post-process: enforce minimum vertical spacing within each column so
-    // cards never overlap (can happen in DE losers rounds where some prereqs
-    // are winners-bracket matches not present in posMap).
-    const byCol = {};
-    for (const [id, pos] of Object.entries(posMap)) {
-        if (!byCol[pos.x]) byCol[pos.x] = [];
-        byCol[pos.x].push(pos);
-    }
-    for (const col of Object.values(byCol)) {
-        col.sort((a, b) => a.y - b.y);
-        for (let i = 1; i < col.length; i++) {
-            const minY = col[i - 1].y + CARD_H + CARD_GAP;
-            if (col[i].y < minY) {
-                const shift = minY - col[i].y;
-                col[i].y      += shift;
-                col[i].centerY += shift;
+        // ── Pass 2: interpolate matches with no visible prereqs ─────────────
+        for (let mi = 0; mi < colMatches.length; mi++) {
+            const m = colMatches[mi];
+            if (positioned.has(m.match_id)) continue;
+
+            // Find nearest positioned neighbor above (lower sorted index)
+            let above = null;
+            for (let j = mi - 1; j >= 0; j--) {
+                if (positioned.has(colMatches[j].match_id)) {
+                    above = posMap[colMatches[j].match_id];
+                    break;
+                }
+            }
+            // Find nearest positioned neighbor below (higher sorted index)
+            let below = null;
+            for (let j = mi + 1; j < colMatches.length; j++) {
+                if (positioned.has(colMatches[j].match_id)) {
+                    below = posMap[colMatches[j].match_id];
+                    break;
+                }
+            }
+
+            let centerY;
+            if (above && below) {
+                centerY = (above.centerY + below.centerY) / 2;
+            } else if (above) {
+                centerY = above.centerY + STRIDE;
+            } else if (below) {
+                centerY = below.centerY - STRIDE;
+            } else {
+                centerY = LABEL_H + CARD_H / 2 + mi * STRIDE;
+            }
+
+            posMap[m.match_id] = { x: colX, y: centerY - CARD_H / 2, centerY };
+            positioned.add(m.match_id);
+        }
+
+        // ── Overlap correction for this column ──────────────────────────────
+        const colPositions = colMatches.map(m => posMap[m.match_id]);
+        colPositions.sort((a, b) => a.y - b.y);
+        for (let i = 1; i < colPositions.length; i++) {
+            const minY = colPositions[i - 1].y + STRIDE;
+            if (colPositions[i].y < minY) {
+                const shift = minY - colPositions[i].y;
+                colPositions[i].y      += shift;
+                colPositions[i].centerY += shift;
             }
         }
     }
 
+    // ── Render ────────────────────────────────────────────────────────────────
     const allPos = Object.values(posMap);
     const totalW = rounds.length * (CARD_W + COL_GAP) - COL_GAP;
     const totalH = Math.max(...allPos.map(p => p.y + CARD_H)) + CARD_GAP;
@@ -183,7 +317,7 @@ function renderHalf(container, matches, title, isLosers) {
         }
     }
 }
-
+ 
 // ── Match card ────────────────────────────────────────────────────────────────
 
 function matchCardStateClass(m) {

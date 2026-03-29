@@ -274,7 +274,9 @@ async function loadTournament({ force = false } = {}) {
             if (phase) {
                 renderPhaseHeader(phase);
                 renderPhaseTabs(phase);
-                renderPhaseTabContent(phase);
+                if (_selectedPhaseTab !== 'bracket') {
+                    renderPhaseTabContent(phase);
+                }
             }
         }
 
