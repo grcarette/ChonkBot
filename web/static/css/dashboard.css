@@ -495,3 +495,14 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Phase nav ── */
+.phase-group { margin-bottom: 2px; }
+.phase-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.phase-dot.phase-active   { background: var(--green); }
+.phase-dot.phase-finished { background: var(--text-muted); }
+.phase-dot.phase-waiting  { background: var(--border); }
+.phase-state-label { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.phase-state-label.phase-active   { color: var(--green); }
+.phase-state-label.phase-finished { color: var(--text-muted); }
+.phase-state-label.phase-waiting  { color: var(--text-muted); }

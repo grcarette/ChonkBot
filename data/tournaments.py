@@ -34,8 +34,67 @@ class TournamentMethodsMixin:
             'registration_open': False,
             'debug': tournament.get('debug', False),
         }
-        if tournament['format'] == 'swiss':
+        fmt = tournament['format']
+        if fmt == 'swiss':
             tournament_doc['round_limit'] = tournament.get('round_limit', 8)
+
+        # Build phases array
+        def _default_label(f):
+            return {
+                'swiss': 'Swiss Rounds',
+                'single elimination': 'Single Elimination',
+                'double elimination': 'Double Elimination',
+                'swiss filter': 'Swiss Rounds',
+            }.get(f, f.title())
+
+        if fmt == 'swiss filter':
+            tournament_doc['phases'] = [
+                {
+                    'index': 0,
+                    'type': 'swiss',
+                    'label': 'Swiss Rounds',
+                    'round_limit': tournament.get('round_limit', 3),
+                    'state': 'setup',
+                    'config_overrides': {},
+                },
+                {
+                    'index': 1,
+                    'type': 'double elimination',
+                    'label': 'Top Bracket',
+                    'state': 'waiting',
+                    'config_overrides': {},
+                    'player_source': {'phase_index': 0, 'placement': 'top', 'count': 8},
+                },
+                {
+                    'index': 2,
+                    'type': 'double elimination',
+                    'label': 'Middle Bracket',
+                    'state': 'waiting',
+                    'config_overrides': {},
+                    'player_source': {'phase_index': 0, 'placement': 'middle', 'count': 8},
+                },
+                {
+                    'index': 3,
+                    'type': 'double elimination',
+                    'label': 'Lower Bracket',
+                    'state': 'waiting',
+                    'config_overrides': {},
+                    'player_source': {'phase_index': 0, 'placement': 'bottom', 'count': None},
+                },
+            ]
+        else:
+            phase = {
+                'index': 0,
+                'type': fmt,
+                'label': _default_label(fmt),
+                'state': 'setup',
+                'config_overrides': {},
+            }
+            if fmt in ('swiss',):
+                phase['round_limit'] = tournament.get('round_limit', 8)
+            tournament_doc['phases'] = [phase]
+
+        tournament_doc['active_phase'] = 0
 
         result = await self.tournament_collection.insert_one(tournament_doc)
         tournament = await self.get_tournament(name=tournament_doc['name'])

@@ -5,7 +5,8 @@
       "Bash(pytest tests/ -x --tb=short)",
       "Bash(pytest tests/test_web_server.py -x -q)",
       "Bash(pytest tests/test_web_server.py -q)",
-      "Bash(grep -r \"sidepanel\\\\|match-card\\\\|match_card\" /c/Repos/Chonkbot --include=*.py --include=*.js --include=*.html)"
+      "Bash(grep -r \"sidepanel\\\\|match-card\\\\|match_card\" /c/Repos/Chonkbot --include=*.py --include=*.js --include=*.html)",
+      "Bash(git revert:*)"
     ]
   }
 }

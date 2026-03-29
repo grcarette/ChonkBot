@@ -233,6 +233,7 @@ async function loadTournament({ force = false } = {}) {
         renderLogo(data.logo_url);
         renderStats(data);
         renderActionArea(data);
+        renderPhaseNav(data);
         populateConfig(data);
         renderOverviewParticipants(
             data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);

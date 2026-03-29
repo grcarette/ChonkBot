@@ -18,6 +18,7 @@ from formats import make_format
 
 from tournaments.match_lobby import MatchLobby
 from tournaments.tournament_manager import TournamentManager
+from tournaments.event_manager import EventManager
 
 from tournaments.challonge_handler import ChallongeHandler
 
@@ -28,10 +29,22 @@ class TournamentHandler():
         self.bot = bot
         self.ch = ChallongeHandler()
         self.tournaments = {}
-        
+        self.events: dict = {}   # ObjectId → EventManager
+
     async def initialize_active_events(self):
         active_events = await self.bot.dh.get_active_events()
         for event in active_events:
+            em = EventManager(self.bot, event)
+            await em.initialize()
+            self.events[event['_id']] = em
+
+            # Backward compat: register the active phase's TM so existing
+            # code that uses bot.th.tournaments[tid] still works.
+            if em.active_tm:
+                self.tournaments[event['_id']] = em.active_tm
+                continue
+
+            # Fallback for events with no active phase TM (setup state)
             if not event.get('category_id'):
                 tm = TournamentManager(self.bot, event)
                 tm.format = make_format(tm)
@@ -56,11 +69,18 @@ class TournamentHandler():
             return False
         await self.add_stages_tournament(tournament)
 
-        tm = TournamentManager(self.bot, tournament)
-        tm.format = make_format(tm)
-        await tm.format.on_initialize()
-        tm.tc = None
-        self.tournaments[tournament['_id']] = tm
+        em = EventManager(self.bot, tournament)
+        await em.initialize()
+        self.events[tournament['_id']] = em
+
+        if em.active_tm:
+            self.tournaments[tournament['_id']] = em.active_tm
+        else:
+            tm = TournamentManager(self.bot, tournament)
+            tm.format = make_format(tm)
+            await tm.format.on_initialize()
+            tm.tc = None
+            self.tournaments[tournament['_id']] = tm
 
         return tournament
         

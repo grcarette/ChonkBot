@@ -540,6 +540,30 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'avatar_url': user.get('avatar_url') if user else None,
         })
 
+    # ── Phase data ────────────────────────────────────────────────────────────
+
+    em = bot.th.events.get(tournament['_id'])
+    phases_data = []
+    for i, phase in enumerate(tournament.get('phases', [])):
+        phase_summary = {
+            'index': i,
+            'type': phase['type'],
+            'label': phase.get('label', phase['type'].title()),
+            'state': phase['state'],
+            'round_limit': phase.get('round_limit'),
+            'config_overrides': phase.get('config_overrides', {}),
+        }
+
+        phase_tm = em.phase_managers.get(i) if em else None
+        if phase_tm and phase['type'] in ('swiss', 'swiss filter'):
+            phase_swiss = await bot.dh.get_swiss_event_by_tournament(
+                phase.get('tournament_id', tournament['_id'])
+            )
+            if phase_swiss and phase_tm.format:
+                phase_summary['swiss'] = await phase_tm.format.get_dashboard_state()
+
+        phases_data.append(phase_summary)
+
     return web.json_response({
         'id':                    str(tournament['_id']),
         'name':                  tournament.get('name', ''),
@@ -573,6 +597,57 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'logo_url':              tournament.get('logo_url'),
         'ranked_compatible':     getattr(tm.format, 'ranked_compatible', False) if tm and tm.format else False,
         'ranked_reporting':      tournament.get('config', {}).get('ranked_reporting', False),
+        'phases':                phases_data,
+        'active_phase':          tournament.get('active_phase', 0),
+        'is_multi_phase':        len(phases_data) > 1,
+    })
+
+
+@require_auth
+async def handle_get_phase(request: web.Request) -> web.Response:
+    """Return full detail for a specific phase."""
+    event_id    = request.match_info['tournament_id']
+    phase_index = int(request.match_info['phase_index'])
+    bot         = request.app['bot']
+
+    tournament = await bot.dh.get_tournament_by_id(event_id)
+    if not tournament:
+        return web.json_response({'error': 'Event not found'}, status=404)
+
+    phases = tournament.get('phases', [])
+    if phase_index >= len(phases):
+        return web.json_response({'error': 'Phase not found'}, status=404)
+
+    phase = phases[phase_index]
+    em = bot.th.events.get(tournament['_id'])
+    tm = em.phase_managers.get(phase_index) if em else None
+
+    lobbies = []
+    raw_lobbies = await bot.dh.get_all_lobbies(
+        phase.get('tournament_id', tournament['_id'])
+    )
+    for l in (raw_lobbies or []):
+        lobbies.append({
+            'match_id':     str(l.get('match_id')),
+            'lobby_name':   l.get('lobby_name', ''),
+            'state':        l.get('state', ''),
+            'player_names': [],
+            'player_ids':   [str(uid) for uid in l.get('players', [])],
+            'round':        l.get('round'),
+        })
+
+    swiss_data = None
+    if phase['type'] in ('swiss', 'swiss filter') and tm and tm.format:
+        swiss_data = await tm.format.get_dashboard_state()
+
+    return web.json_response({
+        'index':    phase_index,
+        'type':     phase['type'],
+        'label':    phase.get('label', phase['type'].title()),
+        'state':    phase['state'],
+        'lobbies':  lobbies,
+        'swiss':    swiss_data,
+        'pending':  [],
     })
 
 
@@ -621,6 +696,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'toggle_hold_when_ready',
         'unpublish_tournament',
         'reopen_lobby',
+        'transition_phase',
     }
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
@@ -941,6 +1017,12 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 need_tm()
                 match_id_str = str(body.get('match_id'))
                 await tm.reopen_lobby(match_id_str)
+
+            elif action == 'transition_phase':
+                em = bot.th.events.get(tournament['_id'])
+                if not em:
+                    return web.json_response({'error': 'Event manager not loaded'}, status=400)
+                await em.transition_to_next_phase()
         except ValueError as e:
             return web.json_response({'error': str(e)}, status=400)
         except Exception as e:
@@ -1675,6 +1757,7 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get(   '/api/stages/browse',                       handle_browse_stages)
     app.router.add_post(  '/api/tournament/{tournament_id}/seed',     handle_set_seed)
     app.router.add_get(   '/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
+    app.router.add_get(   '/api/tournament/{tournament_id}/phase/{phase_index}', handle_get_phase)
 
     # Seeding
     app.router.add_get( '/seeding',         handle_seeding_page)

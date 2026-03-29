@@ -47,3 +47,5 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 [2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 2 tried to register but is already registered
 [2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 3 tried to register but is already registered
 [2026-03-28 20:14:47] [INFO ] [STATE] setup → registration
+[2026-03-28 20:51:56] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 20:51:56] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
