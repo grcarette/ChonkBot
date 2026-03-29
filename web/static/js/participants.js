@@ -9,16 +9,12 @@ const SEED_IDLE_MS = 15000;
 // ── Top-level render (called from loadTournament) ─────────────────────────────
 
 function renderPlayers(entrants, checkedIn, dqs, state, format) {
-    const wrap      = document.getElementById('participants-list-wrap');
-    const countEl   = document.getElementById('players-count');
-    const isBracket = format === 'single elimination' || format === 'double elimination' || format === 'swiss filter';
-    const showCI    = ['checkin', 'active'].includes(state);
+    const wrap    = document.getElementById('participants-list-wrap');
+    const countEl = document.getElementById('players-count');
+    const showCI  = ['checkin', 'active'].includes(state);
 
     if (!wrap) return;
     if (countEl) countEl.textContent = `${entrants.length} entrant${entrants.length !== 1 ? 's' : ''}`;
-
-    document.getElementById('players-count').textContent =
-        `${entrants.length} entrant${entrants.length !== 1 ? 's' : ''}`;
 
     if (!entrants.length) {
         wrap.innerHTML = `<div class="empty-state">No entrants yet.</div>`;
@@ -26,19 +22,15 @@ function renderPlayers(entrants, checkedIn, dqs, state, format) {
         return;
     }
 
-    if (isBracket) {
-        const alreadyRendered = Array.isArray(wrap._entrants);
-        const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
-        if (!alreadyRendered || countChanged) {
-            const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
-            renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
-        }
-        wrap._checkedIn = checkedIn;
-        wrap._dqs       = dqs;
-        wrap._showCI    = showCI;
-    } else {
-        renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI);
+    const alreadyRendered = Array.isArray(wrap._entrants);
+    const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
+    if (!alreadyRendered || countChanged) {
+        const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
+        renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
     }
+    wrap._checkedIn = checkedIn;
+    wrap._dqs       = dqs;
+    wrap._showCI    = showCI;
 }
 
 function renderOverviewParticipants(entrants, checkedIn, dqs, state, format) {
@@ -54,35 +46,21 @@ function renderOverviewParticipants(entrants, checkedIn, dqs, state, format) {
         return;
     }
 
-    const isBracket = format === 'single elimination' || format === 'double elimination' || format === 'swiss filter';
-    const showCI    = ['checkin', 'active'].includes(state);
+    const showCI = ['checkin', 'active'].includes(state);
 
-    if (isBracket) {
-        const alreadyRendered = Array.isArray(wrap._entrants);
-        const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
-        if (!alreadyRendered || countChanged || _forceRefreshSeeds) {
-            const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
-            renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
-            _forceRefreshSeeds = false;
-        }
-        wrap._checkedIn = checkedIn;
-        wrap._dqs       = dqs;
-        wrap._showCI    = showCI;
-    } else {
-        wrap.innerHTML = entrants.map((e, i) => `
-            <div style="display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border)">
-                <span style="width:22px;text-align:right;color:var(--text-muted);font-size:11px;font-weight:600">${i + 1}</span>
-                ${e.avatar_url
-                    ? `<img src="${escapeHtml(e.avatar_url)}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="">`
-                    : `<div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${escapeHtml((e.name||'?')[0])}</div>`
-                }
-                <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(e.name)}</span>
-            </div>`
-        ).join('');
+    const alreadyRendered = Array.isArray(wrap._entrants);
+    const countChanged    = alreadyRendered && wrap._entrants.length !== entrants.length;
+    if (!alreadyRendered || countChanged || _forceRefreshSeeds) {
+        const sorted = [...entrants].sort((a, b) => (a.seed ?? 9999) - (b.seed ?? 9999));
+        renderSeedingList(wrap, sorted, checkedIn, dqs, showCI);
+        _forceRefreshSeeds = false;
     }
+    wrap._checkedIn = checkedIn;
+    wrap._dqs       = dqs;
+    wrap._showCI    = showCI;
 }
 
-// ── Drag-and-drop seeding list (DE/SE/Swiss Filter) ───────────────────────────
+// ── Drag-and-drop seeding list ────────────────────────────────────────────────
 
 function renderSeedingList(wrap, entrants, checkedIn, dqs, showCI) {
     wrap._entrants = [...entrants];
@@ -227,7 +205,6 @@ async function _onSeedPointerUp() {
 }
 
 async function _syncAllSeeds(entrants, wrap) {
-    console.log('[seeding] _syncAllSeeds called, TOURNAMENT_ID:', typeof TOURNAMENT_ID !== 'undefined' ? TOURNAMENT_ID : 'UNDEFINED');
     _seedingSyncing = true;
     const statusEl = wrap.querySelector('.seeding-save-status');
     if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)'; }
@@ -250,51 +227,19 @@ async function _syncAllSeeds(entrants, wrap) {
         return;
     }
 
-    console.log('[seeding] seed save succeeded, setting idle timer for', SEED_IDLE_MS, 'ms');
     clearTimeout(_seedIdleTimer);
     _seedIdleTimer = setTimeout(async () => {
-        console.log('[seeding] idle timer fired, calling refresh_event_info');
         _seedIdleTimer = null;
         const statusEl2 = document.querySelector('#participants-list-wrap .seeding-save-status');
         if (statusEl2) { statusEl2.textContent = 'Updating event info…'; statusEl2.style.color = 'var(--text-muted)'; }
         try {
             await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action: 'refresh_event_info' });
-            console.log('[seeding] refresh_event_info succeeded');
             if (statusEl2) { statusEl2.textContent = 'Event info updated ✓'; statusEl2.style.color = 'var(--green)'; }
             setTimeout(() => { if (statusEl2) statusEl2.textContent = ''; }, 2500);
         } catch (err) {
-            console.warn('[seeding] Failed to refresh event info:', err.message);
             if (statusEl2) statusEl2.textContent = '';
         }
     }, SEED_IDLE_MS);
-}
-
-// ── Plain table (Swiss) ───────────────────────────────────────────────────────
-
-function renderParticipantsTable(wrap, entrants, checkedIn, dqs, showCI) {
-    wrap.innerHTML = `<table class="data-table">
-        <thead><tr><th>#</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody id="players-tbody"></tbody>
-    </table>`;
-    const tbody = document.getElementById('players-tbody');
-    tbody.innerHTML = entrants.map((e, i) => {
-        const isDQ = dqs.includes(e.discord_id);
-        const isCI = checkedIn.includes(e.discord_id);
-        let statusTag = `<span class="tag tag-done">Registered</span>`;
-        if (isDQ)                statusTag = `<span class="tag tag-dq">DQ</span>`;
-        else if (showCI && isCI) statusTag = `<span class="tag tag-checkin">Checked In</span>`;
-        else if (showCI)         statusTag = `<span class="tag tag-stuck">Not Checked In</span>`;
-        const nameEsc = escapeHtml(e.name).replace(/'/g, "\\'");
-        const dqBtn   = isDQ
-            ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer('${e.discord_id}')">Un-DQ</button>`
-            : `<button class="btn btn-danger btn-sm" onclick="dqPlayer('${e.discord_id}','${nameEsc}')">DQ</button>`;
-        return `<tr>
-            <td style="color:var(--text-muted);font-size:12px">${i + 1}</td>
-            <td><strong>${escapeHtml(e.name)}</strong></td>
-            <td>${statusTag}</td>
-            <td>${dqBtn}</td>
-        </tr>`;
-    }).join('');
 }
 
 // ── Seed input (used in bracket seeding view) ─────────────────────────────────

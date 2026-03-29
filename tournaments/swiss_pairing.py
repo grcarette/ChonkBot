@@ -1,16 +1,20 @@
 """
 Swiss pairing algorithm for ChonkBot.
 
-For small fields (≤ EXHAUSTIVE_THRESHOLD players): uses minimum-weight perfect
+Fold pairing: within each point group, the highest-seeded player faces the
+lowest-seeded player (1 vs N, 2 vs N-1, etc). This rewards strong players
+with easier matchups early, letting cream rise over multiple rounds.
+
+For small fields (≤ EXHAUSTIVE_THRESHOLD): uses minimum-weight perfect
 matching over all possible pairings — globally optimal but O((n-1)!!).
 
-For larger fields: uses a fast greedy approach — sort by points desc, pair
-adjacent players, with rematch avoidance by swapping down the list.
+For larger fields: uses a greedy fold approach — group by points, fold-pair
+within each group, with rematch avoidance.
 
 Pairing cost (lower is better):
 1. Rematch penalty (highest priority — avoid at all costs)
-2. Points difference (pair closest points)
-3. Elo difference (tiebreaker)
+2. Points difference (pair within same point group)
+3. Negative elo difference (within a point group, MAXIMIZE elo gap = fold)
 
 Each player dict must have:
     discord_id: int | str
@@ -19,25 +23,39 @@ Each player dict must have:
     match_history: list   # discord_ids of past opponents
 """
 
-EXHAUSTIVE_THRESHOLD = 10  # use exhaustive matching for fields this size or smaller
+EXHAUSTIVE_THRESHOLD = 10
 
 
 def _pairing_cost(p1: dict, p2: dict) -> tuple:
-    """Return a (rematch_penalty, points_diff, elo_diff) cost tuple for a pair."""
+    """
+    Return a cost tuple for pairing two players. Lower is better.
+
+    Within the same point group (points_diff == 0), we NEGATE the elo
+    difference so the optimizer prefers the widest skill gap — this
+    produces fold pairings (best vs worst).
+
+    Across point groups the elo component is irrelevant since the
+    points_diff term already dominates.
+    """
     is_rematch = p2['discord_id'] in p1['match_history']
+    points_diff = abs(p1['points'] - p2['points'])
+    elo_diff = abs(p1['elo'] - p2['elo'])
+
     return (
         1000 if is_rematch else 0,
-        abs(p1['points'] - p2['points']),
-        abs(p1['elo'] - p2['elo']),
+        points_diff,
+        -elo_diff,          # negative = prefer LARGE elo gaps (fold)
     )
 
 
 def _total_cost(pairs: list[tuple[dict, dict]]) -> tuple:
     """Sum costs across all pairs for global comparison."""
-    total_rematch = sum(c[0] for c in (_pairing_cost(a, b) for a, b in pairs))
-    total_points  = sum(c[1] for c in (_pairing_cost(a, b) for a, b in pairs))
-    total_elo     = sum(c[2] for c in (_pairing_cost(a, b) for a, b in pairs))
-    return (total_rematch, total_points, total_elo)
+    costs = [_pairing_cost(a, b) for a, b in pairs]
+    return (
+        sum(c[0] for c in costs),
+        sum(c[1] for c in costs),
+        sum(c[2] for c in costs),
+    )
 
 
 def _all_perfect_matchings(players: list[dict]) -> list[list[tuple[dict, dict]]]:
@@ -62,26 +80,30 @@ def _all_perfect_matchings(players: list[dict]) -> list[list[tuple[dict, dict]]]
 
 def _greedy_pair(players: list[dict]) -> list[tuple[dict, dict]]:
     """
-    Greedy pairing for large fields. Players are pre-sorted by points desc.
-    Pair adjacent players, then attempt single swaps to eliminate rematches.
+    Fold pairing for large fields.
+
+    For each unmatched player (taken from the top of the sorted list),
+    find the best partner: same point group, maximum elo distance,
+    no rematch. This naturally produces fold pairings — the strongest
+    player in a group gets paired with the weakest.
     """
-    remaining = list(players)
+    remaining = list(players)  # already sorted by (-points, -elo)
     pairs = []
 
     while len(remaining) >= 2:
         p1 = remaining.pop(0)
-        # Find the best partner: first non-rematch adjacent player
-        partner_idx = None
-        for i, candidate in enumerate(remaining):
-            if candidate['discord_id'] not in p1['match_history']:
-                partner_idx = i
-                break
 
-        if partner_idx is None:
-            # All remaining players are rematches — just take the closest
-            partner_idx = 0
+        # Score each candidate: (rematch_penalty, points_diff, -elo_diff)
+        best_idx = 0
+        best_cost = _pairing_cost(p1, remaining[0])
 
-        partner = remaining.pop(partner_idx)
+        for i in range(1, len(remaining)):
+            cost = _pairing_cost(p1, remaining[i])
+            if cost < best_cost:
+                best_cost = cost
+                best_idx = i
+
+        partner = remaining.pop(best_idx)
         pairs.append((p1, partner))
 
     return pairs
@@ -89,10 +111,10 @@ def _greedy_pair(players: list[dict]) -> list[tuple[dict, dict]]:
 
 def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[dict]]:
     """
-    Pair available players optimally.
+    Pair available players using fold pairing within point groups.
 
     For fields ≤ EXHAUSTIVE_THRESHOLD: exhaustive global optimum.
-    For larger fields: fast greedy with rematch avoidance.
+    For larger fields: greedy fold with rematch avoidance.
 
     For odd player counts, the bye candidate is selected first (fewest points,
     fewest wins as tiebreaker), then the remaining even field is paired.
@@ -118,7 +140,6 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
         return [], unpaired
 
     if len(players) <= EXHAUSTIVE_THRESHOLD:
-        # Exhaustive: find globally optimal matching
         best_matching = None
         best_cost     = None
         for matching in _all_perfect_matchings(players):
@@ -128,7 +149,6 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
                 best_matching = matching
         return best_matching, unpaired
     else:
-        # Greedy: fast O(n log n) approach
         pairs = _greedy_pair(players)
         return pairs, unpaired
 
@@ -139,12 +159,11 @@ def select_bye_candidate(unpaired: list[dict]) -> dict | None:
     1. Prefer players who have NOT had a bye yet
     2. Fewest points
     3. Fewest wins as tiebreaker
-    If everyone has had a bye, fall back to fewest points.
     """
     if not unpaired:
         return None
     return min(unpaired, key=lambda p: (
-        p.get('has_bye', False),  # False (0) sorts before True (1)
+        p.get('has_bye', False),
         p['points'],
         p.get('wins', 0),
     ))

@@ -70,12 +70,20 @@ document.addEventListener('DOMContentLoaded', () => {
         await doAction('update_config', { name, date });
     };
     document.getElementById('cfg-save-options').onclick = async () => {
-        await doAction('update_config', {
+        const payload = {
             approved_registration: document.getElementById('cfg-approved').checked,
             randomized_stagelist:  document.getElementById('cfg-random-stage').checked,
             display_entrants:      document.getElementById('cfg-display-entrants').checked,
             ranked_reporting:      document.getElementById('cfg-ranked').checked,
-        });
+        };
+        const staggeredRow = document.getElementById('cfg-staggered-row');
+        if (staggeredRow && staggeredRow.style.display !== 'none') {
+            payload.staggered_start = document.getElementById('cfg-staggered').checked;
+            payload.staggered_start_threshold = parseInt(
+                document.getElementById('cfg-staggered-threshold').value, 10
+            ) || 16;
+        }
+        await doAction('update_config', payload);
     };
     // Image uploads — wired once, not on every populateConfig call
     document.getElementById('cfg-banner-upload').addEventListener('change', async (e) => {
@@ -656,6 +664,24 @@ function populateConfig(t) {
     if (rankedRow) {
         rankedRow.hidden = !t.ranked_compatible;
         document.getElementById('cfg-ranked').checked = t.ranked_reporting ?? false;
+    }
+
+    // Staggered start — only show for Swiss formats
+    const isSwissFmt = (t.format === 'swiss' || t.format === 'swiss filter');
+    const staggeredRow     = document.getElementById('cfg-staggered-row');
+    const staggeredThRow   = document.getElementById('cfg-staggered-threshold-row');
+    const staggeredCheck   = document.getElementById('cfg-staggered');
+    const staggeredThInput = document.getElementById('cfg-staggered-threshold');
+
+    if (staggeredRow) staggeredRow.style.display     = isSwissFmt ? '' : 'none';
+    if (staggeredThRow) staggeredThRow.style.display  = isSwissFmt && t.config?.staggered_start ? '' : 'none';
+    if (staggeredCheck) staggeredCheck.checked         = t.config?.staggered_start ?? false;
+    if (staggeredThInput) staggeredThInput.value       = t.config?.staggered_start_threshold ?? 16;
+
+    if (staggeredCheck) {
+        staggeredCheck.onchange = () => {
+            if (staggeredThRow) staggeredThRow.style.display = staggeredCheck.checked ? '' : 'none';
+        };
     }
 }
 

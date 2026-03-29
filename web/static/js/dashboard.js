@@ -184,6 +184,8 @@ function initCreateModal() {
         } else {
             const cfg = formatConfig(selectedFormat);
             roundGroup.hidden      = !cfg.hasRoundLimit;
+            const staggeredRow = document.getElementById('opt-staggered-row');
+            if (staggeredRow) staggeredRow.hidden = !cfg.hasRoundLimit;
             modalTitle.textContent = 'Configuration';
             btnLabel.textContent   = 'Create Tournament';
             btnSubmit.style.opacity = '';
@@ -244,6 +246,8 @@ function initCreateModal() {
                 debug:                 document.getElementById('opt-debug').checked,
                 round_limit:           cfg.hasRoundLimit ? parseInt(fieldRounds.value) || 8 : 8,
                 teams_mode:            document.getElementById('opt-teams').checked,
+                staggered_start:       document.getElementById('opt-staggered')?.checked || false,
+                staggered_start_threshold: 16,
             });
             closeModal();
             await loadTournaments();

@@ -1,0 +1,41 @@
+[2026-03-28 19:29:07] [INFO ] [LOGGER] Log opened — logs\hhh_2026-03-28.log
+[2026-03-28 19:29:29] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-28 19:29:30] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-28 19:29:32] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-28 19:29:33] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-28 19:29:35] [INFO ] [STATE] setup → registration
+[2026-03-28 19:29:38] [INFO ] [REGISTRATION] Bojack (142798704703700992) registered
+[2026-03-28 19:29:42] [INFO ] [REGISTRATION] 142798704703700992 (142798704703700992) dropped
+[2026-03-28 19:37:30] [INFO ] [LOGGER] Log opened — logs\hhh_2026-03-28.log
+[2026-03-28 19:37:56] [DEBUG] [REGISTRATION] Player 0 tried to register but is already registered
+[2026-03-28 19:37:56] [DEBUG] [REGISTRATION] Player 1 tried to register but is already registered
+[2026-03-28 19:37:56] [DEBUG] [REGISTRATION] Player 2 tried to register but is already registered
+[2026-03-28 19:37:56] [DEBUG] [REGISTRATION] Player 3 tried to register but is already registered
+[2026-03-28 19:37:57] [INFO ] [STATE] setup → registration
+[2026-03-28 19:39:42] [INFO ] [LOGGER] Log opened — logs\hhh_2026-03-28.log
+[2026-03-28 19:39:55] [DEBUG] [REGISTRATION] Player 0 tried to register but is already registered
+[2026-03-28 19:39:55] [DEBUG] [REGISTRATION] Player 1 tried to register but is already registered
+[2026-03-28 19:39:55] [DEBUG] [REGISTRATION] Player 2 tried to register but is already registered
+[2026-03-28 19:39:55] [DEBUG] [REGISTRATION] Player 3 tried to register but is already registered
+[2026-03-28 19:39:55] [INFO ] [STATE] setup → registration
+[2026-03-28 19:40:14] [INFO ] [STATE] registration → checkin
+[2026-03-28 19:40:22] [INFO ] [STATE] Tournament started — 4 players
+[2026-03-28 19:40:22] [INFO ] [STATE] checkin → active
+[2026-03-28 19:40:28] [INFO ] [REGISTRATION] Bojack (142798704703700992) registered
+[2026-03-28 19:40:31] [INFO ] [SWISS] Round 1 started — 5 players, 2 matches
+[2026-03-28 19:40:32] [INFO ] [SWISS] Match 524200001 created — 0 vs 142798704703700992 (round 1)
+[2026-03-28 19:40:33] [INFO ] [SWISS] Match 524200002 created — 2 vs 3 (round 1)
+[2026-03-28 19:40:34] [INFO ] [SWISS] Bye awarded to 1
+[2026-03-28 19:41:17] [INFO ] [SWISS] Match 524200001 reported — winner: 0, loser: 142798704703700992 [DQ]
+[2026-03-28 19:41:17] [INFO ] [DQ] Player 142798704703700992 disqualified — active match ended, 0 wins by default
+[2026-03-28 19:41:23] [INFO ] [SWISS] Match 524200002 reported — winner: 2, loser: 3 [DQ]
+[2026-03-28 19:41:23] [INFO ] [SWISS] Round 1 complete
+[2026-03-28 19:41:23] [INFO ] [DQ] Player 3 disqualified — active match ended, 2 wins by default
+[2026-03-28 19:41:30] [INFO ] [SWISS] Round 2 started — 3 players, 1 matches
+[2026-03-28 19:41:30] [INFO ] [SWISS] Match 524200003 created — 1 vs 2 (round 2)
+[2026-03-28 19:41:31] [INFO ] [SWISS] Bye awarded to 0
+[2026-03-28 19:42:01] [INFO ] [SWISS] Match 524200003 reported — winner: 2, loser: 1
+[2026-03-28 19:42:01] [INFO ] [SWISS] Round 2 complete
+[2026-03-28 19:42:08] [INFO ] [SWISS] Round 3 started — 3 players, 1 matches
+[2026-03-28 19:42:08] [INFO ] [SWISS] Match 524200004 created — 0 vs 1 (round 3)
+[2026-03-28 19:42:11] [INFO ] [SWISS] Bye awarded to 2

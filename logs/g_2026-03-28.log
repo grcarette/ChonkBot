@@ -1,0 +1,49 @@
+[2026-03-28 19:52:07] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 19:59:01] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 20:00:01] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 20:00:26] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-28 20:00:28] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-28 20:00:29] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-28 20:00:31] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-28 20:00:33] [INFO ] [STATE] setup → registration
+[2026-03-28 20:00:40] [INFO ] [STATE] registration → checkin
+[2026-03-28 20:00:53] [INFO ] [SWISS] Staggered start: +1 bonus to top 4 of 4 players
+[2026-03-28 20:00:53] [INFO ] [STATE] Tournament started — 4 players
+[2026-03-28 20:00:53] [INFO ] [STATE] checkin → active
+[2026-03-28 20:00:56] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-28 20:00:56] [INFO ] [SWISS] Match 804100001 created — 1 vs 0 (round 1)
+[2026-03-28 20:00:57] [INFO ] [SWISS] Match 804100002 created — 2 vs 3 (round 1)
+[2026-03-28 20:01:06] [INFO ] [SWISS] Match 804100001 reported — winner: 0, loser: 1
+[2026-03-28 20:01:10] [INFO ] [SWISS] Match 804100002 reported — winner: 3, loser: 2
+[2026-03-28 20:01:11] [ERROR] [RANKED] API failure — winner: 0, loser: 1 — Client error '400 Bad Request' for url 'https://uchranked.com/api/report-match.php'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+[2026-03-28 20:01:11] [ERROR] [RANKED] API failure — winner: 3, loser: 2 — Reporting player does not have a linked discord account
+[2026-03-28 20:01:11] [INFO ] [SWISS] Round 1 complete
+[2026-03-28 20:01:16] [INFO ] [SWISS] Round 2 started — 4 players, 2 matches
+[2026-03-28 20:01:16] [INFO ] [SWISS] Match 804100003 created — 0 vs 3 (round 2)
+[2026-03-28 20:01:18] [INFO ] [SWISS] Match 804100004 created — 1 vs 2 (round 2)
+[2026-03-28 20:02:16] [DEBUG] [REGISTRATION] Player 0 tried to register but is already registered
+[2026-03-28 20:02:16] [DEBUG] [REGISTRATION] Player 1 tried to register but is already registered
+[2026-03-28 20:02:16] [DEBUG] [REGISTRATION] Player 2 tried to register but is already registered
+[2026-03-28 20:02:16] [DEBUG] [REGISTRATION] Player 3 tried to register but is already registered
+[2026-03-28 20:02:16] [INFO ] [STATE] setup → registration
+[2026-03-28 20:02:23] [INFO ] [STATE] registration → checkin
+[2026-03-28 20:02:49] [INFO ] [SWISS] Staggered start: +1 bonus to top 2 of 4 players
+[2026-03-28 20:02:49] [INFO ] [STATE] Tournament started — 4 players
+[2026-03-28 20:02:49] [INFO ] [STATE] checkin → active
+[2026-03-28 20:02:53] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-28 20:02:53] [INFO ] [SWISS] Match 804100001 created — 1 vs 0 (round 1)
+[2026-03-28 20:02:54] [INFO ] [SWISS] Match 804100002 created — 2 vs 3 (round 1)
+[2026-03-28 20:03:11] [INFO ] [SWISS] Match 804100001 reported — winner: 0, loser: 1
+[2026-03-28 20:03:15] [INFO ] [SWISS] Match 804100002 reported — winner: 3, loser: 2
+[2026-03-28 20:03:15] [INFO ] [SWISS] Round 1 complete
+[2026-03-28 20:03:21] [INFO ] [SWISS] Round 2 started — 4 players, 2 matches
+[2026-03-28 20:03:21] [INFO ] [SWISS] Match 804100003 created — 0 vs 3 (round 2)
+[2026-03-28 20:03:23] [INFO ] [SWISS] Match 804100004 created — 1 vs 2 (round 2)
+[2026-03-28 20:06:14] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 20:14:10] [INFO ] [LOGGER] Log opened — logs\g_2026-03-28.log
+[2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 0 tried to register but is already registered
+[2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 1 tried to register but is already registered
+[2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 2 tried to register but is already registered
+[2026-03-28 20:14:46] [DEBUG] [REGISTRATION] Player 3 tried to register but is already registered
+[2026-03-28 20:14:47] [INFO ] [STATE] setup → registration

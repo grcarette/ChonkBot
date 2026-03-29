@@ -136,6 +136,27 @@ class SwissFormat(BaseFormat):
             await self._backfill_debug_players()
         await self.manager.start()
 
+        # ── Staggered start bonus ─────────────────────────────────────────────
+        tournament = await self.tm.get_tournament()
+        config = tournament.get('config', {})
+
+        if config.get('staggered_start'):
+            threshold = config.get('staggered_start_threshold', 16)
+            swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
+            if swiss_event:
+                entrant_ids = list(tournament.get('entrants', {}).keys())
+                top_players = [int(did) for did in entrant_ids[:threshold]]
+
+                existing = set(swiss_event.get('players', {}).keys())
+                eligible = [did for did in top_players if str(did) in existing]
+
+                if eligible:
+                    await self.dh.swiss_apply_staggered_bonus(swiss_event['_id'], eligible)
+                    self.tm.logger.info(
+                        'SWISS',
+                        f'Staggered start: +1 bonus to top {len(eligible)} of {len(entrant_ids)} players'
+                    )
+
     async def on_result(self, result: dict, lobby) -> None:
         tournament = await self.tm.get_tournament()
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])

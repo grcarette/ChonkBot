@@ -274,6 +274,22 @@ class SwissMethodsMixin:
             }
         )
 
+    async def swiss_apply_staggered_bonus(self, event_id: ObjectId, discord_ids: list[int], bonus: int = 1):
+        """
+        Award bonus starting points to a list of players.
+        Used by staggered start to give top-seeded players a head start.
+        """
+        if not discord_ids:
+            return
+        update_ops = {}
+        for did in discord_ids:
+            update_ops[f'players.{did}.points'] = bonus
+            update_ops[f'players.{did}.staggered_bonus'] = bonus
+        await self.swiss_collection.update_one(
+            {'_id': ObjectId(event_id)},
+            {'$inc': update_ops}
+        )
+
     # ─── Queries ──────────────────────────────────────────────────────────────
 
     async def swiss_get_available_players(self, event_id: ObjectId) -> list[dict]:

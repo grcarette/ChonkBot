@@ -17,8 +17,14 @@ from web.auth import (
 
 # token_store maps token -> { tournament_id, challonge_url, expires_at }
 token_store: dict[str, dict] = {}
+_tournament_action_locks: dict[str, asyncio.Lock] = {}
 
 TOKEN_EXPIRY_MINUTES = 30
+
+def _get_tournament_lock(tournament_id: str) -> asyncio.Lock:
+    if tournament_id not in _tournament_action_locks:
+        _tournament_action_locks[tournament_id] = asyncio.Lock()
+    return _tournament_action_locks[tournament_id]
 
 def generate_token(tournament_id: str, challonge_url: str) -> str:
     """Generate a one-time access token for a tournament seeding session."""
@@ -220,21 +226,25 @@ async def handle_create_tournament(request: web.Request) -> web.Response:
     display_entrants      = bool(body.get('display_entrants', False))
     round_limit           = max(1, min(int(body.get('round_limit', 8)), 99))
     debug                 = bool(body.get('debug', False))
-    ranked_reporting      = bool(body.get('ranked_reporting', False))
-    teams_mode = bool(body.get('teams_mode', False))
+    ranked_reporting           = bool(body.get('ranked_reporting', False))
+    teams_mode                 = bool(body.get('teams_mode', False))
+    staggered_start            = bool(body.get('staggered_start', False))
+    staggered_start_threshold  = max(1, min(int(body.get('staggered_start_threshold', 16)), 999))
 
     tournament_data = {
-        'name':                  name,
-        'date':                  body.get('date', ''),
-        'organizer':             session['discord_user_id'],
-        'format':                fmt,
-        'approved_registration': approved_registration,
-        'randomized_stagelist':  randomized_stagelist,
-        'display_entrants':      display_entrants,
-        'round_limit':           round_limit,
-        'ranked_reporting':      ranked_reporting,
-        'debug':                 debug,
-        'teams_mode':            teams_mode,
+        'name':                      name,
+        'date':                      body.get('date', ''),
+        'organizer':                 session['discord_user_id'],
+        'format':                    fmt,
+        'approved_registration':     approved_registration,
+        'randomized_stagelist':      randomized_stagelist,
+        'display_entrants':          display_entrants,
+        'round_limit':               round_limit,
+        'ranked_reporting':          ranked_reporting,
+        'debug':                     debug,
+        'teams_mode':                teams_mode,
+        'staggered_start':           staggered_start,
+        'staggered_start_threshold': staggered_start_threshold,
     }
 
     try:
@@ -353,28 +363,31 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     user_map = await bot.dh.get_users_bulk(all_ids)
 
     # ── Seed data ─────────────────────────────────────────────────────────────
+    # Populate seeds for ALL formats, not just bracket.
+    # Bracket formats pull from Challonge participants; everything else uses
+    # the native tournament.seeds dict.
 
     seed_by_discord:         dict[str, int | None] = {}
     challonge_id_by_discord: dict[str, int | None] = {}
-    if is_bracket_fmt:
-        if 'challonge_data' in tournament:
-            challonge_to_discord = {
-                int(cid): str(did)
-                for did, cid in tournament.get('entrants', {}).items()
-                if cid is not None
-            }
-            for p in participants:
-                discord_id = challonge_to_discord.get(p['id'])
-                if discord_id:
-                    seed_by_discord[discord_id]         = p.get('seed')
-                    challonge_id_by_discord[discord_id] = p['id']
-        else:
-            native_seeds    = tournament.get('seeds', {})
-            entrant_key_set = {str(k) for k in tournament.get('entrants', {}).keys()}
-            for discord_id_str, seed in native_seeds.items():
-                key_str = str(discord_id_str)
-                if key_str in entrant_key_set:
-                    seed_by_discord[key_str] = seed
+
+    if is_bracket_fmt and 'challonge_data' in tournament:
+        challonge_to_discord = {
+            int(cid): str(did)
+            for did, cid in tournament.get('entrants', {}).items()
+            if cid is not None
+        }
+        for p in participants:
+            discord_id = challonge_to_discord.get(p['id'])
+            if discord_id:
+                seed_by_discord[discord_id]         = p.get('seed')
+                challonge_id_by_discord[discord_id] = p['id']
+    else:
+        native_seeds    = tournament.get('seeds', {})
+        entrant_key_set = {str(k) for k in tournament.get('entrants', {}).keys()}
+        for discord_id_str, seed in native_seeds.items():
+            key_str = str(discord_id_str)
+            if key_str in entrant_key_set:
+                seed_by_discord[key_str] = seed
 
     # ── Entrants ──────────────────────────────────────────────────────────────
 
@@ -392,7 +405,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
                 entrants.append({
                     'discord_id': key_str,
                     'name':       f"{n1} / {n2}",
-                    'seed':       None,
+                    'seed':       seed_by_discord.get(key_str),
                     'challonge_id': tournament.get('entrants', {}).get(key_str),
                     'avatar_url': None,
                 })
@@ -407,8 +420,8 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
                 'challonge_id': challonge_id_by_discord.get(key_str),
                 'avatar_url':   user.get('avatar_url') if user else None,
             })
-    if is_bracket_fmt:
-        entrants.sort(key=lambda e: e['seed'] if e['seed'] is not None else 9999)
+
+    entrants.sort(key=lambda e: e['seed'] if e['seed'] is not None else 9999)
 
     # ── Lobbies ───────────────────────────────────────────────────────────────
 
@@ -612,300 +625,326 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
     if action not in VALID_ACTIONS:
         return web.json_response({'error': f'Unknown action: {action!r}'}, status=400)
 
-    def need_tm():
-        if not tm:
-            raise ValueError('Tournament manager not loaded — bot may need restart')
+    # ── Acquire per-tournament lock to prevent concurrent state mutations ──
+    lock = _get_tournament_lock(tournament_id)
+    if lock.locked():
+        return web.json_response(
+            {'error': 'Another action is already in progress for this tournament'},
+            status=409
+        )
 
-    try:
-        if action == 'progress':
-            need_tm()
-            await tm.progress_tournament()
+    async with lock:
+        # Re-fetch tournament inside the lock to get the latest state
+        tournament = await bot.dh.get_tournament_by_id(tournament_id)
+        if not tournament:
+            return web.json_response({'error': 'Tournament not found'}, status=404)
+        tm = bot.th.tournaments.get(tournament['_id'])
 
-        elif action == 'open_registration':
-            need_tm()
-            await tm.open_registration()
+        def need_tm():
+            if not tm:
+                raise ValueError('Tournament manager not loaded — bot may need restart')
 
-        elif action == 'close_registration':
-            need_tm()
-            await tm.close_registration()
+        try:
+            if action == 'progress':
+                need_tm()
+                await tm.progress_tournament()
 
-        elif action == 'ping_checkin':
-            need_tm()
-            result = await tm.ping_checkin()
-            if not result:
-                return web.json_response(
-                    {'error': 'Ping limit reached or fewer than 10 players remain unchecked'},
-                    status=400
-                )
+            elif action == 'open_registration':
+                need_tm()
+                await tm.open_registration()
 
-        elif action == 'next_round':
-            need_tm()
-            if fmt not in ('swiss', 'swiss filter'):
-                return web.json_response({'error': 'next_round is only valid for Swiss'}, status=400)
-            if not tm.format:
-                return web.json_response({'error': 'Format not initialised'}, status=500)
-            if tm.format.manager._get_pairing_lock().locked():
-                return web.json_response({'error': 'Round is already being started'}, status=409)
-            await tm.format.manager.run_pairing_cycle()
+            elif action == 'close_registration':
+                need_tm()
+                await tm.close_registration()
 
-        elif action == 'dq_player':
-            need_tm()
-            discord_id = body.get('discord_id')
-            if discord_id is None:
-                return web.json_response({'error': 'discord_id is required'}, status=400)
-            discord_id = int(discord_id)
-            result = await tm.disqualify_player(discord_id)
-            if result is False:
-                return web.json_response(
-                    {'error': 'Player not registered or tournament is not active'},
-                    status=400
-                )
-
-        elif action == 'undq_player':
-            need_tm()
-            discord_id = body.get('discord_id')
-            if discord_id is None:
-                return web.json_response({'error': 'discord_id is required'}, status=400)
-            discord_id = int(discord_id)
-            await tm.undisqualify_player(discord_id)
-
-        elif action == 'force_advance':
-            need_tm()
-            match_id     = body.get('match_id')
-            target_state = body.get('target_state', '')
-            winner_id    = body.get('winner_id')
-
-            if match_id is None or not target_state:
-                return web.json_response(
-                    {'error': 'match_id and target_state are required'}, status=400
-                )
-
-            match_id_str = str(match_id)
-            match_lobby  = next(
-                (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
-                None
-            )
-            if not match_lobby:
-                return web.json_response(
-                    {'error': 'Lobby not found in memory — bot may have restarted'},
-                    status=404
-                )
-
-            if target_state == 'winner':
-                lobby_data = await match_lobby.get_lobby()
-                if lobby_data.get('state') == 'finished':
+            elif action == 'ping_checkin':
+                need_tm()
+                result = await tm.ping_checkin()
+                if not result:
                     return web.json_response(
-                        {'error': 'Lobby is already finished — cannot force-advance again'},
+                        {'error': 'Ping limit reached or fewer than 10 players remain unchecked'},
                         status=400
                     )
 
-                # Resolve winner_id to the exact key stored in the swiss event,
-                # since large Discord IDs can lose precision passing through JS JSON.
-                # We match by string comparison of integer values.
-                if winner_id is not None:
-                    fmt = tournament.get('format', '')
-                    if fmt in ('swiss', 'swiss filter'):
-                        swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
-                        if swiss_event:
-                            stored_keys = list(swiss_event.get('players', {}).keys())
-                            try:
-                                winner_id = next(
-                                    k for k in stored_keys
-                                    if int(k) == int(winner_id)
-                                )
-                            except (StopIteration, ValueError):
-                                pass  # fall through with original value
+            elif action == 'next_round':
+                need_tm()
+                if fmt not in ('swiss', 'swiss filter'):
+                    return web.json_response({'error': 'next_round is only valid for Swiss'}, status=400)
+                if not tm.format:
+                    return web.json_response({'error': 'Format not initialised'}, status=500)
+                if tm.format.manager._get_pairing_lock().locked():
+                    return web.json_response({'error': 'Round is already being started'}, status=409)
+                await tm.format.manager.run_pairing_cycle()
 
-                await match_lobby.force_advance(target_state, winner_id=winner_id)
-            else:
-                await match_lobby.force_advance(target_state, winner_id=winner_id)
-
-        elif action == 'update_config':
-            updates = {}
-            if 'name' in body:
-                name = body['name'].strip()
-                if not name:
-                    return web.json_response({'error': 'Name cannot be empty'}, status=400)
-                updates['name'] = name
-            if 'date' in body:
-                updates['date'] = body['date'].strip()
-            for key in ('approved_registration', 'randomized_stagelist', 'display_entrants', 'ranked_reporting'):
-                if key in body:
-                    updates[f'config.{key}'] = bool(body[key])
-            if updates:
-                await bot.dh.edit_tournament_config(tournament['_id'], **updates)
-                if tm and 'config.display_entrants' in updates:
-                    await tm.edit_event_info()
-
-        elif action == 'delete_tournament':
-            need_tm()
-            await tm.delete_tournament()
-            return web.json_response({'ok': True})
-
-        elif action == 'publish_stagelist':
-            need_tm()
-            await tm.publish_stagelist()
-
-        elif action == 'approve_registration':
-            need_tm()
-            discord_id = int(body.get('discord_id', 0))
-            if not discord_id:
-                return web.json_response({'error': 'discord_id is required'}, status=400)
-            await bot.dh.remove_registration_request(tournament['_id'], discord_id)
-            await tm.register_player_direct(discord_id)
-            member = bot.guild.get_member(discord_id)
-            if member:
-                try:
-                    embed = discord.Embed(
-                        title='Registration Approved',
-                        description=f"Your registration for **{tournament['name']}** has been approved.",
-                        color=discord.Color.green()
+            elif action == 'dq_player':
+                need_tm()
+                discord_id = body.get('discord_id')
+                if discord_id is None:
+                    return web.json_response({'error': 'discord_id is required'}, status=400)
+                discord_id = int(discord_id)
+                result = await tm.disqualify_player(discord_id)
+                if result is False:
+                    return web.json_response(
+                        {'error': 'Player not registered or tournament is not active'},
+                        status=400
                     )
-                    await member.send(embed=embed)
-                except discord.Forbidden:
-                    pass
 
-        elif action == 'deny_registration':
-            need_tm()
-            discord_id = int(body.get('discord_id', 0))
-            reason     = body.get('reason', '').strip()
-            if not discord_id:
-                return web.json_response({'error': 'discord_id is required'}, status=400)
-            await bot.dh.remove_registration_request(tournament['_id'], discord_id)
-            member = bot.guild.get_member(discord_id)
-            if member:
-                try:
-                    desc = f"Your registration for **{tournament['name']}** has been denied."
-                    if reason:
-                        desc += f"\n**Reason:** {reason}"
-                    embed = discord.Embed(
-                        title='Registration Denied', description=desc, color=discord.Color.red()
+            elif action == 'undq_player':
+                need_tm()
+                discord_id = body.get('discord_id')
+                if discord_id is None:
+                    return web.json_response({'error': 'discord_id is required'}, status=400)
+                discord_id = int(discord_id)
+                await tm.undisqualify_player(discord_id)
+
+            elif action == 'force_advance':
+                need_tm()
+                match_id     = body.get('match_id')
+                target_state = body.get('target_state', '')
+                winner_id    = body.get('winner_id')
+
+                if match_id is None or not target_state:
+                    return web.json_response(
+                        {'error': 'match_id and target_state are required'}, status=400
                     )
-                    await member.send(embed=embed)
-                except discord.Forbidden:
-                    pass
 
-        elif action == 'randomize_seeds':
-            import random
-            entrant_ids = list(tournament.get('entrants', {}).keys())
-            shuffled    = random.sample(entrant_ids, len(entrant_ids))
-            seeds       = {int(did): i + 1 for i, did in enumerate(shuffled)}
-            await bot.dh.update_all_seeds(tournament['_id'], seeds)
+                match_id_str = str(match_id)
+                match_lobby  = next(
+                    (lobby for key, lobby in tm.lobbies.items() if str(key) == match_id_str),
+                    None
+                )
+                if not match_lobby:
+                    return web.json_response(
+                        {'error': 'Lobby not found in memory — bot may have restarted'},
+                        status=404
+                    )
 
-        elif action == 'seed_by_rank':
-            entrant_ids = set(int(did) for did in tournament.get('entrants', {}).keys())
-            leaderboard = await bot.uchranked_api.get_leaderboard(10000)
-            elo_map = {}
-            for p in leaderboard:
-                try:
-                    discord_id = int(p['discord_id'])
-                    if discord_id in entrant_ids:
-                        elo_map[discord_id] = p['elo']
-                except (ValueError, TypeError, KeyError):
-                    continue
-            for discord_id in entrant_ids:
-                if discord_id not in elo_map:
-                    elo_map[discord_id] = 0
-            sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
-            seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
-            await bot.dh.update_all_seeds(tournament['_id'], seeds)
+                if target_state == 'winner':
+                    # Check both the DB state AND the in-memory resolved flag
+                    lobby_data = await match_lobby.get_lobby()
+                    if lobby_data.get('state') == 'finished':
+                        return web.json_response(
+                            {'error': 'Lobby is already finished — cannot force-advance again'},
+                            status=400
+                        )
+                    if getattr(match_lobby, 'resolved', False):
+                        return web.json_response(
+                            {'error': 'Lobby result is already being processed'},
+                            status=409
+                        )
 
-        elif action == 'revert_tournament':
-            need_tm()
-            await tm.revert_tournament()
+                    # Resolve winner_id to the exact key stored in the swiss event,
+                    # since large Discord IDs can lose precision passing through JS JSON.
+                    # We match by string comparison of integer values.
+                        if winner_id is not None:
+                            fmt = tournament.get('format', '')
+                            if fmt in ('swiss', 'swiss filter'):
+                                swiss_event = await bot.dh.get_swiss_event_by_tournament(tournament['_id'])
+                                if swiss_event:
+                                    stored_keys = list(swiss_event.get('players', {}).keys())
+                                    try:
+                                        winner_id = next(
+                                            k for k in stored_keys
+                                            if int(k) == int(winner_id)
+                                        )
+                                    except (StopIteration, ValueError):
+                                        pass  # fall through with original value
 
-        elif action == 'call_match':
-            need_tm()
-            match_id = body.get('match_id')
-            if match_id is None:
-                return web.json_response({'error': 'match_id is required'}, status=400)
-            pending    = await tm.format.get_pending_matches()
-            match_data = next((m for m in pending if m['match_id'] == match_id), None)
-            if not match_data:
-                return web.json_response({'error': 'Match not found or already called'}, status=400)
-            await tm.format.call_match(match_data)
-            if hasattr(tm.format, 'invalidate_pending_cache'):
-                tm.format.invalidate_pending_cache()
+                        await match_lobby.force_advance(target_state, winner_id=winner_id)
+                    else:
+                        await match_lobby.force_advance(target_state, winner_id=winner_id)
 
-        elif action == 'hold_match':
-            need_tm()
-            match_id = body.get('match_id')
-            if match_id is None:
-                return web.json_response({'error': 'match_id is required'}, status=400)
-            pending    = await tm.format.get_pending_matches()
-            match_data = next((m for m in pending if m['match_id'] == match_id), None)
-            if not match_data:
-                return web.json_response({'error': 'Match not found or already called'}, status=400)
-            await tm.format.call_match(match_data, hold_match=True)
-            if hasattr(tm.format, 'invalidate_pending_cache'):
-                tm.format.invalidate_pending_cache()
+            elif action == 'update_config':
+                updates = {}
+                if 'name' in body:
+                    name = body['name'].strip()
+                    if not name:
+                        return web.json_response({'error': 'Name cannot be empty'}, status=400)
+                    updates['name'] = name
+                if 'date' in body:
+                    updates['date'] = body['date'].strip()
+                for key in ('approved_registration', 'randomized_stagelist', 'display_entrants', 'ranked_reporting'):
+                    if key in body:
+                        updates[f'config.{key}'] = bool(body[key])
+                if 'staggered_start' in body:
+                    updates['config.staggered_start'] = bool(body['staggered_start'])
+                if 'staggered_start_threshold' in body:
+                    updates['config.staggered_start_threshold'] = max(1, min(int(body['staggered_start_threshold']), 999))
+                if updates:
+                    await bot.dh.edit_tournament_config(tournament['_id'], **updates)
+                    if tm and 'config.display_entrants' in updates:
+                        if tournament.get('category_id') and tm.get_tournament_category():
+                            await tm.edit_event_info()
 
-        elif action == 'call_all_matches':
-            need_tm()
-            await tm.format.call_matches()
-            if hasattr(tm.format, 'invalidate_pending_cache'):
-                tm.format.invalidate_pending_cache()
+            elif action == 'delete_tournament':
+                need_tm()
+                await tm.delete_tournament()
+                return web.json_response({'ok': True})
 
-        elif action == 'set_autocall':
-            need_tm()
-            enabled = bool(body.get('enabled', False))
-            if not hasattr(tm.format, 'autocall_matches'):
-                return web.json_response({'error': 'autocall not supported for this format'}, status=400)
-            tm.format.autocall_matches = enabled
-            if enabled:
+            elif action == 'publish_stagelist':
+                need_tm()
+                await tm.publish_stagelist()
+
+            elif action == 'approve_registration':
+                need_tm()
+                discord_id = int(body.get('discord_id', 0))
+                if not discord_id:
+                    return web.json_response({'error': 'discord_id is required'}, status=400)
+                await bot.dh.remove_registration_request(tournament['_id'], discord_id)
+                await tm.register_player_direct(discord_id)
+                member = bot.guild.get_member(discord_id)
+                if member:
+                    try:
+                        embed = discord.Embed(
+                            title='Registration Approved',
+                            description=f"Your registration for **{tournament['name']}** has been approved.",
+                            color=discord.Color.green()
+                        )
+                        await member.send(embed=embed)
+                    except discord.Forbidden:
+                        pass
+
+            elif action == 'deny_registration':
+                need_tm()
+                discord_id = int(body.get('discord_id', 0))
+                reason     = body.get('reason', '').strip()
+                if not discord_id:
+                    return web.json_response({'error': 'discord_id is required'}, status=400)
+                await bot.dh.remove_registration_request(tournament['_id'], discord_id)
+                member = bot.guild.get_member(discord_id)
+                if member:
+                    try:
+                        desc = f"Your registration for **{tournament['name']}** has been denied."
+                        if reason:
+                            desc += f"\n**Reason:** {reason}"
+                        embed = discord.Embed(
+                            title='Registration Denied', description=desc, color=discord.Color.red()
+                        )
+                        await member.send(embed=embed)
+                    except discord.Forbidden:
+                        pass
+
+            elif action == 'randomize_seeds':
+                import random
+                entrant_ids = list(tournament.get('entrants', {}).keys())
+                shuffled    = random.sample(entrant_ids, len(entrant_ids))
+                seeds       = {int(did): i + 1 for i, did in enumerate(shuffled)}
+                await bot.dh.update_all_seeds(tournament['_id'], seeds)
+
+            elif action == 'seed_by_rank':
+                entrant_ids = set(int(did) for did in tournament.get('entrants', {}).keys())
+                leaderboard = await bot.uchranked_api.get_leaderboard(10000)
+                elo_map = {}
+                for p in leaderboard:
+                    try:
+                        discord_id = int(p['discord_id'])
+                        if discord_id in entrant_ids:
+                            elo_map[discord_id] = p['elo']
+                    except (ValueError, TypeError, KeyError):
+                        continue
+                for discord_id in entrant_ids:
+                    if discord_id not in elo_map:
+                        elo_map[discord_id] = 0
+                sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
+                seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
+                await bot.dh.update_all_seeds(tournament['_id'], seeds)
+
+            elif action == 'revert_tournament':
+                need_tm()
+                await tm.revert_tournament()
+
+            elif action == 'call_match':
+                need_tm()
+                match_id = body.get('match_id')
+                if match_id is None:
+                    return web.json_response({'error': 'match_id is required'}, status=400)
+                pending    = await tm.format.get_pending_matches()
+                match_data = next((m for m in pending if m['match_id'] == match_id), None)
+                if not match_data:
+                    return web.json_response({'error': 'Match not found or already called'}, status=400)
+                await tm.format.call_match(match_data)
+                if hasattr(tm.format, 'invalidate_pending_cache'):
+                    tm.format.invalidate_pending_cache()
+
+            elif action == 'hold_match':
+                need_tm()
+                match_id = body.get('match_id')
+                if match_id is None:
+                    return web.json_response({'error': 'match_id is required'}, status=400)
+                pending    = await tm.format.get_pending_matches()
+                match_data = next((m for m in pending if m['match_id'] == match_id), None)
+                if not match_data:
+                    return web.json_response({'error': 'Match not found or already called'}, status=400)
+                await tm.format.call_match(match_data, hold_match=True)
+                if hasattr(tm.format, 'invalidate_pending_cache'):
+                    tm.format.invalidate_pending_cache()
+
+            elif action == 'call_all_matches':
+                need_tm()
                 await tm.format.call_matches()
+                if hasattr(tm.format, 'invalidate_pending_cache'):
+                    tm.format.invalidate_pending_cache()
 
-        elif action == 'start_held_match':
-            need_tm()
-            match_id = body.get('match_id')
-            if match_id is None:
-                return web.json_response({'error': 'match_id is required'}, status=400)
-            match_lobby = tm.lobbies.get(match_id)
-            if not match_lobby:
-                return web.json_response({'error': 'Lobby not found'}, status=404)
-            await match_lobby.start_match()
+            elif action == 'set_autocall':
+                need_tm()
+                enabled = bool(body.get('enabled', False))
+                if not hasattr(tm.format, 'autocall_matches'):
+                    return web.json_response({'error': 'autocall not supported for this format'}, status=400)
+                tm.format.autocall_matches = enabled
+                if enabled:
+                    await tm.format.call_matches()
 
-        elif action == 'reset_lobby':
-            need_tm()
-            match_id = body.get('match_id')
-            if match_id is None:
-                return web.json_response({'error': 'match_id is required'}, status=400)
-            await tm.reset_lobby_to_active(match_id)
-            # invalidate_pending_cache now lives on the format
-            if hasattr(tm.format, 'invalidate_pending_cache'):
-                tm.format.invalidate_pending_cache()
+            elif action == 'start_held_match':
+                need_tm()
+                match_id = body.get('match_id')
+                if match_id is None:
+                    return web.json_response({'error': 'match_id is required'}, status=400)
+                match_lobby = tm.lobbies.get(match_id)
+                if not match_lobby:
+                    return web.json_response({'error': 'Lobby not found'}, status=404)
+                await match_lobby.start_match()
 
-        elif action == 'post_results':
-            need_tm()
-            await tm.post_final_results()
+            elif action == 'reset_lobby':
+                need_tm()
+                match_id = body.get('match_id')
+                if match_id is None:
+                    return web.json_response({'error': 'match_id is required'}, status=400)
+                await tm.reset_lobby_to_active(match_id)
+                # invalidate_pending_cache now lives on the format
+                if hasattr(tm.format, 'invalidate_pending_cache'):
+                    tm.format.invalidate_pending_cache()
 
-        elif action == 'refresh_event_info':
-            need_tm()
-            await tm.edit_event_info()
+            elif action == 'post_results':
+                need_tm()
+                await tm.post_final_results()
 
-        elif action == 'toggle_hold_when_ready':
-            need_tm()
-            match_id = body.get('match_id')
-            if match_id is None:
-                return web.json_response({'error': 'match_id is required'}, status=400)
-            if not hasattr(tm.format, 'toggle_hold_when_ready'):
-                return web.json_response({'error': 'hold_when_ready not supported for this format'}, status=400)
-            is_flagged = tm.format.toggle_hold_when_ready(match_id)
-            return web.json_response({'ok': True, 'flagged': is_flagged})
+            elif action == 'refresh_event_info':
+                need_tm()
+                await tm.edit_event_info()
 
-        elif action == 'unpublish_tournament':
-            need_tm()
-            await tm.remove_tournament_from_discord()
-            await bot.dh.unpublish_tournament(tournament['_id'])
+            elif action == 'toggle_hold_when_ready':
+                need_tm()
+                match_id = body.get('match_id')
+                if match_id is None:
+                    return web.json_response({'error': 'match_id is required'}, status=400)
+                if not hasattr(tm.format, 'toggle_hold_when_ready'):
+                    return web.json_response({'error': 'hold_when_ready not supported for this format'}, status=400)
+                is_flagged = tm.format.toggle_hold_when_ready(match_id)
+                return web.json_response({'ok': True, 'flagged': is_flagged})
 
-        elif action == 'reopen_lobby':
-            need_tm()
-            match_id_str = str(body.get('match_id'))
-            await tm.reopen_lobby(match_id_str)
-    except ValueError as e:
-        return web.json_response({'error': str(e)}, status=400)
-    except Exception as e:
-        return web.json_response({'error': str(e)}, status=500)
+            elif action == 'unpublish_tournament':
+                need_tm()
+                await tm.remove_tournament_from_discord()
+                await bot.dh.unpublish_tournament(tournament['_id'])
+
+            elif action == 'reopen_lobby':
+                need_tm()
+                match_id_str = str(body.get('match_id'))
+                await tm.reopen_lobby(match_id_str)
+        except ValueError as e:
+            return web.json_response({'error': str(e)}, status=400)
+        except Exception as e:
+            return web.json_response({'error': str(e)}, status=500)
 
     return web.json_response({'ok': True})
 
@@ -983,8 +1022,8 @@ async def handle_set_seed(request: web.Request) -> web.Response:
         return web.json_response({'error': 'Tournament not found'}, status=404)
 
     fmt = tournament.get('format', '')
-    if fmt not in ('single elimination', 'double elimination', 'swiss filter'):
-        return web.json_response({'error': 'Seeding only available for DE/SE/Swiss Filter'}, status=400)
+    if fmt not in ('single elimination', 'double elimination', 'swiss filter', 'swiss'):
+        return web.json_response({'error': 'Seeding not available for this format'}, status=400)
 
     if 'challonge_data' in tournament:
         try:
@@ -1016,7 +1055,6 @@ async def handle_set_seed(request: web.Request) -> web.Response:
             await bot.dh.update_entrant_seed(tournament['_id'], discord_id, seed)
 
     return web.json_response({'ok': True})
-
 
 @require_auth
 async def handle_get_bracket(request: web.Request) -> web.Response:

@@ -57,7 +57,7 @@ class MatchLobby:
             await self.setup_lobby()
         lobby = await self.get_lobby()
         self.remaining_players = set([player for player in self.players if player not in lobby['results']])
-        self.resolve = False
+        self.resolved = False
 
         return self
 

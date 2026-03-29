@@ -563,14 +563,15 @@ async def verify_score_integrity(bot, tournament_id, round_num: int) -> tuple[bo
         else:
             init = 0.0
 
+        staggered = p.get('staggered_bonus', 0)
         byes = max(0, rds - wins - losses)
-        expected = init + wins + byes
+        expected = init + staggered + wins + byes
 
         if abs(pts - expected) > 0.01:
             name = p.get('username', f'player_{did}')
             failures.append(
                 f'{name} after round {round_num}: points={pts} but '
-                f'init({init}) + wins({wins}) + byes({byes}) = {expected}'
+                f'init({init}) + staggered({staggered}) + wins({wins}) + byes({byes}) = {expected}'
             )
 
     return len(failures) == 0, failures

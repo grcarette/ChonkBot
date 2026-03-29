@@ -96,6 +96,10 @@ class MatchReportButton(discord.ui.View):
         await interaction.response.send_message(view=view, ephemeral=True)
         
     async def add_report(self, user, report, original_message):
+        should_end = False
+        should_redo = False
+        final_report = None
+
         async with self._lock:
             # Resolve the slot this user represents
             slot = await self.lobby._resolve_checkin_slot(user.id)
@@ -111,24 +115,31 @@ class MatchReportButton(discord.ui.View):
                 self.user_reports.append(slot)
             else:
                 # TO override — report immediately
-                await self.lobby.end_reporting(report)
-                await original_message.delete()
-                return
+                should_end = True
+                final_report = report
 
-            all_reported = set(self.user_reports) == set(self.lobby.remaining_players)
+            if not should_end:
+                all_reported = set(self.user_reports) == set(self.lobby.remaining_players)
+                if all_reported:
+                    if len(set(self.reports)) > 1:
+                        should_redo = True
+                    else:
+                        should_end = True
+                        final_report = self.reports[0]
 
-        if all_reported:
-            if len(set(self.reports)) > 1:
-                await self.redo_report()
-            else:
-                await self.lobby.end_reporting(self.reports[0])
-                await original_message.delete()
+        # Act on the decision made inside the lock
+        if should_redo:
+            await self.redo_report()
+        elif should_end:
+            await self.lobby.end_reporting(final_report)
+            await original_message.delete()
                 
     async def redo_report(self):
         channel = self.lobby.channel
         message_content = (
             '# Error: Result was not unanimous\n'
-            '## Report the match again. Make sure you select the player who **won**'
+            '## Report the match again.\n'
+            'Make sure you select the player who **won**'
         )
         await channel.send(message_content)
         self.user_reports = []

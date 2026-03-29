@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from utils.emojis import INDICATOR_EMOJIS
 from utils.messages import get_mentions
@@ -7,41 +8,53 @@ class CheckinView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.lobby = lobby
         self.message = None
+        self._lock = asyncio.Lock()
+        self._checkin_ended = False
         
         self.checkin_button = discord.ui.Button(label="Check in", style=discord.ButtonStyle.success, custom_id=f"{self.lobby.match_id}-checkin")
         self.checkin_button.callback = self.check_in
         self.add_item(self.checkin_button)
         
     async def check_in(self, interaction: discord.Interaction):
-        override = False
-        user_id = interaction.user.id
-        message = interaction.message
-        lobby = await self.lobby.get_lobby()
-
-        user_is_to = await self.lobby.check_to_role(user_id)
-        if user_is_to:
-            override = True
-        else:
-            # Resolve which slot (player_id or team_id) this user belongs to
-            slot = await self.lobby._resolve_checkin_slot(user_id)
-            if slot is None:
-                await interaction.response.send_message("You're not part of this match!", ephemeral=True)
-                return
-            if slot in lobby['checked_in']:
-                await interaction.response.send_message("You've already checked in!", ephemeral=True)
+        async with self._lock:
+            if self._checkin_ended:
+                await interaction.response.send_message("Check-in is already complete!", ephemeral=True)
                 return
 
-        if not override:
-            lobby = await self.lobby.checkin_player(slot)
-            embed = await self.generate_embed()
-        else:
-            for slot in self.lobby.remaining_players:
+            override = False
+            user_id = interaction.user.id
+            lobby = await self.lobby.get_lobby()
+
+            user_is_to = await self.lobby.check_to_role(user_id)
+            if user_is_to:
+                override = True
+            else:
+                # Resolve which slot (player_id or team_id) this user belongs to
+                slot = await self.lobby._resolve_checkin_slot(user_id)
+                if slot is None:
+                    await interaction.response.send_message("You're not part of this match!", ephemeral=True)
+                    return
+                if slot in lobby['checked_in']:
+                    await interaction.response.send_message("You've already checked in!", ephemeral=True)
+                    return
+
+            if not override:
                 lobby = await self.lobby.checkin_player(slot)
-            embed = await self.generate_embed()
+                embed = await self.generate_embed()
+            else:
+                for slot in self.lobby.remaining_players:
+                    lobby = await self.lobby.checkin_player(slot)
+                embed = await self.generate_embed()
 
-        await interaction.response.edit_message(embed=embed, view=self)
+            all_checked_in = len(lobby['checked_in']) >= len(self.lobby.remaining_players)
 
-        if len(lobby['checked_in']) == len(self.lobby.remaining_players):
+            if all_checked_in:
+                self._checkin_ended = True
+
+            await interaction.response.edit_message(embed=embed, view=self)
+
+        # Outside the lock — but only one coroutine can reach here because of the guard
+        if all_checked_in:
             self.stop()
             await interaction.message.delete()
             await self.lobby.end_checkin()

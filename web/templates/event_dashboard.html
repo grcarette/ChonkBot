@@ -259,6 +259,24 @@
                     <div class="toggle-info"><span class="toggle-name">UCH Ranked Reporting</span><span class="toggle-desc">Report match results to UCH Ranked and require accounts to register</span></div>
                     <span class="toggle-wrap"><input type="checkbox" id="cfg-ranked" class="toggle-input"><span class="toggle-thumb"></span></span>
                 </label>
+                <label class="toggle-row" id="cfg-staggered-row" style="display:none">
+                    <div class="toggle-info">
+                        <span class="toggle-name">Staggered Start</span>
+                        <span class="toggle-desc">Top-seeded players start with +1 bonus point</span>
+                    </div>
+                    <span class="toggle-wrap">
+                        <input type="checkbox" id="cfg-staggered" class="toggle-input">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                </label>
+                <div class="toggle-row" id="cfg-staggered-threshold-row" style="display:none;border-bottom:none">
+                    <div class="toggle-info">
+                        <span class="toggle-name">Staggered Threshold</span>
+                        <span class="toggle-desc">How many top players receive the bonus</span>
+                    </div>
+                    <input class="field-input" type="number" id="cfg-staggered-threshold"
+                           min="1" max="999" value="16" style="width:70px;text-align:center">
+                </div>
                 <div class="config-save-row">
                     <button class="btn btn-primary btn-sm" id="cfg-save-options">Save Options</button>
                 </div>

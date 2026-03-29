@@ -16,6 +16,8 @@ class TournamentMethodsMixin:
             'display_entrants': tournament['display_entrants'],
             'ranked_reporting': tournament.get('ranked_reporting', False),
             'teams_mode': tournament.get('teams_mode', False),
+            'staggered_start': tournament.get('staggered_start', False),
+            'staggered_start_threshold': tournament.get('staggered_start_threshold', 16),
         }
         tournament_doc = {
             'name': tournament['name'],

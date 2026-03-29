@@ -46,6 +46,8 @@ class TournamentManager:
         self.organizer_role = None
         self.format = None
         self.logger = EventLogger(tournament['name'])
+        self._registration_lock = asyncio.Lock()
+        self._registering_users: set[int] = set()
 
     # ─── Ranked API helper ────────────────────────────────────────────────────
 
@@ -474,45 +476,57 @@ class TournamentManager:
         )
 
     async def register_player(self, user_id):
-        already_registered = await self.bot.dh.get_registration_status(
-            self.tournament['_id'], user_id
-        )
-        if already_registered:
-            self.logger.debug('REGISTRATION', f'Player {user_id} tried to register but is already registered')
-            return False
+        # Per-user dedup guard: if this user_id is already mid-registration, bail out
+        async with self._registration_lock:
+            if user_id in self._registering_users:
+                return False
+            self._registering_users.add(user_id)
 
-        tournament = await self.get_tournament()
+        try:
+            already_registered = await self.bot.dh.get_registration_status(
+                self.tournament['_id'], user_id
+            )
+            if already_registered:
+                self.logger.debug('REGISTRATION', f'Player {user_id} tried to register but is already registered')
+                return False
 
-        # Ranked gate — applies to any ranked_reporting tournament, debug always bypasses
-        if self.is_ranked and not self.debug:
-            ranked_player = await self.get_ranked_player(user_id)
-            if not ranked_player:
-                self.logger.warning('REGISTRATION', f'Player {user_id} blocked — no UCH Ranked account')
-                return 'no_ranked_account'
+            tournament = await self.get_tournament()
 
-        if tournament.get('config', {}).get('approved_registration'):
-            await self.bot.dh.add_registration_request(tournament['_id'], user_id)
-            self.logger.info('REGISTRATION', f'Player {user_id} registration pending TO approval')
-            return 'pending'
+            # Ranked gate — applies to any ranked_reporting tournament, debug always bypasses
+            if self.is_ranked and not self.debug:
+                ranked_player = await self.get_ranked_player(user_id)
+                if not ranked_player:
+                    self.logger.warning('REGISTRATION', f'Player {user_id} blocked — no UCH Ranked account')
+                    return 'no_ranked_account'
 
-        guild = self.guild
-        discord_user = discord.utils.get(guild.members, id=user_id)
-        tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
+            if tournament.get('config', {}).get('approved_registration'):
+                await self.bot.dh.add_registration_request(tournament['_id'], user_id)
+                self.logger.info('REGISTRATION', f'Player {user_id} registration pending TO approval')
+                return 'pending'
 
-        if not self.debug:
-            await discord_user.add_roles(tournament_role)
-            await self.bot.dh.register_user(discord_user)
-        else:
-            await self.bot.dh.register_user(user_id, debug=True)
+            guild = self.guild
+            discord_user = discord.utils.get(guild.members, id=user_id)
+            tournament_role = discord.utils.get(guild.roles, name=self.tournament['name'])
 
-        user = await self.bot.dh.get_user(user_id=user_id)
+            if not self.debug:
+                if discord_user and tournament_role:
+                    await discord_user.add_roles(tournament_role)
+                await self.bot.dh.register_user(discord_user)
+            else:
+                await self.bot.dh.register_user(user_id, debug=True)
 
-        await self.format.on_player_register(user_id, user)
-        if tournament.get('config', {}).get('display_entrants'):
-            await self.edit_event_info()
+            user = await self.bot.dh.get_user(user_id=user_id)
 
-        self.logger.player_registered(user_id, user['name'] if user else str(user_id))
-        return True
+            await self.format.on_player_register(user_id, user)
+            if tournament.get('config', {}).get('display_entrants'):
+                await self.edit_event_info()
+
+            self.logger.player_registered(user_id, user['name'] if user else str(user_id))
+            return True
+        finally:
+            # Always remove the user from the in-flight set
+            async with self._registration_lock:
+                self._registering_users.discard(user_id)
 
     async def unregister_player(self, user_id):
         tournament = await self.get_tournament()
@@ -1610,51 +1624,89 @@ class TournamentManager:
     async def sync_channel_order(self):
         """Reorder channels in the tournament category to match CHANNEL_ORDER.
         
-        Only edits channels that are out of place, using the minimum number of
-        edits. Channels already forming the longest correct subsequence are left
-        untouched.
+        Channels named in CHANNEL_ORDER are placed first (in that order),
+        followed by all other channels in their existing relative order.
+        Uses the minimum number of Discord API calls by simulating moves
+        left-to-right and only editing channels that aren't already in place.
         """
         tournament_category = self.get_tournament_category()
         if not tournament_category:
+            print("[sync_channel_order] No tournament category found — skipping")
             return
 
-        channels = {ch.name: ch for ch in tournament_category.channels}
-        desired = [channels[name] for name in CHANNEL_ORDER if name in channels]
-        if not desired:
+        current = list(tournament_category.channels)
+        if not current:
+            print("[sync_channel_order] Category has no channels — skipping")
             return
 
-        # Find which channels are already in the correct relative order (LIS).
-        # Map each channel to its target index in desired.
-        target_index = {ch: i for i, ch in enumerate(desired)}
-        current = [ch for ch in tournament_category.channels if ch in target_index]
+        # ── Build desired order ───────────────────────────────────────────────
+        # CHANNEL_ORDER channels first (in that order), then everything else
+        # (preserving their current relative order).
+        priority = {name: i for i, name in enumerate(CHANNEL_ORDER)}
 
-        # Extract the indices of current channels in desired order and find LIS.
-        indices = [target_index[ch] for ch in current]
+        ordered = [ch for ch in current if ch.name in priority]
+        ordered.sort(key=lambda ch: priority[ch.name])
 
-        def longest_increasing_subsequence(seq):
-            """Returns the set of values in the LIS (not indices, values)."""
-            if not seq:
-                return set()
-            tails = []
-            for val in seq:
-                lo, hi = 0, len(tails)
-                while lo < hi:
-                    mid = (lo + hi) // 2
-                    if tails[mid] < val:
-                        lo = mid + 1
-                    else:
-                        hi = mid
-                if lo == len(tails):
-                    tails.append(val)
-                else:
-                    tails[lo] = val
-            return set(tails)
+        ordered_ids = {ch.id for ch in ordered}
+        unordered = [ch for ch in current if ch.id not in ordered_ids]
 
-        lis_indices = longest_increasing_subsequence(indices)
-        needs_edit = [ch for ch in desired if target_index[ch] not in lis_indices]
+        desired = ordered + unordered
 
-        for ch in needs_edit:
-            await ch.edit(position=target_index[ch])
+        current_names = [ch.name for ch in current]
+        desired_names = [ch.name for ch in desired]
+        print(f"[sync_channel_order] Current: {current_names}")
+        print(f"[sync_channel_order] Desired: {desired_names}")
+
+        if [ch.id for ch in current] == [ch.id for ch in desired]:
+            print("[sync_channel_order] Already in correct order — 0 edits")
+            return
+
+        # ── Simulate moves to find minimum edits ─────────────────────────────
+        # Walk left-to-right through the desired order. If the channel at
+        # position i isn't the right one, move the right channel there.
+        #
+        # Simulating in a Python list mirrors what Discord does: remove the
+        # channel from its old position, insert at the new one, everything
+        # else shifts. This means the positions we pass to ch.edit() are
+        # correct *given the state after all previous moves*.
+        #
+        # This naturally produces exactly (n − LIS_length) edits — the
+        # theoretical minimum.
+        simulated = list(current)
+        edits = []
+
+        for target_pos in range(len(desired)):
+            want = desired[target_pos]
+            have = simulated[target_pos]
+
+            if have.id == want.id:
+                continue  # already in place — no edit needed
+
+            # Find where the wanted channel currently sits
+            current_pos = next(i for i, ch in enumerate(simulated) if ch.id == want.id)
+
+            # Simulate the move: remove from old position, insert at new
+            simulated.pop(current_pos)
+            simulated.insert(target_pos, want)
+            edits.append((want, target_pos))
+
+        # ── Execute edits using relative moves (not absolute positions) ───────
+        # ch.edit(position=N) sets guild-wide position, which disrupts channels
+        # outside this category. Using move(after=...) keeps edits scoped to
+        # the category.
+        print(f"[sync_channel_order] {len(edits)} edit(s) needed "
+              f"(out of {len(desired)} channels)")
+
+        for ch, pos in edits:
+            if pos == 0:
+                print(f"[sync_channel_order]   Moving '{ch.name}' → beginning of category")
+                await ch.move(beginning=True, category=tournament_category)
+            else:
+                anchor = desired[pos - 1]
+                print(f"[sync_channel_order]   Moving '{ch.name}' → after '{anchor.name}'")
+                await ch.move(after=anchor, category=tournament_category)
+
+        print("[sync_channel_order] Done")
 
     async def revert_tournament(self):
         tournament = await self.get_tournament()
@@ -1701,7 +1753,10 @@ class TournamentManager:
         return tournament
 
     def get_tournament_category(self):
-        return discord.utils.get(self.guild.categories, id=self.tournament['category_id'])
+        cat_id = self.tournament.get('category_id')
+        if not cat_id:
+            return None
+        return discord.utils.get(self.guild.categories, id=cat_id)
 
     def get_short_timestamp(self, timestamp):
         return timestamp.strftime("%I:%M%p").lstrip("0")
