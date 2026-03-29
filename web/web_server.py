@@ -301,6 +301,14 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     fmt            = tournament.get('format', '')
     is_bracket_fmt = fmt in ('single elimination', 'double elimination', 'swiss filter')
 
+    # For swiss filter events with floating, the Pro bracket shell holds floated
+    # players separately from the Swiss entrants. Merge them for display/seeding.
+    swiss_filter_pro_entrants: dict = {}
+    if fmt == 'swiss filter':
+        sf_phases = tournament.get('phases', [])
+        if len(sf_phases) > 1:
+            swiss_filter_pro_entrants = sf_phases[1].get('entrants') or {}
+
     # ── Parallel fetches ──────────────────────────────────────────────────────
 
     async def _fetch_challonge_participants():
@@ -355,7 +363,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
 
     # Resolve entrant IDs — in teams mode keys are "p1_p2" strings
     entrant_ids = []
-    for key in tournament.get('entrants', {}).keys():
+    for key in list(tournament.get('entrants', {}).keys()) + list(swiss_filter_pro_entrants.keys()):
         key_str = str(key)
         if '_' in key_str:
             try:
@@ -390,7 +398,10 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
                 challonge_id_by_discord[discord_id] = p['id']
     else:
         native_seeds    = tournament.get('seeds', {})
-        entrant_key_set = {str(k) for k in tournament.get('entrants', {}).keys()}
+        entrant_key_set = (
+            {str(k) for k in tournament.get('entrants', {}).keys()} |
+            {str(k) for k in swiss_filter_pro_entrants.keys()}
+        )
         for discord_id_str, seed in native_seeds.items():
             key_str = str(discord_id_str)
             if key_str in entrant_key_set:
@@ -399,7 +410,10 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     # ── Entrants ──────────────────────────────────────────────────────────────
 
     entrants = []
-    for key_str in tournament.get('entrants', {}).keys():
+    _all_entrant_keys = list(tournament.get('entrants', {}).keys()) + [
+        k for k in swiss_filter_pro_entrants if str(k) not in {str(x) for x in tournament.get('entrants', {}).keys()}
+    ]
+    for key_str in _all_entrant_keys:
         key_str = str(key_str)
         if '_' in key_str:
             # Teams mode — show team name
@@ -576,6 +590,13 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             if phase_swiss and phase_tm.format:
                 phase_summary['swiss'] = await phase_tm.format.get_dashboard_state()
 
+        phase_tid = phase.get('tournament_id')
+        if phase_tid and phase_tid != tournament['_id']:
+            phase_lobbies = await bot.dh.get_active_lobbies(phase_tid)
+            phase_summary['lobby_count'] = len(phase_lobbies) if phase_lobbies else 0
+        else:
+            phase_summary['lobby_count'] = len(raw_lobbies) if raw_lobbies else 0
+
         phases_data.append(phase_summary)
 
     return web.json_response({
@@ -616,60 +637,6 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'is_multi_phase':        len(phases_data) > 1,
     })
 
-
-@require_auth
-async def handle_get_phase(request: web.Request) -> web.Response:
-    """Return full detail for a specific phase."""
-    event_id    = request.match_info['tournament_id']
-    phase_index = int(request.match_info['phase_index'])
-    bot         = request.app['bot']
-
-    tournament = await bot.dh.get_tournament_by_id(event_id)
-    if not tournament:
-        return web.json_response({'error': 'Event not found'}, status=404)
-
-    phases = tournament.get('phases', [])
-    if phase_index >= len(phases):
-        return web.json_response({'error': 'Phase not found'}, status=404)
-
-    phase = phases[phase_index]
-    em = bot.th.events.get(tournament['_id'])
-    tm = em.phase_managers.get(phase_index) if em else None
-
-    lobbies = []
-    raw_lobbies = await bot.dh.get_all_lobbies(
-        phase.get('tournament_id', tournament['_id'])
-    )
-    for l in (raw_lobbies or []):
-        lobbies.append({
-            'match_id':     str(l.get('match_id')),
-            'lobby_name':   l.get('lobby_name', ''),
-            'state':        l.get('state', ''),
-            'player_names': [],
-            'player_ids':   [str(uid) for uid in l.get('players', [])],
-            'round':        l.get('round'),
-        })
-
-    swiss_data = None
-    if phase['type'] in ('swiss', 'swiss filter') and tm and tm.format:
-        swiss_data = await tm.format.get_dashboard_state()
-
-    response = {
-        'index':         phase_index,
-        'type':          phase['type'],
-        'label':         phase.get('label', phase['type'].title()),
-        'state':         phase['state'],
-        'lobbies':       lobbies,
-        'swiss':         swiss_data,
-        'pending':       [],
-        'entrant_count': len(phase.get('entrants', {})),
-    }
-
-    if phase.get('challonge_data'):
-        from utils.get_bracket_link import get_bracket_link
-        response['challonge_url'] = await get_bracket_link(phase['challonge_data']['url'])
-
-    return web.json_response(response)
 
 
 @require_auth
@@ -714,6 +681,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         'reset_lobby',
         'post_results',
         'refresh_event_info',
+        'sync_floated_players',
         'toggle_hold_when_ready',
         'unpublish_tournament',
         'reopen_lobby',
@@ -883,6 +851,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'delete_tournament':
                 need_tm()
+                if tournament.get('format') == 'swiss filter':
+                    em = bot.th.events.get(tournament['_id'])
+                    if em:
+                        await em.destroy_bracket_shells()
                 await tm.delete_tournament()
                 return web.json_response({'ok': True})
 
@@ -931,28 +903,72 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'randomize_seeds':
                 import random
-                entrant_ids = list(tournament.get('entrants', {}).keys())
-                shuffled    = random.sample(entrant_ids, len(entrant_ids))
-                seeds       = {int(did): i + 1 for i, did in enumerate(shuffled)}
+                locked_map = {}
+                for ls in body.get('locked_seeds', []):
+                    try:
+                        locked_map[int(ls['discord_id'])] = int(ls['seed'])
+                    except (KeyError, ValueError, TypeError):
+                        continue
+
+                sf_pro = {}
+                if tournament.get('format') == 'swiss filter':
+                    sf_phases = tournament.get('phases', [])
+                    if len(sf_phases) > 1:
+                        sf_pro = sf_phases[1].get('entrants') or {}
+                entrant_ids  = list({**tournament.get('entrants', {}), **sf_pro}.keys())
+                unlocked_ids = [did for did in entrant_ids if int(did) not in locked_map]
+                total        = len(entrant_ids)
+                taken_slots  = set(locked_map.values())
+                free_slots   = [s for s in range(1, total + 1) if s not in taken_slots]
+                shuffled     = random.sample(free_slots, len(free_slots))
+                seeds        = dict(locked_map)
+                for did, slot in zip(unlocked_ids, shuffled):
+                    seeds[int(did)] = slot
                 await bot.dh.update_all_seeds(tournament['_id'], seeds)
+                em = bot.th.events.get(tournament['_id'])
+                print(f'[FLOAT] randomize_seeds: em={em}, format={tournament.get("format")}, id={tournament["_id"]}')
+                if em and tournament.get('format') == 'swiss filter':
+                    await em.sync_floated_players()
 
             elif action == 'seed_by_rank':
-                entrant_ids = set(int(did) for did in tournament.get('entrants', {}).keys())
-                leaderboard = await bot.uchranked_api.get_leaderboard(10000)
+                locked_map = {}
+                for ls in body.get('locked_seeds', []):
+                    try:
+                        locked_map[int(ls['discord_id'])] = int(ls['seed'])
+                    except (KeyError, ValueError, TypeError):
+                        continue
+
+                sf_pro = {}
+                if tournament.get('format') == 'swiss filter':
+                    sf_phases = tournament.get('phases', [])
+                    if len(sf_phases) > 1:
+                        sf_pro = sf_phases[1].get('entrants') or {}
+                entrant_ids  = set(int(did) for did in {**tournament.get('entrants', {}), **sf_pro}.keys())
+                unlocked_ids = {did for did in entrant_ids if did not in locked_map}
+                leaderboard  = await bot.uchranked_api.get_leaderboard(10000)
                 elo_map = {}
                 for p in leaderboard:
                     try:
                         discord_id = int(p['discord_id'])
-                        if discord_id in entrant_ids:
+                        if discord_id in unlocked_ids:
                             elo_map[discord_id] = p['elo']
                     except (ValueError, TypeError, KeyError):
                         continue
-                for discord_id in entrant_ids:
+                for discord_id in unlocked_ids:
                     if discord_id not in elo_map:
                         elo_map[discord_id] = 0
-                sorted_ids = sorted(elo_map.keys(), key=lambda uid: elo_map[uid], reverse=True)
-                seeds      = {discord_id: i + 1 for i, discord_id in enumerate(sorted_ids)}
+                sorted_ids  = sorted(unlocked_ids, key=lambda uid: elo_map[uid], reverse=True)
+                total       = len(entrant_ids)
+                taken_slots = set(locked_map.values())
+                free_slots  = sorted(s for s in range(1, total + 1) if s not in taken_slots)
+                seeds       = dict(locked_map)
+                for discord_id, slot in zip(sorted_ids, free_slots):
+                    seeds[discord_id] = slot
                 await bot.dh.update_all_seeds(tournament['_id'], seeds)
+                em = bot.th.events.get(tournament['_id'])
+                print(f'[FLOAT] seed_by_rank: em={em}, format={tournament.get("format")}, id={tournament["_id"]}')
+                if em and tournament.get('format') == 'swiss filter':
+                    await em.sync_floated_players()
 
             elif action == 'revert_tournament':
                 need_tm()
@@ -1027,6 +1043,14 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 need_tm()
                 await tm.edit_event_info()
 
+            elif action == 'sync_floated_players':
+                em = bot.th.events.get(tournament['_id'])
+                print(f'[FLOAT] sync_floated_players action received — em={em}, tournament_id={tournament["_id"]}')
+                if em:
+                    await em.sync_floated_players()
+                else:
+                    print(f'[FLOAT] no EventManager found for {tournament["_id"]} — keys={list(bot.th.events.keys())[:5]}')
+
             elif action == 'toggle_hold_when_ready':
                 need_tm()
                 match_id = body.get('match_id')
@@ -1039,6 +1063,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'unpublish_tournament':
                 need_tm()
+                if tournament.get('format') == 'swiss filter':
+                    em = bot.th.events.get(tournament['_id'])
+                    if em:
+                        await em.destroy_bracket_shells()
                 await tm.remove_tournament_from_discord()
                 await bot.dh.unpublish_tournament(tournament['_id'])
 
@@ -1789,7 +1817,7 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get(   '/api/stages/browse',                       handle_browse_stages)
     app.router.add_post(  '/api/tournament/{tournament_id}/seed',     handle_set_seed)
     app.router.add_get(   '/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
-    app.router.add_get(   '/api/tournament/{tournament_id}/phase/{phase_index}', handle_get_phase)
+
 
     # Seeding
     app.router.add_get( '/seeding',         handle_seeding_page)

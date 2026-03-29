@@ -40,9 +40,14 @@ class TournamentHandler():
 
             # Backward compat: register the active phase's TM so existing
             # code that uses bot.th.tournaments[tid] still works.
+            # If the active phase is already finished (e.g. swiss phase done,
+            # waiting for TO to start brackets), fall through to the event-level TM.
             if em.active_tm:
-                self.tournaments[event['_id']] = em.active_tm
-                continue
+                phases = event.get('phases', [])
+                active_phase_state = phases[em.active_phase_index].get('state') if phases else None
+                if active_phase_state != 'finished':
+                    self.tournaments[event['_id']] = em.active_tm
+                    continue
 
             # Fallback for events with no active phase TM (setup state)
             if not event.get('category_id'):

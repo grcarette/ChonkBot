@@ -244,8 +244,196 @@ class EventManager:
             3: beginner_players,      # phase index 3 = Beginner
         }
 
+    async def sync_floated_players(self):
+        """
+        For swiss filter events: ensure the top-N seeds are registered in the
+        Pro Challonge bracket and removed from the Swiss phase, and vice-versa
+        for players who fall out of the top N.
+
+        No-op if: floating is disabled, the Pro bracket shell doesn't exist yet,
+        or the Swiss phase has already started.
+        """
+        print(f'[FLOAT] sync_floated_players() called for event {self.event["_id"]}')
+        try:
+            self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
+
+            config = self.event.get('config', {})
+            floating_enabled = config.get('top_seed_floating')
+            floating_count   = config.get('top_seed_floating_count', 0)
+            print(f'[FLOAT] top_seed_floating={floating_enabled} count={floating_count}')
+            if not floating_enabled or not floating_count:
+                print('[FLOAT] floating disabled or count=0 — skipping')
+                return
+
+            phases = self.event.get('phases', [])
+            print(f'[FLOAT] phases count={len(phases)}, states={[p.get("state") for p in phases]}')
+            if len(phases) < 2:
+                print('[FLOAT] fewer than 2 phases — skipping')
+                return
+
+            swiss_state = phases[0].get('state')
+            if swiss_state in ('active', 'finished'):
+                print(f'[FLOAT] Swiss phase already {swiss_state} — skipping')
+                return
+
+            pro_phase = phases[1]
+            ch_data   = pro_phase.get('challonge_data')
+            print(f'[FLOAT] pro_phase challonge_data={ch_data}')
+            if not ch_data:
+                print('[FLOAT] Pro bracket shell not created yet — skipping')
+                return
+
+            swiss_entrants = self.event.get('entrants') or {}
+            pro_entrants   = pro_phase.get('entrants') or {}
+            all_ids        = set(str(k) for k in swiss_entrants) | set(str(k) for k in pro_entrants)
+            print(f'[FLOAT] swiss_entrants={list(swiss_entrants.keys())[:5]}... ({len(swiss_entrants)} total)')
+            print(f'[FLOAT] pro_entrants={list(pro_entrants.keys())[:5]}... ({len(pro_entrants)} total)')
+            print(f'[FLOAT] all_ids count={len(all_ids)}')
+
+            if not all_ids:
+                print('[FLOAT] no entrants at all — skipping')
+                return
+
+            seeds      = self.event.get('seeds') or {}
+            sorted_ids = sorted(all_ids, key=lambda did: seeds.get(str(did), 9999))
+            target_floated = set(sorted_ids[:floating_count])
+            current_pro    = set(str(k) for k in pro_entrants)
+            print(f'[FLOAT] seeds sample={dict(list(seeds.items())[:5])}')
+            print(f'[FLOAT] sorted_ids (first {floating_count+3})={sorted_ids[:floating_count+3]}')
+            print(f'[FLOAT] target_floated={target_floated}')
+            print(f'[FLOAT] current_pro={current_pro}')
+
+            to_add_to_pro      = target_floated - current_pro
+            to_remove_from_pro = current_pro - target_floated
+            print(f'[FLOAT] to_add_to_pro={to_add_to_pro}')
+            print(f'[FLOAT] to_remove_from_pro={to_remove_from_pro}')
+
+            if not to_add_to_pro and not to_remove_from_pro:
+                print('[FLOAT] nothing to change')
+                return
+
+            from tournaments.challonge_handler import ChallongeHandler
+            ch = ChallongeHandler()
+
+            challonge_url = ch_data['url']
+            challonge_id  = ch_data['id']
+
+            for discord_id in to_add_to_pro:
+                print(f'[FLOAT] adding {discord_id} to Pro bracket ({challonge_url})')
+                try:
+                    user = await self.bot.dh.get_user(user_id=int(discord_id))
+                    name = user['name'] if user else f'Player {discord_id}'
+                    participant_id = await ch.register_player(challonge_url, name)
+                    print(f'[FLOAT] registered {discord_id} ({name}) as participant {participant_id}')
+                    await self.bot.dh.tournament_collection.update_one(
+                        {'_id': self.event['_id']},
+                        {'$set': {f'phases.1.entrants.{discord_id}': participant_id}}
+                    )
+                    print(f'[FLOAT] {discord_id} added to Pro')
+                except Exception as e:
+                    import traceback
+                    print(f'[FLOAT] ERROR adding {discord_id} to Pro: {e}')
+                    traceback.print_exc()
+
+            for discord_id in to_remove_from_pro:
+                print(f'[FLOAT] removing {discord_id} from Pro bracket')
+                try:
+                    participant_id = pro_entrants.get(discord_id) or pro_entrants.get(int(discord_id))
+                    if participant_id:
+                        await ch.unregister_player(challonge_id, participant_id)
+                        print(f'[FLOAT] unregistered {discord_id} (participant {participant_id}) from Challonge')
+                    await self.bot.dh.tournament_collection.update_one(
+                        {'_id': self.event['_id']},
+                        {'$unset': {f'phases.1.entrants.{discord_id}': ''}}
+                    )
+                    print(f'[FLOAT] {discord_id} removed from Pro')
+                except Exception as e:
+                    import traceback
+                    print(f'[FLOAT] ERROR removing {discord_id} from Pro: {e}')
+                    traceback.print_exc()
+
+            self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
+            print(f'[FLOAT] sync complete: +{len(to_add_to_pro)} to Pro, -{len(to_remove_from_pro)} to Swiss')
+            self.logger.info('FLOAT',
+                f'Float sync: +{len(to_add_to_pro)} to Pro, -{len(to_remove_from_pro)} to Swiss')
+        except Exception as e:
+            import traceback
+            print(f'[FLOAT] UNHANDLED ERROR in sync_floated_players: {e}')
+            traceback.print_exc()
+
+    async def create_bracket_shells(self):
+        """
+        Create empty Challonge brackets for all bracket phases.
+        Called at publish time so bracket links exist during registration.
+        The brackets stay in Challonge 'pending' state — players are added
+        and brackets are started later at phase transition.
+        """
+        from tournaments.challonge_handler import ChallongeHandler
+
+        event = self.event
+        print(f'[BRACKETS] create_bracket_shells() starting for event: {event["name"]} (id={event["_id"]})')
+        print(f'[BRACKETS] phases: {[{"label": p.get("label"), "type": p["type"], "has_challonge": bool(p.get("challonge_data"))} for p in event.get("phases", [])]}')
+
+        ch = ChallongeHandler()
+
+        for i, phase in enumerate(event.get('phases', [])):
+            if phase['type'] not in ('single elimination', 'double elimination'):
+                print(f'[BRACKETS] phase {i} ({phase.get("label")}) type={phase["type"]} — skipping (not a bracket)')
+                continue
+            if phase.get('challonge_data'):
+                print(f'[BRACKETS] phase {i} ({phase.get("label")}) — skipping (already has challonge_data: {phase["challonge_data"]})')
+                continue
+
+            bracket_name = f"{event['name']} - {phase['label']}"
+            raw_slug = f"{event['name'].lower().replace(' ', '_')}_{phase['label'].lower().replace(' ', '_')}"
+            url_slug = ''.join(c for c in raw_slug if c.isalnum() or c == '_')[:60]
+
+            print(f'[BRACKETS] phase {i} ({phase.get("label")}): creating Challonge bracket name={bracket_name!r} url_slug={url_slug!r} type={phase["type"]}')
+
+            try:
+                challonge_tournament = await ch.create_tournament(
+                    name=bracket_name,
+                    tournament_type=phase['type'],
+                    url=url_slug,
+                )
+            except Exception as e:
+                import traceback
+                print(f'[BRACKETS] phase {i} ({phase.get("label")}): Challonge create_tournament FAILED: {e}')
+                traceback.print_exc()
+                raise
+
+            print(f'[BRACKETS] phase {i} ({phase.get("label")}): Challonge bracket created — id={challonge_tournament["id"]} url={challonge_tournament["url"]}')
+
+            try:
+                await self.bot.dh.tournament_collection.update_one(
+                    {'_id': event['_id']},
+                    {'$set': {
+                        f'phases.{i}.challonge_data': {
+                            'url': challonge_tournament['url'],
+                            'id': challonge_tournament['id'],
+                        },
+                    }}
+                )
+                print(f'[BRACKETS] phase {i} ({phase.get("label")}): DB updated with challonge_data')
+            except Exception as e:
+                import traceback
+                print(f'[BRACKETS] phase {i} ({phase.get("label")}): DB update FAILED: {e}')
+                traceback.print_exc()
+                raise
+
+            self.logger.info('PHASE',
+                f'{phase["label"]}: Challonge shell created — {challonge_tournament["url"]}')
+
+        # Refresh cached event doc
+        self.event = await self.bot.dh.get_tournament_by_id(event['_id'])
+        print(f'[BRACKETS] create_bracket_shells() complete for event: {event["name"]}')
+
     async def _create_bracket_phase(self, phase_index: int, player_ids: list[str]):
-        """Create a Challonge bracket and register players for one bracket phase."""
+        """
+        Populate and start an existing Challonge bracket for one bracket phase.
+        The Challonge bracket was already created at publish time by
+        create_bracket_shells(). This method adds players and starts it.
+        """
         phase = self.event['phases'][phase_index]
         event = self.event
 
@@ -254,22 +442,20 @@ class EventManager:
             self.logger.info('PHASE', f'{phase["label"]}: no players, skipping')
             return
 
+        ch_data = phase.get('challonge_data')
+        if not ch_data:
+            raise ValueError(
+                f'Phase {phase_index} ({phase.get("label")}) has no Challonge bracket — '
+                f'was the event published?'
+            )
+
         from tournaments.challonge_handler import ChallongeHandler
         ch = ChallongeHandler()
 
-        bracket_name = f"{event['name']} - {phase['label']}"
-        raw_slug = f"{event['name'].lower().replace(' ', '-')}-{phase['label'].lower().replace(' ', '-')}"
-        url_slug = ''.join(c for c in raw_slug if c.isalnum() or c == '-')[:60]
+        challonge_url = ch_data['url']
+        challonge_id = ch_data['id']
 
-        challonge_tournament = await ch.create_tournament(
-            name=bracket_name,
-            tournament_type='double elimination',
-            url=url_slug,
-        )
-
-        challonge_url = challonge_tournament['url']
-        challonge_id = challonge_tournament['id']
-
+        # Register players into the existing (empty) bracket
         entrant_map: dict[str, int] = {}
         for discord_id in player_ids:
             user = await self.bot.dh.get_user(user_id=int(discord_id))
@@ -277,20 +463,19 @@ class EventManager:
             participant_id = await ch.register_player(challonge_url, name)
             entrant_map[discord_id] = participant_id
 
+        # Start the bracket
         await ch.start_tournament(challonge_id)
 
+        # Update phase in DB
         await self.bot.dh.tournament_collection.update_one(
             {'_id': event['_id']},
             {'$set': {
                 f'phases.{phase_index}.state': 'active',
-                f'phases.{phase_index}.challonge_data': {
-                    'url': challonge_url,
-                    'id': challonge_id,
-                },
                 f'phases.{phase_index}.entrants': entrant_map,
             }}
         )
 
+        # Create TournamentManager for this bracket
         phase_doc = self._build_phase_tournament_doc(phase_index)
         phase_doc['entrants'] = entrant_map
         phase_doc['challonge_data'] = {'url': challonge_url, 'id': challonge_id}
@@ -301,10 +486,11 @@ class EventManager:
         await tm.format.on_initialize()
         self.phase_managers[phase_index] = tm
 
+        # Backward compat
         self.bot.th.tournaments[phase_doc['_id']] = tm
 
         self.logger.info('PHASE',
-            f'{phase["label"]}: created with {len(player_ids)} players — {challonge_url}')
+            f'{phase["label"]}: populated with {len(player_ids)} players, started')
 
     async def transition_to_brackets(self):
         """TO-triggered transition from Swiss phase to the three bracket phases."""
@@ -467,6 +653,32 @@ class EventManager:
             {'_id': self.event['_id']},
             {'$set': {f'phases.{phase_index}.state': state}}
         )
+
+    async def destroy_bracket_shells(self):
+        """Delete all Challonge brackets created for bracket phases."""
+        from tournaments.challonge_handler import ChallongeHandler
+        ch = ChallongeHandler()
+
+        for i, phase in enumerate(self.event.get('phases', [])):
+            ch_data = phase.get('challonge_data')
+            if not ch_data:
+                continue
+            try:
+                await ch.delete_tournament(ch_data['id'])
+                self.logger.info('PHASE', f'{phase.get("label", i)}: Challonge bracket deleted')
+            except Exception as e:
+                self.logger.info('PHASE', f'{phase.get("label", i)}: failed to delete bracket — {e}')
+
+            await self.bot.dh.tournament_collection.update_one(
+                {'_id': self.event['_id']},
+                {'$set': {
+                    f'phases.{i}.challonge_data': None,
+                    f'phases.{i}.entrants': {},
+                    f'phases.{i}.state': 'waiting',
+                }}
+            )
+
+        self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
 
     async def _finish_event(self):
         """All phases complete — transition event to finished."""

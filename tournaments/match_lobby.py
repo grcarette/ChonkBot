@@ -169,6 +169,33 @@ class MatchLobby:
             )
             await self.channel.send(embed=embed)
         
+    def _all_debug_players(self) -> bool:
+        """True when the tournament is in debug mode (all players are synthetic)."""
+        return self.tournament_manager.debug
+
+    async def _auto_checkin_all(self):
+        """Debug: check in every player then hand off to end_checkin."""
+        for player_id in list(self.remaining_players):
+            await self.checkin_player(player_id)
+        await self.end_checkin()
+
+    async def _auto_stage_bans(self):
+        """Debug: skip stage bans — let end_stage_bans pick a random stage."""
+        await self.end_stage_bans(banned_stages=[])
+
+    async def _auto_report(self):
+        """Debug: pick a winner weighted by seed (lower seed number = higher win chance).
+        Weight = 1/seed, so seed-1 vs seed-32 gives ~97% win chance for seed-1.
+        Falls back to 50/50 if seeds are not set."""
+        players = list(self.remaining_players)
+        seeds = self.tournament.get('seeds', {})
+        if seeds:
+            weights = [1.0 / seeds.get(str(p), 999) for p in players]
+            winner_id = random.choices(players, weights=weights, k=1)[0]
+        else:
+            winner_id = random.choice(players)
+        await self.end_reporting(winner_id=winner_id)
+
     async def start_checkin(self):
         await self.dh.update_lobby_state(self.match_id, 'checkin')
         view = CheckinView(self)
@@ -176,6 +203,8 @@ class MatchLobby:
         discord_members = await self.get_remaining_discord_members()
         mentions = get_mentions(discord_members)
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
+        if self._all_debug_players():
+            asyncio.create_task(self._auto_checkin_all())
 
     async def checkin_player(self, player_id):
         lobby = await self.dh.lobby_checkin_player(self.match_id, player_id)
@@ -197,6 +226,8 @@ class MatchLobby:
             discord_members = await self.get_remaining_discord_members()
             mentions = get_mentions(discord_members)
             await self.channel.send(' '.join(mentions), embed=embed, file=file, view=view)
+            if self._all_debug_players():
+                asyncio.create_task(self._auto_stage_bans())
             
     async def end_stage_bans(self, banned_stages):
         remaining_stages = [stage for stage in self.stages if stage not in banned_stages]
@@ -222,7 +253,9 @@ class MatchLobby:
         )
         mentions = get_mentions(self.remaining_players)
         await self.channel.send(' '.join(mentions), embed=embed, view=view)
-    
+        if self._all_debug_players():
+            asyncio.create_task(self._auto_report())
+
     async def end_reporting(self, winner_id, is_dq=False):
         if self.resolved:
             return

@@ -1,0 +1,86 @@
+[2026-03-29 00:01:03] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:01:03] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:07:40] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:07:40] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:10:27] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:10:27] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-29.log
+[2026-03-29 00:10:38] [INFO ] [STATE] Tournament started — 32 players
+[2026-03-29 00:10:38] [INFO ] [STATE] checkin → active
+[2026-03-29 00:10:43] [INFO ] [SWISS] Round 1 started — 24 players, 12 matches
+[2026-03-29 00:10:43] [INFO ] [SWISS] Match 59500001 created — 9 vs 15 (round 1)
+[2026-03-29 00:10:44] [INFO ] [SWISS] Match 59500002 created — 17 vs 23 (round 1)
+[2026-03-29 00:10:46] [INFO ] [SWISS] Match 59500003 created — 25 vs 31 (round 1)
+[2026-03-29 00:10:47] [INFO ] [SWISS] Match 59500001 reported — winner: 15, loser: 9
+[2026-03-29 00:10:47] [INFO ] [SWISS] Match 59500004 created — 8 vs 14 (round 1)
+[2026-03-29 00:10:48] [INFO ] [SWISS] Match 59500002 reported — winner: 17, loser: 23
+[2026-03-29 00:10:49] [INFO ] [SWISS] Match 59500005 created — 16 vs 22 (round 1)
+[2026-03-29 00:10:49] [INFO ] [SWISS] Match 59500003 reported — winner: 31, loser: 25
+[2026-03-29 00:10:50] [INFO ] [SWISS] Match 59500006 created — 24 vs 30 (round 1)
+[2026-03-29 00:10:51] [INFO ] [SWISS] Match 59500004 reported — winner: 14, loser: 8
+[2026-03-29 00:10:52] [INFO ] [SWISS] Match 59500007 created — 10 vs 13 (round 1)
+[2026-03-29 00:10:52] [INFO ] [SWISS] Match 59500005 reported — winner: 16, loser: 22
+[2026-03-29 00:10:53] [INFO ] [SWISS] Match 59500008 created — 18 vs 21 (round 1)
+[2026-03-29 00:10:54] [INFO ] [SWISS] Match 59500006 reported — winner: 30, loser: 24
+[2026-03-29 00:10:54] [INFO ] [SWISS] Match 59500009 created — 26 vs 29 (round 1)
+[2026-03-29 00:10:55] [INFO ] [SWISS] Match 59500007 reported — winner: 13, loser: 10
+[2026-03-29 00:10:56] [INFO ] [SWISS] Match 59500010 created — 11 vs 12 (round 1)
+[2026-03-29 00:10:57] [INFO ] [SWISS] Match 59500008 reported — winner: 21, loser: 18
+[2026-03-29 00:10:57] [INFO ] [SWISS] Match 59500011 created — 19 vs 20 (round 1)
+[2026-03-29 00:10:58] [INFO ] [SWISS] Match 59500009 reported — winner: 29, loser: 26
+[2026-03-29 00:10:59] [INFO ] [SWISS] Match 59500012 created — 27 vs 28 (round 1)
+[2026-03-29 00:11:00] [INFO ] [SWISS] Match 59500010 reported — winner: 11, loser: 12
+[2026-03-29 00:11:01] [INFO ] [SWISS] Match 59500011 reported — winner: 20, loser: 19
+[2026-03-29 00:11:03] [INFO ] [SWISS] Match 59500012 reported — winner: 27, loser: 28
+[2026-03-29 00:11:03] [INFO ] [SWISS] Round 1 complete
+[2026-03-29 00:11:24] [INFO ] [SWISS] Round 2 started — 24 players, 12 matches
+[2026-03-29 00:11:24] [INFO ] [SWISS] Match 59500013 created — 17 vs 15 (round 2)
+[2026-03-29 00:11:26] [INFO ] [SWISS] Match 59500014 created — 16 vs 31 (round 2)
+[2026-03-29 00:11:27] [INFO ] [SWISS] Match 59500015 created — 11 vs 14 (round 2)
+[2026-03-29 00:11:28] [INFO ] [SWISS] Match 59500013 reported — winner: 17, loser: 15
+[2026-03-29 00:11:28] [INFO ] [SWISS] Match 59500016 created — 27 vs 30 (round 2)
+[2026-03-29 00:11:29] [INFO ] [SWISS] Match 59500014 reported — winner: 16, loser: 31
+[2026-03-29 00:11:31] [INFO ] [SWISS] Match 59500017 created — 20 vs 13 (round 2)
+[2026-03-29 00:11:32] [INFO ] [SWISS] Match 59500015 reported — winner: 11, loser: 14
+[2026-03-29 00:11:33] [INFO ] [SWISS] Match 59500018 created — 21 vs 29 (round 2)
+[2026-03-29 00:11:34] [INFO ] [SWISS] Match 59500016 reported — winner: 30, loser: 27
+[2026-03-29 00:11:34] [INFO ] [SWISS] Match 59500019 created — 9 vs 23 (round 2)
+[2026-03-29 00:11:35] [INFO ] [SWISS] Match 59500017 reported — winner: 13, loser: 20
+[2026-03-29 00:11:35] [INFO ] [SWISS] Match 59500020 created — 25 vs 22 (round 2)
+[2026-03-29 00:11:36] [INFO ] [SWISS] Match 59500018 reported — winner: 21, loser: 29
+[2026-03-29 00:11:37] [INFO ] [SWISS] Match 59500021 created — 8 vs 12 (round 2)
+[2026-03-29 00:11:37] [INFO ] [SWISS] Match 59500019 reported — winner: 9, loser: 23
+[2026-03-29 00:11:38] [INFO ] [SWISS] Match 59500022 created — 24 vs 28 (round 2)
+[2026-03-29 00:11:39] [INFO ] [SWISS] Match 59500020 reported — winner: 22, loser: 25
+[2026-03-29 00:11:40] [INFO ] [SWISS] Match 59500023 created — 10 vs 19 (round 2)
+[2026-03-29 00:11:40] [INFO ] [SWISS] Match 59500021 reported — winner: 8, loser: 12
+[2026-03-29 00:11:41] [INFO ] [SWISS] Match 59500024 created — 18 vs 26 (round 2)
+[2026-03-29 00:11:42] [INFO ] [SWISS] Match 59500022 reported — winner: 28, loser: 24
+[2026-03-29 00:11:43] [INFO ] [SWISS] Match 59500023 reported — winner: 10, loser: 19
+[2026-03-29 00:11:44] [INFO ] [SWISS] Match 59500024 reported — winner: 26, loser: 18
+[2026-03-29 00:11:45] [INFO ] [SWISS] Round 2 complete
+[2026-03-29 00:11:59] [INFO ] [SWISS] Round 3 started — 24 players, 12 matches
+[2026-03-29 00:11:59] [INFO ] [SWISS] Match 59500025 created — 17 vs 30 (round 3)
+[2026-03-29 00:12:01] [INFO ] [SWISS] Match 59500026 created — 16 vs 13 (round 3)
+[2026-03-29 00:12:02] [INFO ] [SWISS] Match 59500027 created — 11 vs 21 (round 3)
+[2026-03-29 00:12:03] [INFO ] [SWISS] Match 59500025 reported — winner: 30, loser: 17
+[2026-03-29 00:12:04] [INFO ] [SWISS] Match 59500028 created — 9 vs 31 (round 3)
+[2026-03-29 00:12:05] [INFO ] [SWISS] Match 59500029 created — 8 vs 15 (round 3)
+[2026-03-29 00:12:05] [INFO ] [SWISS] Match 59500026 reported — winner: 13, loser: 16
+[2026-03-29 00:12:06] [INFO ] [SWISS] Match 59500027 reported — winner: 21, loser: 11
+[2026-03-29 00:12:06] [INFO ] [SWISS] Match 59500030 created — 10 vs 14 (round 3)
+[2026-03-29 00:12:08] [INFO ] [SWISS] Match 59500031 created — 26 vs 22 (round 3)
+[2026-03-29 00:12:09] [INFO ] [SWISS] Match 59500028 reported — winner: 9, loser: 31
+[2026-03-29 00:12:09] [INFO ] [SWISS] Match 59500029 reported — winner: 8, loser: 15
+[2026-03-29 00:12:09] [INFO ] [SWISS] Match 59500032 created — 27 vs 29 (round 3)
+[2026-03-29 00:12:10] [INFO ] [SWISS] Match 59500030 reported — winner: 10, loser: 14
+[2026-03-29 00:12:10] [INFO ] [SWISS] Match 59500033 created — 20 vs 28 (round 3)
+[2026-03-29 00:12:11] [INFO ] [SWISS] Match 59500031 reported — winner: 26, loser: 22
+[2026-03-29 00:12:12] [INFO ] [SWISS] Match 59500034 created — 25 vs 23 (round 3)
+[2026-03-29 00:12:13] [INFO ] [SWISS] Match 59500032 reported — winner: 27, loser: 29
+[2026-03-29 00:12:13] [INFO ] [SWISS] Match 59500035 created — 24 vs 12 (round 3)
+[2026-03-29 00:12:15] [INFO ] [SWISS] Match 59500036 created — 18 vs 19 (round 3)
+[2026-03-29 00:12:15] [INFO ] [SWISS] Match 59500033 reported — winner: 28, loser: 20
+[2026-03-29 00:12:15] [INFO ] [SWISS] Match 59500034 reported — winner: 25, loser: 23
+[2026-03-29 00:12:17] [INFO ] [SWISS] Match 59500035 reported — winner: 12, loser: 24
+[2026-03-29 00:12:18] [INFO ] [SWISS] Match 59500036 reported — winner: 18, loser: 19
+[2026-03-29 00:12:18] [INFO ] [SWISS] Round 3 complete

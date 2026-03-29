@@ -57,6 +57,17 @@ class SwissManager:
 
         available = await self.dh.swiss_get_available_players(swiss_event['_id'])
 
+        # For swiss filter events: exclude top-N seeded players who are in the Pro bracket
+        config = self.tm.tournament.get('config', {})
+        floating_count = config.get('top_seed_floating_count', 0) if config.get('top_seed_floating') else 0
+        if floating_count:
+            event_doc = await self.dh.get_tournament_by_id(self.tm.tournament['_id'])
+            seeds = event_doc.get('seeds', {})
+            if seeds:
+                sorted_ids = sorted(seeds.keys(), key=lambda k: seeds[k])
+                floated_ids = set(sorted_ids[:floating_count])
+                available = [p for p in available if str(p['discord_id']) not in floated_ids]
+
         if len(available) < 2:
             if len(available) == 1:
                 await self.award_bye(available[0], swiss_event)

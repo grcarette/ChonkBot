@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
             btn.classList.add('active');
+            deselectPhase();
             document.getElementById(`section-${btn.dataset.section}`).classList.add('active');
             const m = SECTION_META[btn.dataset.section] || {};
             document.getElementById('topbar-title').textContent = m.title || '';
@@ -172,13 +173,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Seed controls
     document.getElementById('btn-randomize-seeds').addEventListener('click', async () => {
-        if (await showConfirm('Randomize Seeds?', 'This will randomly shuffle all current seeds.'))
-            await doAction('randomize_seeds');
+        if (await showConfirm('Randomize Seeds?', 'This will randomly shuffle all current seeds.')) {
+            const locked_seeds = getLockedSeedsPayload();
+            await doAction('randomize_seeds', locked_seeds.length ? { locked_seeds } : {});
+        }
     });
     document.getElementById('btn-seed-by-rank').addEventListener('click', async () => {
         if (await showConfirm('Seed by Rank?',
-            'This will overwrite all current seeds with UCH Ranked elo order, highest elo = seed 1.'))
-            await doAction('seed_by_rank');
+            'This will overwrite all current seeds with UCH Ranked elo order, highest elo = seed 1.')) {
+            const locked_seeds = getLockedSeedsPayload();
+            await doAction('seed_by_rank', locked_seeds.length ? { locked_seeds } : {});
+        }
+    });
+    document.getElementById('btn-save-seeding').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-save-seeding');
+        const statusEl = document.querySelector('.seeding-save-status');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)'; }
+        try {
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action: 'sync_floated_players' });
+            if (statusEl) { statusEl.textContent = 'Seeding saved ✓'; statusEl.style.color = 'var(--green)'; }
+            showToast('Seeding saved', 'success');
+            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+            await loadTournament({ force: true });
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = `Save failed: ${err.message}`; statusEl.style.color = 'var(--red)'; }
+            showToast(`Save failed: ${err.message}`, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Seeding`;
+        }
     });
 
     // Pause polling when tab is hidden, resume on focus
@@ -241,6 +266,18 @@ async function loadTournament({ force = false } = {}) {
         renderStats(data);
         renderActionArea(data);
         renderPhaseNav(data);
+        updatePhaseCache(data);
+
+        // If a phase is selected, re-render its content with fresh data
+        if (_selectedPhase !== null && data.is_multi_phase) {
+            const phase = _cachedPhases[_selectedPhase];
+            if (phase) {
+                renderPhaseHeader(phase);
+                renderPhaseTabs(phase);
+                renderPhaseTabContent(phase);
+            }
+        }
+
         populateConfig(data);
         renderOverviewParticipants(
             data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
@@ -454,31 +491,53 @@ function renderActionArea(t) {
         if (finalRoundActive) {
             _nextRoundInFlight = false;
         }
-        const wrapUpHtml = finalRoundActive ? `
-            <div class="action-panel" style="margin-top:8px">
-                <div class="action-panel-title">Wrap Up</div>
-                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
-                    Final round is underway. Once all matches complete the event will end automatically.
-                </p>
-                <div class="action-row">
-                    <button class="btn btn-primary" id="btn-post-results" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        Post Results
-                    </button>
-                    <button class="btn btn-danger" id="btn-finalize" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                        </svg>
-                        Finalize &amp; Remove Channels
-                    </button>
-                </div>
-            </div>` : '';
+        let wrapUpHtml = '';
+        if (finalRoundActive) {
+            const pt = t.swiss?.phase_transition;
+            if (pt) {
+                wrapUpHtml = `
+                    <div class="action-panel" style="margin-top:8px">
+                        <div class="action-panel-title">Phase Transition</div>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                            Swiss rounds are complete. Review the standings above, then start the bracket phase when ready.
+                        </p>
+                        <div class="action-row">
+                            <button class="btn btn-success" id="btn-phase-transition">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                ${escapeHtml(pt.label)}
+                            </button>
+                        </div>
+                    </div>`;
+            } else {
+                wrapUpHtml = `
+                    <div class="action-panel" style="margin-top:8px">
+                        <div class="action-panel-title">Wrap Up</div>
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                            Final round is underway. Once all matches complete the event will end automatically.
+                        </p>
+                        <div class="action-row">
+                            <button class="btn btn-primary" id="btn-post-results" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                Post Results
+                            </button>
+                            <button class="btn btn-danger" id="btn-finalize" ${t.swiss.active_matches > 0 ? 'disabled title="Waiting for all matches to finish"' : ''}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                    <path d="M10 11v6M14 11v6"/>
+                                </svg>
+                                Finalize &amp; Remove Channels
+                            </button>
+                        </div>
+                    </div>`;
+            }
+        }
 
         area.innerHTML = `
             ${roundHtml}
@@ -523,16 +582,25 @@ function renderActionArea(t) {
             </div>`;
 
         if (finalRoundActive) {
-            const postBtn = document.getElementById('btn-post-results');
-            if (postBtn) postBtn.onclick = async () => {
-                if (await showConfirm('Post Results?', 'This will post the final standings to the results channel.', 'warning'))
-                    await doAction('post_results');
-            };
-            const finalizeBtn = document.getElementById('btn-finalize');
-            if (finalizeBtn) finalizeBtn.onclick = async () => {
-                if (await showConfirm('Finalize Tournament?', 'All lobby channels and tournament roles will be permanently removed from Discord.', 'danger'))
-                    await doAction('progress');
-            };
+            const pt = t.swiss?.phase_transition;
+            if (pt) {
+                const transBtn = document.getElementById('btn-phase-transition');
+                if (transBtn) transBtn.onclick = async () => {
+                    if (await showConfirm(pt.confirm_title, pt.confirm_message))
+                        await doAction(pt.action);
+                };
+            } else {
+                const postBtn = document.getElementById('btn-post-results');
+                if (postBtn) postBtn.onclick = async () => {
+                    if (await showConfirm('Post Results?', 'This will post the final standings to the results channel.', 'warning'))
+                        await doAction('post_results');
+                };
+                const finalizeBtn = document.getElementById('btn-finalize');
+                if (finalizeBtn) finalizeBtn.onclick = async () => {
+                    if (await showConfirm('Finalize Tournament?', 'All lobby channels and tournament roles will be permanently removed from Discord.', 'danger'))
+                        await doAction('progress');
+                };
+            }
         }
         
 
@@ -605,65 +673,62 @@ function renderActionArea(t) {
             if (confirmed) await doAction('revert_tournament');
         };
 
-    // Swiss Filter: Swiss phase done, bracket phases waiting — show transition button
-    if (t.format === 'swiss filter' && t.phases) {
-        const swissPhase = t.phases.find(p => p.type === 'swiss');
-        const hasWaiting = t.phases.some(p => p.state === 'waiting');
-        if (swissPhase && swissPhase.state === 'finished' && hasWaiting) {
-            area.innerHTML += `
-                <div class="action-panel">
-                    <div class="action-panel-title">Phase Transition</div>
-                    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
-                        Swiss rounds are complete. Review the standings, then start the bracket phase.
-                        Players will be sorted into Pro (3-0), Intermediate (2-1), and Beginner (0-1 wins) brackets.
-                    </p>
-                    <div class="action-row">
-                        <button class="btn btn-success" id="btn-start-brackets">
-                            Start Bracket Phase
-                        </button>
-                    </div>
-                </div>`;
-            document.getElementById('btn-start-brackets').onclick = async () => {
-                if (await showConfirm('Start Brackets?',
-                    'Players will be distributed into brackets based on their Swiss record. This cannot be undone.'))
-                    await doAction('transition_phase');
+    } else if (state === 'finished') {
+        const pt = t.swiss?.phase_transition;
+        if (pt) {
+            // A format is signalling that a phase transition is available (e.g. swiss filter → brackets)
+            area.innerHTML = `<div class="action-panel">
+                <div class="action-panel-title">Phase Transition</div>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                    Swiss rounds are complete. Review the standings above, then start the bracket phase when ready.
+                </p>
+                <div class="action-row">
+                    <button class="btn btn-success" id="btn-phase-transition">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        ${escapeHtml(pt.label)}
+                    </button>
+                </div>
+            </div>`;
+            document.getElementById('btn-phase-transition').onclick = async () => {
+                if (await showConfirm(pt.confirm_title, pt.confirm_message))
+                    await doAction(pt.action);
+            };
+        } else {
+            area.innerHTML = `<div class="action-panel">
+                <div class="action-panel-title">Wrap Up</div>
+                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                    All matches are complete. Post results to the results channel, then finalize when ready to tear down Discord channels.
+                </p>
+                <div class="action-row">
+                    <button class="btn btn-primary" id="btn-post-results">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Post Results
+                    </button>
+                    <button class="btn btn-danger" id="btn-finalize">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/>
+                        </svg>
+                        Finalize &amp; Remove Channels
+                    </button>
+                </div>
+            </div>`;
+            document.getElementById('btn-post-results').onclick = async () => {
+                if (await showConfirm('Post Results?', 'This will post the final standings to the results channel.', 'warning'))
+                    await doAction('post_results');
+            };
+            document.getElementById('btn-finalize').onclick = async () => {
+                if (await showConfirm('Finalize Tournament?', 'All lobby channels and tournament roles will be permanently removed from Discord.', 'danger'))
+                    await doAction('progress');
             };
         }
-    }
-
-    } else if (state === 'finished') {
-        area.innerHTML = `<div class="action-panel">
-            <div class="action-panel-title">Wrap Up</div>
-            <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
-                All matches are complete. Post results to the results channel, then finalize when ready to tear down Discord channels.
-            </p>
-            <div class="action-row">
-                <button class="btn btn-primary" id="btn-post-results">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    Post Results
-                </button>
-                <button class="btn btn-danger" id="btn-finalize">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                        <path d="M10 11v6M14 11v6"/>
-                    </svg>
-                    Finalize &amp; Remove Channels
-                </button>
-            </div>
-        </div>`;
-        document.getElementById('btn-post-results').onclick = async () => {
-            if (await showConfirm('Post Results?', 'This will post the final standings to the results channel.', 'warning'))
-                await doAction('post_results');
-        };
-        document.getElementById('btn-finalize').onclick = async () => {
-            if (await showConfirm('Finalize Tournament?', 'All lobby channels and tournament roles will be permanently removed from Discord.', 'danger'))
-                await doAction('progress');
-        };
 
     } else {
         area.innerHTML = `<div class="action-panel">

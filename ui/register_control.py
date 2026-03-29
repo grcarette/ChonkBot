@@ -118,7 +118,11 @@ class RegisterControlView(discord.ui.View):
             return
 
         result = await self.tm.register_player(user_id)
-        if result == 'no_ranked_account':
+        if result == 'late_registration_closed':
+            await interaction.followup.send(
+                "Registration is closed — this event has already started.", ephemeral=True
+            )
+        elif result == 'no_ranked_account':
             await interaction.followup.send(
                 "You need a UCH Ranked account to participate in this event. "
                 "You can sign up at <https://uchranked.com>.",

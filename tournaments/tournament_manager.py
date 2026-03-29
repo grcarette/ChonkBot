@@ -208,7 +208,7 @@ class TournamentManager:
         elif tournament['state'] == 'checkin':
             await self.send_checkin_message()
         elif tournament['state'] == 'active':
-            if self.format:
+            if self.format and self.format.allows_late_registration:
                 self.bot.add_view(SwissActiveRegisterView(self))
             await self.start_tournament_loop()
 
@@ -238,7 +238,8 @@ class TournamentManager:
             next_state = 'active'
             pre_transition_tasks = [self.start_tournament()]
         elif state == 'active':
-            next_state = 'finished'
+            if not self.format.owns_end_transition:
+                next_state = 'finished'
             pre_transition_tasks = [self.end_tournament()]
         elif state == 'finished':
             next_state = 'finalized'
@@ -249,6 +250,20 @@ class TournamentManager:
                 await task
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
             self.logger.state_transition(state, next_state)
+
+            # Create Challonge bracket shells after state update so a Challonge
+            # failure can't block the publish state transition.
+            if state == 'setup' and tournament.get('format') == 'swiss filter':
+                em = self.bot.th.events.get(tournament['_id'])
+                if em:
+                    try:
+                        await em.create_bracket_shells()
+                    except Exception as e:
+                        import traceback
+                        print(f'[ERROR] swiss filter bracket shell creation failed: {e}')
+                        traceback.print_exc()
+                else:
+                    print(f'[ERROR] EventManager not found for tournament {tournament["_id"]} — bracket shells not created')
 
     # ─── Stages ───────────────────────────────────────────────────────────────
 
@@ -364,8 +379,13 @@ class TournamentManager:
         tournament = await self.get_tournament()
 
         if self.debug:
-            is_swiss = self.tournament.get('format', '') in ('swiss', 'swiss filter')
-            debug_player_count = 4 if is_swiss else 8
+            fmt = self.tournament.get('format', '')
+            if fmt == 'swiss filter':
+                debug_player_count = 32
+            elif fmt == 'swiss':
+                debug_player_count = 4
+            else:
+                debug_player_count = 8
             if self.is_teams_mode:
                 # Pair up debug players into teams
                 for i in range(0, debug_player_count, 2):
@@ -491,6 +511,10 @@ class TournamentManager:
                 return False
 
             tournament = await self.get_tournament()
+
+            # Late registration gate — some formats (e.g. swiss filter) close registration once active
+            if tournament.get('state') == 'active' and not self.debug and not self.format.allows_late_registration:
+                return 'late_registration_closed'
 
             # Ranked gate — applies to any ranked_reporting tournament, debug always bypasses
             if self.is_ranked and not self.debug:
@@ -891,7 +915,7 @@ class TournamentManager:
             # DE/SE: delete the register channel, bracket drives match calling
             if register_channel:
                 await register_channel.delete()
-        else:
+        elif self.format.allows_late_registration:
             # Swiss: keep register channel open with active join/leave view
             if register_channel:
                 await register_channel.purge(limit=None)
@@ -914,6 +938,10 @@ class TournamentManager:
                     await register_channel.set_permissions(
                         self.guild.default_role, overwrite=overwrite
                     )
+        else:
+            # Format does not allow late registration — delete the register channel
+            if register_channel:
+                await register_channel.delete()
 
         await self.bot.dh.update_tournament_state(self.tournament['_id'], 'active')
         if hasattr(self.format, 'invalidate_pending_cache'):
@@ -1512,9 +1540,31 @@ class TournamentManager:
         )
 
         if entrant_list:
-            names = '\n'.join(f"{i+1}. {e['name']}" for i, e in enumerate(entrant_list))
+            total = len(entrant_list)
+            max_chars = 1024
+            lines = []
+            used = 0
+
+            cap = 50
+            for i, e in enumerate(entrant_list):
+                if i >= cap:
+                    lines.append(f'*... and {total - cap} more*')
+                    break
+                line = f"{i+1}. {e['name']}"
+                remaining = total - (i + 1)
+                suffix = f"\n*... and {remaining} more*" if remaining > 0 else ''
+                # +1 for the \n joining this line to previous lines
+                cost = len(line) + (1 if lines else 0)
+
+                if used + cost + len(suffix) > max_chars:
+                    lines.append(f'*... and {remaining + 1} more*')
+                    break
+                lines.append(line)
+                used += cost
+
+            names = '\n'.join(lines)
             embed.add_field(
-                name=f"Entrants ({len(entrant_list)})",
+                name=f"Entrants ({total})",
                 value=names,
                 inline=False
             )

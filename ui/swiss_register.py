@@ -56,6 +56,11 @@ class SwissActiveRegisterView(discord.ui.View):
 
         # Register the player
         success = await self.tm.register_player(user_id)
+        if success == 'late_registration_closed':
+            await interaction.followup.send(
+                "Registration is closed — this event has already started.", ephemeral=True
+            )
+            return
         if not success:
             await interaction.followup.send(
                 "Something went wrong registering you. Please try again.", ephemeral=True

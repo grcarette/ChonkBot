@@ -107,16 +107,34 @@ class TournamentInfoDisplay:
 
         ordered_ids = await self._get_ordered_discord_ids(tournament, entrants)
 
-        names = []
+        max_chars = 900  # leave room for the rest of the embed description
+        total = len(ordered_ids)
+        lines = []
+        used = 0
+
+        cap = 50
         for i, discord_id in enumerate(ordered_ids, start=1):
+            if i > cap:
+                lines.append(f'*... and {total - cap} more*')
+                break
             try:
                 user = await self.dh.get_user(user_id=int(discord_id))
                 name = user['name'] if user else f'Unknown ({discord_id})'
             except Exception:
                 name = f'Unknown ({discord_id})'
-            names.append(f"{i}. {name}")
 
-        return '\n'.join(names) if names else '*No entrants yet.*'
+            line = f"{i}. {name}"
+            remaining = total - i
+            suffix = f"\n*... and {remaining} more*" if remaining > 0 else ''
+            cost = len(line) + (1 if lines else 0)
+
+            if used + cost + len(suffix) > max_chars:
+                lines.append(f'*... and {remaining + 1} more*')
+                break
+            lines.append(line)
+            used += cost
+
+        return '\n'.join(lines) if lines else '*No entrants yet.*'
 
     async def _get_ordered_discord_ids(self, tournament, entrants) -> list[str]:
         """

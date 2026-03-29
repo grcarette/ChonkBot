@@ -6,6 +6,31 @@ let _seedingSyncing       = false;
 let _seedIdleTimer = null;
 const SEED_IDLE_MS = 15000;
 
+const _lockedSeeds = new Set(); // discord_ids whose seeds are locked
+let _lockedSeedsLoaded = false;
+
+function _ensureLockedSeeds() {
+    if (_lockedSeedsLoaded) return;
+    _lockedSeedsLoaded = true;
+    try {
+        const stored = localStorage.getItem(`lockedSeeds_${TOURNAMENT_ID}`);
+        if (stored) JSON.parse(stored).forEach(id => _lockedSeeds.add(id));
+    } catch {}
+}
+
+function _persistLockedSeeds() {
+    try {
+        localStorage.setItem(`lockedSeeds_${TOURNAMENT_ID}`, JSON.stringify([..._lockedSeeds]));
+    } catch {}
+}
+
+const _SVG_LOCK = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+</svg>`;
+const _SVG_UNLOCK = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M11 1a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h5V3a3 3 0 0 1 6 0v4a.5.5 0 0 1-1 0V3a2 2 0 0 0-2-2z"/>
+</svg>`;
+
 // ── Top-level render (called from loadTournament) ─────────────────────────────
 
 function renderPlayers(entrants, checkedIn, dqs, state, format) {
@@ -63,6 +88,7 @@ function renderOverviewParticipants(entrants, checkedIn, dqs, state, format) {
 // ── Drag-and-drop seeding list ────────────────────────────────────────────────
 
 function renderSeedingList(wrap, entrants, checkedIn, dqs, showCI) {
+    _ensureLockedSeeds();
     wrap._entrants = [...entrants];
     wrap.innerHTML = `<ul class="seeding-list"></ul>
         <div class="seeding-save-status" style="height:24px;text-align:center;font-size:12px;padding:6px 0;color:var(--text-muted)"></div>`;
@@ -81,10 +107,12 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
         if (isDQ)                tag = `<span class="tag tag-dq">DQ</span>`;
         else if (showCI && isCI) tag = `<span class="tag tag-checkin">✓</span>`;
 
-        const nameEsc = escapeHtml(e.name).replace(/'/g, "\\'");
-        const dqBtn   = isDQ
+        const nameEsc  = escapeHtml(e.name).replace(/'/g, "\\'");
+        const dqBtn    = isDQ
             ? `<button class="btn btn-secondary btn-sm" onclick="undqPlayer('${e.discord_id}')">Un-DQ</button>`
             : `<button class="btn btn-danger btn-sm" onclick="dqPlayer('${e.discord_id}','${nameEsc}')">DQ</button>`;
+        const isLocked = _lockedSeeds.has(e.discord_id);
+        const lockBtn  = `<button class="seed-lock-btn${isLocked ? ' is-locked' : ''}" onclick="toggleSeedLock('${e.discord_id}')" title="${isLocked ? 'Unlock seed' : 'Lock seed'}">${isLocked ? _SVG_LOCK : _SVG_UNLOCK}</button>`;
 
         const li = document.createElement('li');
         li.className    = 'participant-item';
@@ -97,6 +125,7 @@ function _rebuildSeedingList(wrap, checkedIn, dqs, showCI) {
                     <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
                 </svg>
             </span>
+            ${lockBtn}
             <span class="participant-seed">${i + 1}</span>
             ${e.avatar_url
                 ? `<img src="${escapeHtml(e.avatar_url)}" class="participant-avatar" alt="">`
@@ -259,6 +288,28 @@ async function setSeed(input) {
     } finally {
         input.disabled = false;
     }
+}
+
+// ── Seed locking ─────────────────────────────────────────────────────────────
+
+function toggleSeedLock(discordId) {
+    if (_lockedSeeds.has(discordId)) _lockedSeeds.delete(discordId);
+    else _lockedSeeds.add(discordId);
+    _persistLockedSeeds();
+
+    for (const id of ['overview-participants-wrap', 'participants-list-wrap']) {
+        const wrap = document.getElementById(id);
+        if (wrap?._entrants) _rebuildSeedingList(wrap, wrap._checkedIn || [], wrap._dqs || [], wrap._showCI || false);
+    }
+}
+
+function getLockedSeedsPayload() {
+    const wrap = document.getElementById('overview-participants-wrap')
+               || document.getElementById('participants-list-wrap');
+    if (!wrap?._entrants) return [];
+    return wrap._entrants
+        .map((e, i) => ({ discord_id: e.discord_id, seed: i + 1 }))
+        .filter(({ discord_id }) => _lockedSeeds.has(discord_id));
 }
 
 // ── DQ actions ────────────────────────────────────────────────────────────────

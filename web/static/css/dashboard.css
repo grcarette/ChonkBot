@@ -331,6 +331,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
 .participant-item.shift-down { transform: translateY(var(--pi-h)); transition: transform 0.18s ease; }
 .participant-drag-handle { color: var(--text-muted); cursor: grab; flex-shrink: 0; display: flex; }
 .participant-drag-handle:hover { color: var(--text-primary); }
+.participant-actions { display: flex; align-items: center; gap: 6px; }
+.seed-lock-btn { background: none; border: none; padding: 4px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; border-radius: 4px; transition: color 0.15s; flex-shrink: 0; }
+.seed-lock-btn:hover { color: var(--text-primary); }
+.seed-lock-btn.is-locked { color: #f0a500; }
+.seed-lock-btn.is-locked:hover { color: #d4900a; }
 .participant-seed { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 22px; text-align: right; }
 .participant-name { flex: 1; font-size: 13px; font-weight: 500; }
 .participant-tags { display: flex; gap: 6px; }
@@ -505,4 +510,33 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
 .phase-state-label { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .phase-state-label.phase-active   { color: var(--green); }
 .phase-state-label.phase-finished { color: var(--text-muted); }
+
+/* ── Phase content tabs ── */
+.phase-tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    padding: 0 18px;
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+.phase-tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    font-family: inherit;
+}
+.phase-tab:hover {
+    color: var(--text-primary);
+}
+.phase-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
 .phase-state-label.phase-waiting  { color: var(--text-muted); }

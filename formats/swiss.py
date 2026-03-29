@@ -322,6 +322,10 @@ class SwissFormat(BaseFormat):
     def ranked_compatible(self) -> bool:
         return True
 
+    @property
+    def allows_late_registration(self) -> bool:
+        return True
+
     # ─── Private helpers ──────────────────────────────────────────────────────
 
     async def _backfill_debug_players(self) -> None:

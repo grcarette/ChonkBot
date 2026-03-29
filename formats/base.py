@@ -298,3 +298,17 @@ class BaseFormat:
         """Whether this format supports UCH Ranked reporting. Default: False."""
         return False
 
+    @property
+    def allows_late_registration(self) -> bool:
+        """Whether players can register after the tournament goes active. Default: True."""
+        return True
+
+    @property
+    def owns_end_transition(self) -> bool:
+        """If True, the format manages its own active→finished state transition.
+        progress_tournament will call end_tournament() but will NOT update the tournament
+        state to 'finished' — the format is responsible for doing so (e.g. via
+        EventManager.on_phase_finished / _finish_event) at the appropriate time.
+        Default: False (normal formats transition immediately)."""
+        return False
+
