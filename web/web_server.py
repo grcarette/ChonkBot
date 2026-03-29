@@ -166,12 +166,15 @@ async def handle_get_tournaments(request: web.Request) -> web.Response:
     total_lobbies = 0
     tournament_list = []
 
-    for t in tournaments:
+    all_lobbies = await asyncio.gather(
+        *[bot.dh.get_active_lobbies(t['_id']) for t in tournaments]
+    )
+
+    for t, lobbies in zip(tournaments, all_lobbies):
         tid = t['_id']
         entrant_count = len(t.get('entrants', {}))
         total_players += entrant_count
 
-        lobbies = await bot.dh.get_active_lobbies(tid)
         lobby_count = len(lobbies) if lobbies else 0
         total_lobbies += lobby_count
 
@@ -374,7 +377,8 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         else:
             entrant_ids.append(key_str)
 
-    all_ids  = list(set(entrant_ids + lobby_player_ids))
+    request_id_strs = [str(r) for r in (request_ids or [])]
+    all_ids  = list(set(entrant_ids + lobby_player_ids + request_id_strs))
     user_map = await bot.dh.get_users_bulk(all_ids)
 
     # ── Seed data ─────────────────────────────────────────────────────────────
@@ -545,6 +549,22 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'round_ready':        False,  # Safe default when TM not loaded
             'final_round_active': current_round >= round_limit,
         }
+        # Include phase_transition if the swiss phase is done and bracket phases are waiting
+        if swiss_event.get('state') == 'finished':
+            has_waiting = any(
+                p.get('state') == 'waiting'
+                for p in tournament.get('phases', [])[1:]
+            )
+            if has_waiting:
+                swiss_data['phase_transition'] = {
+                    'label':           'Start Bracket Phase',
+                    'action':          'transition_phase',
+                    'confirm_title':   'Start Bracket Phase?',
+                    'confirm_message': (
+                        'Players will be sorted into brackets based on their Swiss record. '
+                        'This cannot be undone.'
+                    ),
+                }
 
     # ── autocall / hold_when_ready (Challonge formats only) ──────────────────
 
@@ -554,7 +574,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
 
     registration_requests = []
     for rid in (request_ids or []):
-        user = user_map.get(str(rid)) or await bot.dh.get_user(user_id=int(rid))
+        user = user_map.get(str(rid))
         registration_requests.append({
             'discord_id': str(rid),
             'name':       user['name'] if user else str(rid),
@@ -564,8 +584,22 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     # ── Phase data ────────────────────────────────────────────────────────────
 
     em = bot.th.events.get(tournament['_id'])
-    phases_data = []
-    for i, phase in enumerate(tournament.get('phases', [])):
+
+    async def _noop():
+        return None
+
+    async def _build_phase_summary(i, phase):
+        from utils.get_bracket_link import get_bracket_link
+        phase_tm = em.phase_managers.get(i) if em else None
+        phase_tid = phase.get('tournament_id')
+
+        challonge_url, phase_lobbies, phase_swiss = await asyncio.gather(
+            get_bracket_link(phase['challonge_data']['url']) if phase.get('challonge_data') else _noop(),
+            bot.dh.get_active_lobbies(phase_tid) if (phase_tid and phase_tid != tournament['_id']) else _noop(),
+            bot.dh.get_swiss_event_by_tournament(phase.get('tournament_id', tournament['_id']))
+                if (phase_tm and phase['type'] in ('swiss', 'swiss filter')) else _noop(),
+        )
+
         phase_summary = {
             'index': i,
             'type': phase['type'],
@@ -576,28 +610,23 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'entrant_count': len(phase.get('entrants', {})),
         }
 
-        if phase.get('challonge_data'):
-            from utils.get_bracket_link import get_bracket_link
-            phase_summary['challonge_url'] = await get_bracket_link(
-                phase['challonge_data']['url']
-            )
+        if challonge_url is not None:
+            phase_summary['challonge_url'] = challonge_url
 
-        phase_tm = em.phase_managers.get(i) if em else None
-        if phase_tm and phase['type'] in ('swiss', 'swiss filter'):
-            phase_swiss = await bot.dh.get_swiss_event_by_tournament(
-                phase.get('tournament_id', tournament['_id'])
-            )
-            if phase_swiss and phase_tm.format:
-                phase_summary['swiss'] = await phase_tm.format.get_dashboard_state()
+        if phase_swiss and phase_tm and phase_tm.format:
+            phase_summary['swiss'] = await phase_tm.format.get_dashboard_state()
 
-        phase_tid = phase.get('tournament_id')
-        if phase_tid and phase_tid != tournament['_id']:
-            phase_lobbies = await bot.dh.get_active_lobbies(phase_tid)
-            phase_summary['lobby_count'] = len(phase_lobbies) if phase_lobbies else 0
+        if phase_lobbies is not None:
+            phase_summary['lobby_count'] = len(phase_lobbies)
         else:
             phase_summary['lobby_count'] = len(raw_lobbies) if raw_lobbies else 0
 
-        phases_data.append(phase_summary)
+        return phase_summary
+
+    phases_data = list(await asyncio.gather(
+        *[_build_phase_summary(i, phase)
+          for i, phase in enumerate(tournament.get('phases', []))]
+    ))
 
     return web.json_response({
         'id':                    str(tournament['_id']),
@@ -704,6 +733,15 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         if not tournament:
             return web.json_response({'error': 'Tournament not found'}, status=404)
         tm = bot.th.tournaments.get(tournament['_id'])
+
+        # If a phase_index is provided, route to the phase's TM instead
+        phase_index_raw = body.get('phase_index')
+        if phase_index_raw is not None:
+            em_lookup = bot.th.events.get(tournament['_id'])
+            if em_lookup:
+                phase_tm_lookup = em_lookup.phase_managers.get(int(phase_index_raw))
+                if phase_tm_lookup:
+                    tm = phase_tm_lookup
 
         def need_tm():
             if not tm:
@@ -1786,6 +1824,145 @@ async def handle_delete_image(request: web.Request) -> web.Response:
     return web.json_response({'ok': True})
 
 
+@require_auth
+async def handle_get_phase_bracket(request: web.Request) -> web.Response:
+    """Interactive bracket data for a specific phase (Pro / Intermediate / Beginner)."""
+    tournament_id  = request.match_info['tournament_id']
+    phase_index    = int(request.match_info['phase_index'])
+    bot            = request.app['bot']
+
+    tournament = await bot.dh.get_tournament_by_id(tournament_id)
+    if not tournament:
+        return web.json_response({'error': 'Tournament not found'}, status=404)
+
+    phases = tournament.get('phases', [])
+    if phase_index >= len(phases):
+        return web.json_response({'error': 'Phase not found'}, status=404)
+
+    phase   = phases[phase_index]
+    ch_data = phase.get('challonge_data')
+    if not ch_data:
+        return web.json_response({'error': 'No Challonge bracket for this phase yet'}, status=404)
+
+    fmt           = phase['type']
+    challonge_url = ch_data['url']
+
+    # challonge participant id → discord id
+    challonge_to_discord: dict[int, str] = {}
+    for did, cid in (phase.get('entrants') or {}).items():
+        if cid is not None:
+            try:
+                challonge_to_discord[int(cid)] = str(did)
+            except (ValueError, TypeError):
+                pass
+
+    # User name / avatar map — users collection first, Swiss username as fallback
+    discord_ids = list({str(k) for k in (phase.get('entrants') or {}).keys()})
+    user_map    = await bot.dh.get_users_bulk(discord_ids)
+
+    swiss_name_map: dict[str, str] = {}
+    if phases:
+        swiss_phase  = phases[0]
+        swiss_event  = await bot.dh.get_swiss_event_by_tournament(
+            swiss_phase.get('tournament_id') or tournament['_id']
+        )
+        if swiss_event:
+            swiss_name_map = {
+                pid: p.get('username', '')
+                for pid, p in swiss_event.get('players', {}).items()
+            }
+
+    discord_to_name:   dict[str, str]       = {}
+    discord_to_avatar: dict[str, str | None] = {}
+    for did, user in user_map.items():
+        discord_to_name[did]   = user['name']
+        discord_to_avatar[did] = user.get('avatar_url')
+    for did, uname in swiss_name_map.items():
+        if did not in discord_to_name and uname:
+            discord_to_name[did] = uname
+
+    # Fetch matches from Challonge
+    em       = bot.th.events.get(tournament['_id'])
+    phase_tm = em.phase_managers.get(phase_index) if em else None
+    try:
+        if phase_tm and hasattr(phase_tm, 'format') and phase_tm.format and hasattr(phase_tm.format, 'ch'):
+            challonge_handler = phase_tm.format.ch
+        else:
+            from tournaments.challonge_handler import ChallongeHandler
+            challonge_handler = ChallongeHandler(challonge_url)
+        raw_matches = await challonge_handler.get_all_matches(challonge_url)
+    except Exception as e:
+        return web.json_response({'error': f'Challonge error: {str(e)}'}, status=502)
+
+    # Lobbies for this phase
+    phase_tid   = (phase_tm.tournament['_id'] if phase_tm else None) or tournament['_id']
+    raw_lobbies = await bot.dh.get_all_lobbies(phase_tid)
+    lobby_by_match = {l['match_id']: l for l in (raw_lobbies or [])}
+
+    hold_when_ready: set = set()
+    if phase_tm and phase_tm.format:
+        hold_when_ready = getattr(phase_tm.format, 'hold_when_ready', set()) or set()
+
+    def _pname(cid):
+        if cid is None: return None
+        key = challonge_to_discord.get(int(cid))
+        return discord_to_name.get(key, f'#{cid}') if key else f'#{cid}'
+
+    def _pdiscord(cid):
+        if cid is None: return None
+        return challonge_to_discord.get(int(cid))
+
+    def _pavatar(cid):
+        if cid is None: return None
+        key = challonge_to_discord.get(int(cid))
+        return discord_to_avatar.get(key) if key else None
+
+    matches = []
+    for m in raw_matches:
+        match_id  = m['id']
+        round_num = m['round']
+        p1_cid    = m.get('player1_id')
+        p2_cid    = m.get('player2_id')
+        winner_cid = m.get('winner_id')
+
+        bracket = ('Winners' if round_num > 0 else 'Losers') if fmt == 'double elimination' else ''
+
+        pre_raw = m.get('prerequisite_match_ids_csv', '')
+        if not pre_raw:
+            prereq_ids = []
+        elif isinstance(pre_raw, (int, float)):
+            prereq_ids = [int(pre_raw)]
+        else:
+            prereq_ids = [int(x) for x in str(pre_raw).split(',') if x.strip()]
+
+        lobby  = lobby_by_match.get(match_id)
+        is_bye = p1_cid is None or p2_cid is None
+        matches.append({
+            'match_id':          match_id,
+            'round':             round_num,
+            'bracket':           bracket,
+            'state':             m['state'],
+            'lobby_state':       lobby['state'] if lobby else None,
+            'p1_name':           _pname(p1_cid),
+            'p2_name':           _pname(p2_cid),
+            'p1_discord_id':     _pdiscord(p1_cid),
+            'p2_discord_id':     _pdiscord(p2_cid),
+            'p1_avatar_url':     _pavatar(p1_cid),
+            'p2_avatar_url':     _pavatar(p2_cid),
+            'winner_name':       _pname(winner_cid) if winner_cid else None,
+            'winner_discord_id': _pdiscord(winner_cid),
+            'picked_stage':      lobby.get('picked_stage') if lobby else None,
+            'prereq_ids':        prereq_ids,
+            'has_lobby':         lobby is not None,
+            'hold_when_ready':   match_id in hold_when_ready,
+            'is_bye':            is_bye,
+        })
+
+    matches.sort(key=lambda x: (0 if x['bracket'] == 'Winners' else 1, abs(x['round'])))
+
+    return web.json_response({'format': fmt, 'matches': matches, 'phase_index': phase_index})
+
+
 # ─── App factory ──────────────────────────────────────────────────────────────
 
 def create_app(challonge_handler_factory, bot) -> web.Application:
@@ -1817,7 +1994,7 @@ def create_app(challonge_handler_factory, bot) -> web.Application:
     app.router.add_get(   '/api/stages/browse',                       handle_browse_stages)
     app.router.add_post(  '/api/tournament/{tournament_id}/seed',     handle_set_seed)
     app.router.add_get(   '/api/tournament/{tournament_id}/pending_matches', handle_get_pending_matches)
-
+    app.router.add_get(   '/api/tournament/{tournament_id}/phase/{phase_index}/bracket', handle_get_phase_bracket)
 
     # Seeding
     app.router.add_get( '/seeding',         handle_seeding_page)

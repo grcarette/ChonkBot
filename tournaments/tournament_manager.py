@@ -212,8 +212,7 @@ class TournamentManager:
                 self.bot.add_view(SwissActiveRegisterView(self))
             await self.start_tournament_loop()
 
-        tournament = await self.get_tournament()
-        self.organizer_role = discord.utils.get(self.guild.roles, name=f"{tournament['name']} TO")
+        self.organizer_role = discord.utils.get(self.guild.roles, name=f"{self.tournament['name']} TO")
 
     # ─── Tournament state progression ────────────────────────────────────────
 
@@ -245,9 +244,12 @@ class TournamentManager:
             next_state = 'finalized'
             pre_transition_tasks = [self.finalize_tournament()]
 
+        # Always run pre-transition tasks — even when format owns the state transition
+        for task in pre_transition_tasks:
+            await task
+
+        # Only update DB state when there is an actual state transition
         if next_state:
-            for task in pre_transition_tasks:
-                await task
             await self.bot.dh.update_tournament_state(self.tournament['_id'], next_state)
             self.logger.state_transition(state, next_state)
 
@@ -707,8 +709,10 @@ class TournamentManager:
         team_id = self._make_team_id(player1_id, player2_id)
 
         # Resolve display names for team name
-        u1 = await self.bot.dh.get_user(user_id=player1_id)
-        u2 = await self.bot.dh.get_user(user_id=player2_id)
+        u1, u2 = await asyncio.gather(
+            self.bot.dh.get_user(user_id=player1_id),
+            self.bot.dh.get_user(user_id=player2_id),
+        )
         name1 = u1['name'] if u1 else str(player1_id)
         name2 = u2['name'] if u2 else str(player2_id)
         team_name = f"{name1} / {name2}"
@@ -1799,8 +1803,9 @@ class TournamentManager:
 
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
-        self.tournament = tournament
-        return tournament
+        if tournament is not None:
+            self.tournament = tournament
+        return self.tournament
 
     def get_tournament_category(self):
         cat_id = self.tournament.get('category_id')

@@ -184,14 +184,19 @@ class MatchLobby:
         await self.end_stage_bans(banned_stages=[])
 
     async def _auto_report(self):
-        """Debug: pick a winner weighted by seed (lower seed number = higher win chance).
-        Weight = 1/seed, so seed-1 vs seed-32 gives ~97% win chance for seed-1.
+        """Debug: pick a winner using a logistic seed-gap model.
+        P(better seed wins) = 1 / (1 + 10^(-k * gap)) where gap = opponent_seed - player_seed.
+        k=0.15 gives: 1 apart→53%, 4 apart→71%, 8 apart→86%, 16 apart→96%, 24 apart→99%.
         Falls back to 50/50 if seeds are not set."""
         players = list(self.remaining_players)
         seeds = self.tournament.get('seeds', {})
-        if seeds:
-            weights = [1.0 / seeds.get(str(p), 999) for p in players]
-            winner_id = random.choices(players, weights=weights, k=1)[0]
+        if seeds and len(players) == 2:
+            s1 = seeds.get(str(players[0]), 9999)
+            s2 = seeds.get(str(players[1]), 9999)
+            gap = s2 - s1  # positive means players[0] has the better (lower) seed
+            k = 0.15
+            p1_win = 1.0 / (1.0 + 10 ** (-k * gap))
+            winner_id = random.choices(players, weights=[p1_win, 1 - p1_win], k=1)[0]
         else:
             winner_id = random.choice(players)
         await self.end_reporting(winner_id=winner_id)

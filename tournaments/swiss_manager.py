@@ -60,13 +60,19 @@ class SwissManager:
         # For swiss filter events: exclude top-N seeded players who are in the Pro bracket
         config = self.tm.tournament.get('config', {})
         floating_count = config.get('top_seed_floating_count', 0) if config.get('top_seed_floating') else 0
-        if floating_count:
-            event_doc = await self.dh.get_tournament_by_id(self.tm.tournament['_id'])
-            seeds = event_doc.get('seeds', {})
-            if seeds:
-                sorted_ids = sorted(seeds.keys(), key=lambda k: seeds[k])
-                floated_ids = set(sorted_ids[:floating_count])
-                available = [p for p in available if str(p['discord_id']) not in floated_ids]
+        seeds = self.tm.tournament.get('seeds', {})
+
+        if floating_count and seeds:
+            sorted_ids = sorted(seeds.keys(), key=lambda k: seeds[k])
+            floated_ids = set(sorted_ids[:floating_count])
+            available = [p for p in available if str(p['discord_id']) not in floated_ids]
+
+        # Inject seed into each player dict so the pairing algorithm can use it
+        if seeds:
+            for p in available:
+                seed = seeds.get(str(p['discord_id']))
+                if seed is not None:
+                    p['seed'] = seed
 
         if len(available) < 2:
             if len(available) == 1:
@@ -80,8 +86,6 @@ class SwissManager:
             await self.post_round_complete(swiss_event)
 
         current_round = await self.dh.swiss_increment_round(swiss_event['_id'])
-
-        swiss_event = await self.dh.get_swiss_event_by_tournament(self.tm.tournament['_id'])
 
         await self.randomize_stagelist()
 
@@ -129,11 +133,29 @@ class SwissManager:
             await self.end_event()
             return
 
+    async def _get_floated_ids(self) -> set[str]:
+        """Return the set of discord_id strings for players floated to the Pro bracket,
+        or an empty set if top-seed floating is disabled or seeds aren't set."""
+        event_doc = await self.dh.get_tournament_by_id(self.tm.tournament['_id'])
+        config = event_doc.get('config', {})
+        if not config.get('top_seed_floating'):
+            return set()
+        count = config.get('top_seed_floating_count', 0)
+        if count <= 0:
+            return set()
+        seeds = event_doc.get('seeds', {})
+        if not seeds:
+            return set()
+        sorted_ids = sorted(seeds.keys(), key=lambda k: seeds[k])
+        return set(sorted_ids[:count])
+
     async def post_round_complete(self, swiss_event):
         """Post full standings to event-updates. The web dashboard handles enabling the next round button."""
         event_update_channel = await self.tm.get_channel('event-updates')
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
+            floated_ids = await self._get_floated_ids()
+            standings = [p for p in standings if str(p['discord_id']) not in floated_ids]
             standings_text = "\n".join(
                 f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L-{p.get('byes', 0)}B)"
                 for i, p in enumerate(standings)
@@ -257,6 +279,8 @@ class SwissManager:
         event_update_channel = await self.tm.get_channel('event-updates')
         if event_update_channel:
             standings = await self.dh.swiss_get_standings(swiss_event['_id'])
+            floated_ids = await self._get_floated_ids()
+            standings = [p for p in standings if str(p['discord_id']) not in floated_ids]
             standings_text = "\n".join(
                 f"{i+1}. {p['username']} — {p['points']}pts ({p['wins']}W-{p['losses']}L-{p.get('byes', 0)}B)"
                 for i, p in enumerate(standings)

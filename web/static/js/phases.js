@@ -6,6 +6,7 @@
 let _selectedPhase = null;   // null = overview, or phase index
 let _selectedPhaseTab = null; // 'matches' | 'bracket' | 'leaderboard'
 let _cachedPhases = [];       // populated by loadTournament
+let _phaseBracketPollTimer = null; // interval for polling phase bracket
 
 function updatePhaseCache(data) {
     _cachedPhases = data.phases || [];
@@ -41,8 +42,13 @@ function renderPhaseNav(data) {
 
 // ── Phase selection (instant — no API call) ──────────────────────────────────
 
-function selectPhase(index) {
+async function selectPhase(index) {
+    // Stop any phase bracket poll from a previous phase selection
+    _stopPhaseBracketPoll();
+    _activePhaseBracketIndex = null;
+
     _selectedPhase = index;
+    _selectedPhaseTab = null; // reset tab on phase change
 
     // Deselect sidebar nav items for event-level sections
     document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.remove('active'));
@@ -58,22 +64,30 @@ function selectPhase(index) {
     const phase = _cachedPhases[index];
     if (!phase) return;
 
-    // Pick default tab based on phase type
-    const defaultTab = phase.type === 'swiss' ? 'matches' : 'matches';
-    _selectedPhaseTab = _selectedPhaseTab || defaultTab;
+    // Default to matches tab on phase selection
+    _selectedPhaseTab = 'matches';
 
     renderPhaseHeader(phase);
     renderPhaseTabs(phase);
-    renderPhaseTabContent(phase);
+    await renderPhaseTabContent(phase);
 }
 
 function deselectPhase() {
     _selectedPhase = null;
     _selectedPhaseTab = null;
+    _stopPhaseBracketPoll();
+    _activePhaseBracketIndex = null;
     document.getElementById('section-phase-content').classList.remove('active');
     document.querySelectorAll('#phase-nav-items .nav-item').forEach(btn => {
         btn.classList.remove('active');
     });
+}
+
+function _stopPhaseBracketPoll() {
+    if (_phaseBracketPollTimer) {
+        clearInterval(_phaseBracketPollTimer);
+        _phaseBracketPollTimer = null;
+    }
 }
 
 // ── Phase header ─────────────────────────────────────────────────────────────
@@ -109,7 +123,11 @@ function renderPhaseTabs(phase) {
     ).join('');
 }
 
-function selectPhaseTab(tabId) {
+async function selectPhaseTab(tabId) {
+    if (tabId !== 'bracket') {
+        _stopPhaseBracketPoll();
+        _activePhaseBracketIndex = null;
+    }
     _selectedPhaseTab = tabId;
     const phase = _cachedPhases[_selectedPhase];
     if (!phase) return;
@@ -119,18 +137,18 @@ function selectPhaseTab(tabId) {
         t.classList.toggle('active', t.textContent.trim().toLowerCase() === tabId);
     });
 
-    renderPhaseTabContent(phase);
+    await renderPhaseTabContent(phase);
 }
 
 // ── Tab content ──────────────────────────────────────────────────────────────
 
-function renderPhaseTabContent(phase) {
+async function renderPhaseTabContent(phase) {
     const content = document.getElementById('phase-tab-content');
 
     if (_selectedPhaseTab === 'matches') {
         renderPhaseMatches(content, phase);
     } else if (_selectedPhaseTab === 'bracket') {
-        renderPhaseBracket(content, phase);
+        await renderPhaseBracket(content, phase);
     } else if (_selectedPhaseTab === 'leaderboard') {
         renderPhaseLeaderboard(content, phase);
     }
@@ -150,7 +168,7 @@ function renderPhaseMatches(container, phase) {
         </div>`;
 }
 
-function renderPhaseBracket(container, phase) {
+async function renderPhaseBracket(container, phase) {
     if (!phase.challonge_url) {
         container.innerHTML = `
             <div style="padding:40px;text-align:center;color:var(--text-muted)">
@@ -158,21 +176,53 @@ function renderPhaseBracket(container, phase) {
             </div>`;
         return;
     }
+
+    // Stop any existing poll before starting a new one
+    _stopPhaseBracketPoll();
+
+    // Set active phase bracket index so drawer actions route to the right TM
+    _activePhaseBracketIndex = phase.index;
+
+    // Build the container structure (header + bracket wrap)
     container.innerHTML = `
         <div style="padding:18px">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
                 <span style="font-size:15px;font-weight:600">${escapeHtml(phase.label)}</span>
                 <span style="font-size:12px;color:var(--text-muted)">${phase.entrant_count || 0} players</span>
-                <a href="${escapeHtml(phase.challonge_url)}" target="_blank" rel="noopener"
+                ${phase.challonge_url ? `<a href="${escapeHtml(phase.challonge_url)}" target="_blank" rel="noopener"
                    class="btn btn-secondary btn-sm" style="text-decoration:none">
                     View on Challonge ↗
-                </a>
+                </a>` : ''}
             </div>
-            <iframe src="${escapeHtml(phase.challonge_url)}/module"
-                    width="100%" height="500" frameborder="0"
-                    style="border:1px solid var(--border);border-radius:var(--radius)">
-            </iframe>
+            <div id="phase-bracket-wrap" style="overflow-x:auto"></div>
         </div>`;
+
+    const wrap = document.getElementById('phase-bracket-wrap');
+    let _lastPhaseBracketJson = null;
+
+    async function fetchAndRender() {
+        // Bail out if the user has navigated away from this phase or tab
+        if (_activePhaseBracketIndex !== phase.index) return;
+        try {
+            const data = await api('GET', `/api/tournament/${TOURNAMENT_ID}/phase/${phase.index}/bracket`);
+            const json = JSON.stringify(data.matches);
+            if (json === _lastPhaseBracketJson) return; // nothing changed, skip re-render
+            _lastPhaseBracketJson = json;
+            bracketData = data;
+            if (_activePhaseBracketIndex === phase.index && wrap.isConnected) {
+                renderBracketInto(data, wrap);
+            }
+        } catch (err) {
+            if (wrap.isConnected && _activePhaseBracketIndex === phase.index) {
+                wrap.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:13px">${escapeHtml(err.message)}</div>`;
+            }
+        }
+    }
+
+    await fetchAndRender();
+
+    // Poll every 5 s while this phase bracket is open
+    _phaseBracketPollTimer = setInterval(fetchAndRender, 5000);
 }
 
 function renderPhaseLeaderboard(container, phase) {

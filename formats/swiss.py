@@ -41,7 +41,7 @@ class SwissFormat(BaseFormat):
     async def on_initialize(self) -> None:
         """Create the swiss event document if it doesn't exist yet,
         and rehydrate any pending results from finished lobbies."""
-        tournament = await self.tm.get_tournament()
+        tournament = self.tm.tournament  # use in-memory doc — avoids DB overwrite crash for phase TMs
         swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
         if not swiss_event:
             round_limit = tournament.get('round_limit', 8)

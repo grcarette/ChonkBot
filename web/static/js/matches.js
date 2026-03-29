@@ -205,7 +205,7 @@ async function _matchActionAndRefresh(matchId, action, extra = {}) {
     _disableMatchRow(matchId);
     try {
         _timing.start(`api_post_action[${matchId}:${action}]`);
-        await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action, match_id: matchId, ...extra });
+        await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, { action, match_id: matchId, ...extra, ...(typeof _phasePayload === 'function' ? _phasePayload() : {}) });
         _timing.end(`api_post_action[${matchId}:${action}]`);
     } catch (err) {
         _timing.end(`api_post_action[${matchId}:${action}]`);

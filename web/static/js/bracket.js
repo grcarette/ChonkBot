@@ -3,6 +3,12 @@
 
 let bracketData = null;
 let _bracketRapidPollTimer = null;
+let _activePhaseBracketIndex = null; // non-null when a phase bracket tab is open
+
+// Returns { phase_index: N } when a phase bracket is active, else {}
+function _phasePayload() {
+    return _activePhaseBracketIndex !== null ? { phase_index: _activePhaseBracketIndex } : {};
+}
 
 async function loadBracket() {
     try {
@@ -17,11 +23,10 @@ async function loadBracket() {
     }
 }
 
-function renderBracket(data) {
-    const wrap = document.getElementById('bracket-wrap');
+function renderBracketInto(data, wrap) {
     if (!data || !data.matches || !data.matches.length) {
         wrap.innerHTML = `<div class="bracket-unavailable">
-            ...existing empty state...
+            <p>No bracket data available</p>
         </div>`;
         return;
     }
@@ -31,7 +36,6 @@ function renderBracket(data) {
     wrap.innerHTML = '';
 
     if (isSwiss) {
-        // Render a round header above the flat card grid
         if (data.round > 0) {
             const header = document.createElement('div');
             header.className = 'bracket-half-title';
@@ -56,6 +60,10 @@ function renderBracket(data) {
         renderHalf(el, data.matches, '', false);
         wrap.appendChild(el);
     }
+}
+
+function renderBracket(data) {
+    renderBracketInto(data, document.getElementById('bracket-wrap'));
 }
 
 function renderHalf(container, matches, title, isLosers) {
@@ -102,6 +110,26 @@ function renderHalf(container, matches, title, isLosers) {
                 centerY = LABEL_H + CARD_H / 2 + roundMap[rounds[ri]].indexOf(m) * (CARD_H + CARD_GAP);
             }
             posMap[m.match_id] = { x: colX, y: centerY - CARD_H / 2, centerY };
+        }
+    }
+
+    // Post-process: enforce minimum vertical spacing within each column so
+    // cards never overlap (can happen in DE losers rounds where some prereqs
+    // are winners-bracket matches not present in posMap).
+    const byCol = {};
+    for (const [id, pos] of Object.entries(posMap)) {
+        if (!byCol[pos.x]) byCol[pos.x] = [];
+        byCol[pos.x].push(pos);
+    }
+    for (const col of Object.values(byCol)) {
+        col.sort((a, b) => a.y - b.y);
+        for (let i = 1; i < col.length; i++) {
+            const minY = col[i - 1].y + CARD_H + CARD_GAP;
+            if (col[i].y < minY) {
+                const shift = minY - col[i].y;
+                col[i].y      += shift;
+                col[i].centerY += shift;
+            }
         }
     }
 
@@ -420,6 +448,7 @@ function populateDrawer(m) {
             const res = await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
                 action:   'toggle_hold_when_ready',
                 match_id: m.match_id,
+                ..._phasePayload(),
             });
             // Update the local bracketData so the card re-renders correctly
             // without a full bracket reload
@@ -447,7 +476,7 @@ async function drawerCallMatch(matchId, btn) {
     document.getElementById('drawer-sub').textContent = 'Calling match...';
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
-            action: 'call_match', match_id: matchId
+            action: 'call_match', match_id: matchId, ..._phasePayload()
         });
     } catch (err) {
         showToast(err.message, 'error');
@@ -469,7 +498,7 @@ async function drawerHoldMatch(matchId, btn) {
 
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
-            action: 'hold_match', match_id: matchId
+            action: 'hold_match', match_id: matchId, ..._phasePayload()
         });
     } catch (err) {
         showToast(err.message, 'error');
@@ -503,7 +532,7 @@ async function drawerStartHeld(matchId, btn) {
     document.getElementById('drawer-sub').textContent = 'Starting match...';
     try {
         await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
-            action: 'start_held_match', match_id: matchId
+            action: 'start_held_match', match_id: matchId, ..._phasePayload()
         });
     } catch (err) {
         showToast(err.message, 'error');
@@ -520,7 +549,14 @@ async function drawerDQ(discordId, name) {
 async function drawerResetMatch(matchId) {
     if (await showConfirm('Reset Match?',
         'This will reopen the match on Challonge. Any recorded result will be undone.', 'danger')) {
-        await doAction('reset_match', { match_id: matchId });
+        try {
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+                action: 'reset_match', match_id: matchId, ..._phasePayload()
+            });
+            showToast('Match reset', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
         await loadBracket();
     }
 }
@@ -536,6 +572,7 @@ async function drawerResetLobby(matchId) {
             await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
                 action:   'reset_lobby',
                 match_id: matchId,
+                ..._phasePayload(),
             });
             showToast('Lobby reset', 'success');
         } catch (err) {

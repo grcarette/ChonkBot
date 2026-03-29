@@ -317,7 +317,7 @@ function getLockedSeedsPayload() {
 async function dqPlayer(discordId, name) {
     if (await showConfirm('Disqualify Player?',
         `${name} will be DQ'd. If they have an active match, their opponent wins.`, 'danger'))
-        await doAction('dq_player', { discord_id: discordId });
+        await doAction('dq_player', { discord_id: discordId, ...(typeof _phasePayload === 'function' ? _phasePayload() : {}) });
 }
 
 async function undqPlayer(discordId) {

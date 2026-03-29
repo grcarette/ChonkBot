@@ -29,6 +29,26 @@ class SwissFilterFormat(SwissFormat):
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
+    async def on_tournament_start(self) -> None:
+        """Mark phase 0 as active in the event doc, then run normal Swiss start."""
+        await self._ensure_phase_active()
+        await super().on_tournament_start()
+
+    async def on_match_calling_loop(self) -> None:
+        """On restart the tournament_start path is skipped, so repair phase state here."""
+        await self._ensure_phase_active()
+        await super().on_match_calling_loop()
+
+    async def _ensure_phase_active(self) -> None:
+        """Set phase 0 state to 'active' if it's still 'setup' (idempotent)."""
+        em = self.tm.bot.th.events.get(self.tm.tournament['_id'])
+        if not em:
+            return
+        phases = em.event.get('phases', [])
+        if phases and phases[0].get('state') == 'setup':
+            await em._update_phase_state(0, 'active')
+            em.event = await self.tm.bot.dh.get_tournament_by_id(self.tm.tournament['_id'])
+
     async def on_tournament_end(self) -> None:
         """
         Swiss phase complete: flush any pending Ranked results and mark the

@@ -164,14 +164,24 @@ class EventManager:
             if not channel:
                 return
             swiss_event = await self.bot.dh.get_swiss_event_by_tournament(
-                self.event['phases'][phase_index].get('tournament_id', self.event['_id'])
+                self.event['phases'][phase_index].get('tournament_id') or self.event['_id']
             )
             if not swiss_event:
                 return
             standings = await self.bot.dh.swiss_get_standings(swiss_event['_id'])
+            config = self.event.get('config', {})
+            if config.get('top_seed_floating'):
+                count = config.get('top_seed_floating_count', 0)
+                seeds = self.event.get('seeds', {})
+                if count > 0 and seeds:
+                    sorted_ids = sorted(seeds.keys(), key=lambda k: seeds[k])
+                    floated_ids = set(sorted_ids[:count])
+                    standings = [p for p in standings if str(p['discord_id']) not in floated_ids]
+            top_standings = standings[:20]
+            user_map = await self.bot.dh.get_users_bulk([str(p['discord_id']) for p in top_standings])
             lines = []
-            for i, p in enumerate(standings[:20], 1):
-                user = await self.bot.dh.get_user(user_id=int(p['discord_id']))
+            for i, p in enumerate(top_standings, 1):
+                user = user_map.get(str(p['discord_id']))
                 name = user['name'] if user else str(p['discord_id'])
                 wins = p.get('wins', 0)
                 losses = p.get('losses', 0)
@@ -195,7 +205,7 @@ class EventManager:
         """
         swiss_phase = self.event['phases'][0]
         swiss_event = await self.bot.dh.get_swiss_event_by_tournament(
-            swiss_phase.get('tournament_id', self.event['_id'])
+            swiss_phase.get('tournament_id') or self.event['_id']
         )
         if not swiss_event:
             raise ValueError('Swiss event not found')
@@ -455,13 +465,37 @@ class EventManager:
         challonge_url = ch_data['url']
         challonge_id = ch_data['id']
 
-        # Register players into the existing (empty) bracket
+        # Players already pre-registered (e.g. floated players from sync_floated_players)
+        existing_entrants: dict[str, int] = {
+            str(k): v for k, v in (phase.get('entrants') or {}).items()
+        }
+
+        # Name lookup: users collection first, Swiss username as fallback
+        player_user_map = await self.bot.dh.get_users_bulk(player_ids)
+        swiss_phase = self.event['phases'][0]
+        swiss_event = await self.bot.dh.get_swiss_event_by_tournament(
+            swiss_phase.get('tournament_id') or self.event['_id']
+        )
+        swiss_name_map: dict[str, str] = {}
+        if swiss_event:
+            swiss_name_map = {
+                pid: p.get('username', '')
+                for pid, p in swiss_event.get('players', {}).items()
+            }
+
         entrant_map: dict[str, int] = {}
         for discord_id in player_ids:
-            user = await self.bot.dh.get_user(user_id=int(discord_id))
-            name = user['name'] if user else f'Player {discord_id}'
+            did_str = str(discord_id)
+            # Reuse existing participant ID — don't double-register
+            if did_str in existing_entrants:
+                entrant_map[did_str] = existing_entrants[did_str]
+                continue
+            user = player_user_map.get(did_str)
+            name = (user['name'] if user
+                    else swiss_name_map.get(did_str)
+                    or f'Player {discord_id}')
             participant_id = await ch.register_player(challonge_url, name)
-            entrant_map[discord_id] = participant_id
+            entrant_map[did_str] = participant_id
 
         # Start the bracket
         await ch.start_tournament(challonge_id)
@@ -494,6 +528,8 @@ class EventManager:
 
     async def transition_to_brackets(self):
         """TO-triggered transition from Swiss phase to the three bracket phases."""
+        # Refresh to pick up floated entrants written by sync_floated_players
+        self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
         swiss_phase = self.event['phases'][0]
         if swiss_phase['state'] != 'finished':
             raise ValueError('Swiss phase is not finished yet')
@@ -627,7 +663,7 @@ class EventManager:
         phase = self.event['phases'][phase_index]
         if phase['type'] in ('swiss', 'swiss filter'):
             swiss_event = await self.bot.dh.get_swiss_event_by_tournament(
-                phase.get('tournament_id', self.event['_id'])
+                phase.get('tournament_id') or self.event['_id']
             )
             if swiss_event:
                 return await self.bot.dh.swiss_get_standings(swiss_event['_id'])
@@ -638,8 +674,9 @@ class EventManager:
         tm = await self._create_phase_tm(phase_index)
         self.phase_managers[phase_index] = tm
 
+        player_user_map = await self.bot.dh.get_users_bulk(player_ids)
         for discord_id in player_ids:
-            user = await self.bot.dh.get_user(user_id=int(discord_id))
+            user = player_user_map.get(str(discord_id))
             await tm.format.on_player_register(int(discord_id), user)
 
         await self._update_phase_state(phase_index, 'active')

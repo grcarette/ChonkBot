@@ -1,9 +1,9 @@
 """
 Swiss pairing algorithm for ChonkBot.
 
-Fold pairing: within each point group, the highest-seeded player faces the
-lowest-seeded player (1 vs N, 2 vs N-1, etc). This rewards strong players
-with easier matchups early, letting cream rise over multiple rounds.
+Fold pairing: within each point group, the best player faces the worst
+(seed 1 vs seed N, seed 2 vs seed N-1, etc). When seeds are not set,
+falls back to elo-based fold pairing.
 
 For small fields (≤ EXHAUSTIVE_THRESHOLD): uses minimum-weight perfect
 matching over all possible pairings — globally optimal but O((n-1)!!).
@@ -14,37 +14,53 @@ within each group, with rematch avoidance.
 Pairing cost (lower is better):
 1. Rematch penalty (highest priority — avoid at all costs)
 2. Points difference (pair within same point group)
-3. Negative elo difference (within a point group, MAXIMIZE elo gap = fold)
+3. Negative skill difference (within a point group, MAXIMIZE gap = fold)
+   Uses seed gap when seeds are set; elo gap otherwise.
 
 Each player dict must have:
     discord_id: int | str
     points: float
     elo: int
     match_history: list   # discord_ids of past opponents
+Optional:
+    seed: int   # tournament seed (1 = best); enables seed-based fold pairing
 """
 
 EXHAUSTIVE_THRESHOLD = 10
+
+
+def _skill_diff(p1: dict, p2: dict) -> float:
+    """
+    Return a skill gap value for fold pairing. Larger = further apart.
+
+    Uses seed when both players have one (seed 1 = best, higher = worse),
+    otherwise falls back to elo difference.
+    """
+    s1 = p1.get('seed')
+    s2 = p2.get('seed')
+    if s1 is not None and s2 is not None:
+        return abs(s1 - s2)
+    return abs(p1['elo'] - p2['elo'])
 
 
 def _pairing_cost(p1: dict, p2: dict) -> tuple:
     """
     Return a cost tuple for pairing two players. Lower is better.
 
-    Within the same point group (points_diff == 0), we NEGATE the elo
-    difference so the optimizer prefers the widest skill gap — this
-    produces fold pairings (best vs worst).
+    Within the same point group (points_diff == 0), we NEGATE the skill
+    difference so the optimizer prefers the widest gap — this produces
+    fold pairings (seed 1 vs seed N, seed 2 vs seed N-1, etc.).
 
-    Across point groups the elo component is irrelevant since the
+    Across point groups the skill component is irrelevant since the
     points_diff term already dominates.
     """
     is_rematch = p2['discord_id'] in p1['match_history']
     points_diff = abs(p1['points'] - p2['points'])
-    elo_diff = abs(p1['elo'] - p2['elo'])
 
     return (
         1000 if is_rematch else 0,
         points_diff,
-        -elo_diff,          # negative = prefer LARGE elo gaps (fold)
+        -_skill_diff(p1, p2),   # negative = prefer LARGE skill gaps (fold)
     )
 
 
@@ -87,13 +103,13 @@ def _greedy_pair(players: list[dict]) -> list[tuple[dict, dict]]:
     no rematch. This naturally produces fold pairings — the strongest
     player in a group gets paired with the weakest.
     """
-    remaining = list(players)  # already sorted by (-points, -elo)
+    remaining = list(players)  # already sorted by points desc, then seed/elo
     pairs = []
 
     while len(remaining) >= 2:
         p1 = remaining.pop(0)
 
-        # Score each candidate: (rematch_penalty, points_diff, -elo_diff)
+        # Score each candidate: (rematch_penalty, points_diff, -skill_diff)
         best_idx = 0
         best_cost = _pairing_cost(p1, remaining[0])
 
@@ -126,8 +142,13 @@ def pair_players(available: list[dict]) -> tuple[list[tuple[dict, dict]], list[d
     if len(available) < 2:
         return [], list(available)
 
-    # Sort by points desc, elo desc for deterministic ordering
-    players = sorted(available, key=lambda p: (-p['points'], -p['elo']))
+    # Sort: best points first, then by seed ascending (1 = best) when seeds
+    # are set, or elo descending (higher = better) as fallback.
+    use_seeds = any(p.get('seed') is not None for p in available)
+    if use_seeds:
+        players = sorted(available, key=lambda p: (-p['points'], p.get('seed', 9999)))
+    else:
+        players = sorted(available, key=lambda p: (-p['points'], -p['elo']))
 
     # Handle odd count — pull bye candidate out first
     unpaired = []
