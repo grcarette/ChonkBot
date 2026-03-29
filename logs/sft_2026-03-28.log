@@ -1,0 +1,15 @@
+[2026-03-28 21:16:46] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-28.log
+[2026-03-28 21:16:46] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-28.log
+[2026-03-28 21:17:34] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-28 21:17:35] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-28 21:17:37] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-28 21:17:38] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-28 21:17:39] [INFO ] [STATE] setup → registration
+[2026-03-28 21:18:50] [INFO ] [STATE] registration → checkin
+[2026-03-28 21:23:14] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-28.log
+[2026-03-28 21:23:14] [INFO ] [LOGGER] Log opened — logs\sft_2026-03-28.log
+[2026-03-28 21:23:49] [INFO ] [STATE] Tournament started — 4 players
+[2026-03-28 21:23:49] [INFO ] [STATE] checkin → active
+[2026-03-28 21:26:09] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-28 21:26:09] [INFO ] [SWISS] Match 423700001 created — 1 vs 2 (round 1)
+[2026-03-28 21:26:11] [INFO ] [SWISS] Match 423700002 created — 0 vs 3 (round 1)

@@ -119,6 +119,14 @@
                         <span class="toggle-info"><span class="toggle-name">Staggered Start</span><span class="toggle-desc">Top-seeded players start with +1 bonus point</span></span>
                         <span class="toggle-wrap"><input type="checkbox" id="opt-staggered" class="toggle-input"><span class="toggle-thumb"></span></span>
                     </label>
+                    <label class="toggle-row" id="opt-floating-row" hidden style="border-bottom:none">
+                        <span class="toggle-info"><span class="toggle-name">Top Seed Floating</span><span class="toggle-desc">Top-seeded players placed in Pro bracket regardless of Swiss record</span></span>
+                        <span class="toggle-wrap"><input type="checkbox" id="opt-floating" class="toggle-input"><span class="toggle-thumb"></span></span>
+                    </label>
+                    <div class="toggle-row" id="opt-floating-count-row" hidden style="border-bottom:none">
+                        <div class="toggle-info"><span class="toggle-name">Float Count</span><span class="toggle-desc">How many top seeds float to Pro bracket</span></div>
+                        <input class="field-input" type="number" id="opt-floating-count" min="0" max="999" value="0" style="width:70px;text-align:center">
+                    </div>
                     <label class="toggle-row" style="border-bottom:none">
                         <span class="toggle-info"><span class="toggle-name">2v2 Teams Mode</span><span class="toggle-desc">Players register and compete as 2-person teams</span></span>
                         <span class="toggle-wrap"><input type="checkbox" id="opt-teams" class="toggle-input"><span class="toggle-thumb"></span></span>

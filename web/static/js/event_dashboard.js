@@ -83,6 +83,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('cfg-staggered-threshold').value, 10
             ) || 16;
         }
+        const floatingRow = document.getElementById('cfg-floating-row');
+        if (floatingRow && floatingRow.style.display !== 'none') {
+            payload.top_seed_floating = document.getElementById('cfg-floating').checked;
+            payload.top_seed_floating_count = parseInt(
+                document.getElementById('cfg-floating-count').value, 10
+            ) || 0;
+        }
         await doAction('update_config', payload);
     };
     // Image uploads — wired once, not on every populateConfig call
@@ -312,7 +319,7 @@ function renderActionArea(t) {
                 <button class="btn ${registration_open ? 'btn-toggle-on' : 'btn-toggle-off'}" id="btn-toggle-reg">
                     ${registration_open ? 'Close Registration' : 'Open Registration'}
                 </button>
-                ${(!isSwiss || !t.config?.randomized_stagelist) ? `
+                ${(format !== 'swiss' || !t.config?.randomized_stagelist) ? `
                 <button class="btn btn-primary" id="btn-publish-stagelist">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -371,7 +378,7 @@ function renderActionArea(t) {
                     </svg>
                     Ping Check-in
                 </button>
-                ${(!isSwiss || !t.config?.randomized_stagelist) ? `
+                ${(format !== 'swiss' || !t.config?.randomized_stagelist) ? `
                 <button class="btn btn-primary" id="btn-publish-stagelist">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -479,7 +486,7 @@ function renderActionArea(t) {
                 <div class="action-panel-title">Controls</div>
                 <div class="action-row">
                     ${nextBtn}
-                    ${(!isSwiss || !t.config?.randomized_stagelist) ? `<button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
+                    ${(format !== 'swiss' || !t.config?.randomized_stagelist) ? `<button class="btn btn-primary btn-sm" id="btn-publish-stagelist">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="17 8 12 3 7 8"/>
@@ -598,6 +605,32 @@ function renderActionArea(t) {
             if (confirmed) await doAction('revert_tournament');
         };
 
+    // Swiss Filter: Swiss phase done, bracket phases waiting — show transition button
+    if (t.format === 'swiss filter' && t.phases) {
+        const swissPhase = t.phases.find(p => p.type === 'swiss');
+        const hasWaiting = t.phases.some(p => p.state === 'waiting');
+        if (swissPhase && swissPhase.state === 'finished' && hasWaiting) {
+            area.innerHTML += `
+                <div class="action-panel">
+                    <div class="action-panel-title">Phase Transition</div>
+                    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+                        Swiss rounds are complete. Review the standings, then start the bracket phase.
+                        Players will be sorted into Pro (3-0), Intermediate (2-1), and Beginner (0-1 wins) brackets.
+                    </p>
+                    <div class="action-row">
+                        <button class="btn btn-success" id="btn-start-brackets">
+                            Start Bracket Phase
+                        </button>
+                    </div>
+                </div>`;
+            document.getElementById('btn-start-brackets').onclick = async () => {
+                if (await showConfirm('Start Brackets?',
+                    'Players will be distributed into brackets based on their Swiss record. This cannot be undone.'))
+                    await doAction('transition_phase');
+            };
+        }
+    }
+
     } else if (state === 'finished') {
         area.innerHTML = `<div class="action-panel">
             <div class="action-panel-title">Wrap Up</div>
@@ -683,6 +716,26 @@ function populateConfig(t) {
         staggeredCheck.onchange = () => {
             if (staggeredThRow) staggeredThRow.style.display = staggeredCheck.checked ? '' : 'none';
         };
+    }
+
+    // Top Seed Floating — only show for Swiss Filter, only before brackets start
+    const isSwissFilter = (t.format === 'swiss filter');
+    const bracketsStarted = isSwissFilter && t.phases &&
+        t.phases.some(p => p.index > 0 && p.state !== 'waiting');
+    const floatingRow      = document.getElementById('cfg-floating-row');
+    const floatingCountRow = document.getElementById('cfg-floating-count-row');
+    const floatingCheck    = document.getElementById('cfg-floating');
+    const floatingCount    = document.getElementById('cfg-floating-count');
+
+    if (floatingRow)      floatingRow.style.display      = isSwissFilter ? '' : 'none';
+    if (floatingCountRow) floatingCountRow.style.display  = isSwissFilter ? '' : 'none';
+    if (floatingCheck) {
+        floatingCheck.checked  = t.config?.top_seed_floating ?? false;
+        floatingCheck.disabled = bracketsStarted;
+    }
+    if (floatingCount) {
+        floatingCount.value    = t.config?.top_seed_floating_count ?? 0;
+        floatingCount.disabled = bracketsStarted;
     }
 }
 

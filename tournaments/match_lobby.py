@@ -149,10 +149,12 @@ class MatchLobby:
                 member = discord.utils.get(self.guild.members, id=player)
                 if member:
                     overwrites[member] = discord.PermissionOverwrite(read_messages=True)
+        prefix = self.tournament.get('lobby_prefix', '')
+        base_name = f"{prefix}-{self.lobby_name}" if prefix else self.lobby_name
         if hold_match:
-            channel_name = f"{INDICATOR_EMOJIS['hourglass']} {self.lobby_name}"
+            channel_name = f"{INDICATOR_EMOJIS['hourglass']} {base_name}"
         else:
-            channel_name = self.lobby_name
+            channel_name = base_name
         self.channel = await self.guild.create_text_channel(name=channel_name, overwrites=overwrites, category=None)
         await self.dh.add_channel_to_lobby(self.match_id, self.channel)
 

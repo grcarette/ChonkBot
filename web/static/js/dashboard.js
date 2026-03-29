@@ -29,14 +29,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Format capabilities ───────────────────────────────────────────────────────
 
 const FORMAT_CONFIG = {
-    'swiss':               { hasRoundLimit: true,  rankedCompatible: true  },
-    'swiss filter':        { hasRoundLimit: true,  rankedCompatible: true  },
-    'double elimination':  { hasRoundLimit: false, rankedCompatible: true  },
-    'single elimination':  { hasRoundLimit: false, rankedCompatible: true  },
+    'swiss':               { hasRoundLimit: true,  lockRoundLimit: false, showFloating: false, rankedCompatible: true  },
+    'swiss filter':        { hasRoundLimit: true,  lockRoundLimit: true,  showFloating: true,  rankedCompatible: true  },
+    'double elimination':  { hasRoundLimit: false, lockRoundLimit: false, showFloating: false, rankedCompatible: true  },
+    'single elimination':  { hasRoundLimit: false, lockRoundLimit: false, showFloating: false, rankedCompatible: true  },
 };
 
 function formatConfig(fmt) {
-    return FORMAT_CONFIG[fmt] || { hasRoundLimit: false, rankedCompatible: false };
+    return FORMAT_CONFIG[fmt] || { hasRoundLimit: false, lockRoundLimit: false, showFloating: false, rankedCompatible: false };
 }
 
 // ── Tournament list ────────────────────────────────────────────────────────────
@@ -160,6 +160,8 @@ function initCreateModal() {
         document.getElementById('opt-display-entrants').checked = false;
         document.getElementById('opt-ranked').checked           = false;
         document.getElementById('opt-debug').checked            = false;
+        if (document.getElementById('opt-floating'))       document.getElementById('opt-floating').checked = false;
+        if (document.getElementById('opt-floating-count')) document.getElementById('opt-floating-count').value = 0;
         if (rankedRow) rankedRow.hidden = true;
         selectedFormat = null;
         formatBtns.forEach(b => b.classList.remove('selected'));
@@ -184,8 +186,16 @@ function initCreateModal() {
         } else {
             const cfg = formatConfig(selectedFormat);
             roundGroup.hidden      = !cfg.hasRoundLimit;
+            if (cfg.hasRoundLimit) {
+                fieldRounds.disabled = cfg.lockRoundLimit;
+                if (cfg.lockRoundLimit) fieldRounds.value = 3;
+            }
             const staggeredRow = document.getElementById('opt-staggered-row');
-            if (staggeredRow) staggeredRow.hidden = !cfg.hasRoundLimit;
+            if (staggeredRow) staggeredRow.hidden = !cfg.hasRoundLimit || cfg.lockRoundLimit;
+            const floatingRow = document.getElementById('opt-floating-row');
+            if (floatingRow) floatingRow.hidden = !cfg.showFloating;
+            const floatingCountRow = document.getElementById('opt-floating-count-row');
+            if (floatingCountRow) floatingCountRow.hidden = !cfg.showFloating;
             modalTitle.textContent = 'Configuration';
             btnLabel.textContent   = 'Create Tournament';
             btnSubmit.style.opacity = '';
@@ -235,7 +245,7 @@ function initCreateModal() {
         errBox.hidden      = true;
 
         try {
-            await api('POST', '/api/tournaments', {
+            const payload = {
                 name:                  fieldName.value.trim(),
                 date:                  fieldDate.value.trim(),
                 format:                selectedFormat,
@@ -248,7 +258,12 @@ function initCreateModal() {
                 teams_mode:            document.getElementById('opt-teams').checked,
                 staggered_start:       document.getElementById('opt-staggered')?.checked || false,
                 staggered_start_threshold: 16,
-            });
+            };
+            if (cfg.showFloating) {
+                payload.top_seed_floating       = document.getElementById('opt-floating')?.checked || false;
+                payload.top_seed_floating_count = parseInt(document.getElementById('opt-floating-count')?.value) || 0;
+            }
+            await api('POST', '/api/tournaments', payload);
             closeModal();
             await loadTournaments();
         } catch (err) {

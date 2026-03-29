@@ -48,38 +48,63 @@ class TournamentMethodsMixin:
             }.get(f, f.title())
 
         if fmt == 'swiss filter':
+            tournament_doc['round_limit'] = 3
+            config_data['top_seed_floating'] = tournament.get('top_seed_floating', False)
+            config_data['top_seed_floating_count'] = tournament.get('top_seed_floating_count', 0)
+
             tournament_doc['phases'] = [
                 {
                     'index': 0,
                     'type': 'swiss',
                     'label': 'Swiss Rounds',
-                    'round_limit': tournament.get('round_limit', 3),
+                    'round_limit': 3,
                     'state': 'setup',
+                    'tournament_id': None,
                     'config_overrides': {},
                 },
                 {
                     'index': 1,
                     'type': 'double elimination',
-                    'label': 'Top Bracket',
+                    'label': 'Pro Bracket',
                     'state': 'waiting',
+                    'tournament_id': None,
+                    'challonge_data': None,
                     'config_overrides': {},
-                    'player_source': {'phase_index': 0, 'placement': 'top', 'count': 8},
+                    'player_source': {
+                        'phase_index': 0,
+                        'method': 'wins',
+                        'wins_required': 3,
+                        'accepts_floated': True,
+                    },
                 },
                 {
                     'index': 2,
                     'type': 'double elimination',
-                    'label': 'Middle Bracket',
+                    'label': 'Intermediate Bracket',
                     'state': 'waiting',
+                    'tournament_id': None,
+                    'challonge_data': None,
                     'config_overrides': {},
-                    'player_source': {'phase_index': 0, 'placement': 'middle', 'count': 8},
+                    'player_source': {
+                        'phase_index': 0,
+                        'method': 'wins',
+                        'wins_required': 2,
+                        'accepts_floated': False,
+                    },
                 },
                 {
                     'index': 3,
                     'type': 'double elimination',
-                    'label': 'Lower Bracket',
+                    'label': 'Beginner Bracket',
                     'state': 'waiting',
+                    'tournament_id': None,
+                    'challonge_data': None,
                     'config_overrides': {},
-                    'player_source': {'phase_index': 0, 'placement': 'bottom', 'count': None},
+                    'player_source': {
+                        'phase_index': 0,
+                        'method': 'wins',
+                        'wins_remaining': True,
+                    },
                 },
             ]
         else:

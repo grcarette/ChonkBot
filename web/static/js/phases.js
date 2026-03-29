@@ -63,7 +63,26 @@ function renderPhaseContent(phaseData) {
         document.getElementById('topbar-sub').textContent   = `${phaseData.type} · ${phaseData.state}`;
     }
 
-    // Render swiss data for this phase if available
+    // Bracket phases: show bracket link + entrant count above the match list
+    if (phaseData.type === 'double elimination' || phaseData.type === 'single elimination') {
+        const wrap = document.getElementById('matches-section-wrap');
+        let headerHtml = '';
+        if (phaseData.challonge_url) {
+            const count = phaseData.entrant_count ?? 0;
+            headerHtml = `<div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600">${escapeHtml(phaseData.label)}</span>
+                <span style="font-size:12px;color:var(--text-muted)">${count} player${count !== 1 ? 's' : ''}</span>
+                <a href="${escapeHtml(phaseData.challonge_url)}" target="_blank" rel="noopener"
+                   class="btn btn-secondary btn-sm" style="text-decoration:none">
+                    View Bracket ↗
+                </a>
+            </div>`;
+        }
+        if (wrap) wrap.innerHTML = headerHtml;
+        return;
+    }
+
+    // Swiss phase: render matches and swiss data
     if (phaseData.swiss) {
         renderMatches(
             phaseData.lobbies  || [],

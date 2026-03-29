@@ -247,6 +247,13 @@ async def handle_create_tournament(request: web.Request) -> web.Response:
         'staggered_start_threshold': staggered_start_threshold,
     }
 
+    if fmt == 'swiss filter':
+        tournament_data['round_limit'] = 3
+        tournament_data['top_seed_floating'] = bool(body.get('top_seed_floating', False))
+        tournament_data['top_seed_floating_count'] = max(0, min(
+            int(body.get('top_seed_floating_count', 0)), 999
+        ))
+
     try:
         result = await bot.th.create_tournament_record(tournament_data)
         if not result:
@@ -552,7 +559,14 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'state': phase['state'],
             'round_limit': phase.get('round_limit'),
             'config_overrides': phase.get('config_overrides', {}),
+            'entrant_count': len(phase.get('entrants', {})),
         }
+
+        if phase.get('challonge_data'):
+            from utils.get_bracket_link import get_bracket_link
+            phase_summary['challonge_url'] = await get_bracket_link(
+                phase['challonge_data']['url']
+            )
 
         phase_tm = em.phase_managers.get(i) if em else None
         if phase_tm and phase['type'] in ('swiss', 'swiss filter'):
@@ -640,15 +654,22 @@ async def handle_get_phase(request: web.Request) -> web.Response:
     if phase['type'] in ('swiss', 'swiss filter') and tm and tm.format:
         swiss_data = await tm.format.get_dashboard_state()
 
-    return web.json_response({
-        'index':    phase_index,
-        'type':     phase['type'],
-        'label':    phase.get('label', phase['type'].title()),
-        'state':    phase['state'],
-        'lobbies':  lobbies,
-        'swiss':    swiss_data,
-        'pending':  [],
-    })
+    response = {
+        'index':         phase_index,
+        'type':          phase['type'],
+        'label':         phase.get('label', phase['type'].title()),
+        'state':         phase['state'],
+        'lobbies':       lobbies,
+        'swiss':         swiss_data,
+        'pending':       [],
+        'entrant_count': len(phase.get('entrants', {})),
+    }
+
+    if phase.get('challonge_data'):
+        from utils.get_bracket_link import get_bracket_link
+        response['challonge_url'] = await get_bracket_link(phase['challonge_data']['url'])
+
+    return web.json_response(response)
 
 
 @require_auth
@@ -846,6 +867,14 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     updates['config.staggered_start'] = bool(body['staggered_start'])
                 if 'staggered_start_threshold' in body:
                     updates['config.staggered_start_threshold'] = max(1, min(int(body['staggered_start_threshold']), 999))
+                if 'top_seed_floating' in body:
+                    updates['config.top_seed_floating'] = bool(body['top_seed_floating'])
+                if 'top_seed_floating_count' in body:
+                    try:
+                        val = int(body['top_seed_floating_count'])
+                    except (TypeError, ValueError):
+                        val = 0
+                    updates['config.top_seed_floating_count'] = max(0, min(val, 999))
                 if updates:
                     await bot.dh.edit_tournament_config(tournament['_id'], **updates)
                     if tm and 'config.display_entrants' in updates:
@@ -1022,7 +1051,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 em = bot.th.events.get(tournament['_id'])
                 if not em:
                     return web.json_response({'error': 'Event manager not loaded'}, status=400)
-                await em.transition_to_next_phase()
+                if tournament.get('format') == 'swiss filter':
+                    await em.transition_to_brackets()
+                else:
+                    await em.transition_to_next_phase()
         except ValueError as e:
             return web.json_response({'error': str(e)}, status=400)
         except Exception as e:
