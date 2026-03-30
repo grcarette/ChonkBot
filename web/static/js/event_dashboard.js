@@ -312,7 +312,7 @@ async function loadTournament({ force = false } = {}) {
         updatePhaseCache(data);
 
         // If a phase is selected, re-render its content with fresh data
-        if (_selectedPhase !== null && data.is_multi_phase) {
+        if (_selectedPhase !== null && data.phases && data.phases.length > 0) {
             const phase = _cachedPhases[_selectedPhase];
             if (phase) {
                 renderPhaseHeader(phase);

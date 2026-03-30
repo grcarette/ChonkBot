@@ -126,9 +126,11 @@ class EventManager:
         # Bracket label prefix for lobby channel naming (e.g. 'pro', 'int', 'beg')
         doc['lobby_prefix'] = phase.get('label', '').lower()[:3]
         doc['_phase_label'] = phase.get('label', '')
+        doc['_phase_index'] = phase_index
 
         # Carry over challonge_data and entrants so ChallongeFormat.on_initialize()
         # can rehydrate from the existing bracket instead of creating a new one.
+        # Entrants always live on the phase now — no top-level fallback needed.
         if phase.get('challonge_data'):
             doc['challonge_data'] = phase['challonge_data']
         if phase.get('entrants'):
@@ -301,7 +303,8 @@ class EventManager:
                 print('[FLOAT] Pro bracket shell not created yet — skipping')
                 return
 
-            swiss_entrants = self.event.get('entrants') or {}
+            swiss_phase_0  = self.event.get('phases', [{}])[0] if self.event.get('phases') else {}
+            swiss_entrants = swiss_phase_0.get('entrants') or {}
             pro_entrants   = pro_phase.get('entrants') or {}
             all_ids        = set(str(k) for k in swiss_entrants) | set(str(k) for k in pro_entrants)
             print(f'[FLOAT] swiss_entrants={list(swiss_entrants.keys())[:5]}... ({len(swiss_entrants)} total)')

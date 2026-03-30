@@ -28,7 +28,6 @@ def _make_single_phase_event(fmt='swiss'):
         'state': 'active',
         'active_phase': 0,
         'registration_open': False,
-        'entrants': {'100': 1, '200': 2},
         'checked_in': ['100'],
         'dqs': [],
         'pending_teams': [],
@@ -53,6 +52,7 @@ def _make_single_phase_event(fmt='swiss'):
                 'tournament_id': eid,
                 'config_overrides': {},
                 'round_limit': 3,
+                'entrants': {'100': 1, '200': 2},
                 **({'challonge_data': None} if fmt in ('single elimination', 'double elimination') else {}),
             }
         ],
@@ -71,7 +71,6 @@ def _make_swiss_filter_event():
         'state': 'active',
         'active_phase': 0,
         'registration_open': False,
-        'entrants': {str(i): i for i in range(1, 17)},
         'checked_in': [],
         'dqs': [],
         'pending_teams': [],
@@ -96,6 +95,7 @@ def _make_swiss_filter_event():
                 'tournament_id': eid,
                 'config_overrides': {},
                 'round_limit': 3,
+                'entrants': {str(i): i for i in range(1, 17)},
             },
             {
                 'index': 1,

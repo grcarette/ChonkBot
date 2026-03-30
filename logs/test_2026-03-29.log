@@ -1,0 +1,80 @@
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [WARNING] [DQ] DQ attempted for 100 but player is not registered
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [DQ] Player 100 un-DQ'd — must rejoin to play
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 21:45:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:35:42] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:35:42] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [WARNING] [DQ] DQ attempted for 100 but player is not registered
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [DQ] Player 100 un-DQ'd — must rejoin to play
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:43:41] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [WARNING] [DQ] DQ attempted for 100 but player is not registered
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [DQ] Player 100 un-DQ'd — must rejoin to play
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log
+[2026-03-29 22:44:10] [INFO ] [LOGGER] Log opened — logs\test_2026-03-29.log

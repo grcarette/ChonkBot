@@ -18,7 +18,7 @@ function renderPhaseNav(data) {
     const section = document.getElementById('phase-nav-section');
     const wrap    = document.getElementById('phase-nav-items');
 
-    if (!data.is_multi_phase) {
+    if (!data.phases || data.phases.length === 0) {
         section.hidden = true;
         return;
     }

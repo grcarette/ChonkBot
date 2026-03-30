@@ -193,8 +193,12 @@ class ChallongeFormat(BaseFormat):
         tournament = await self.tm.get_tournament()
         fmt = tournament['format']
 
-        player_1_id = await self.tm.bot.dh.get_user_by_challonge(tournament['_id'], match['player1_id'])
-        player_2_id = await self.tm.bot.dh.get_user_by_challonge(tournament['_id'], match['player2_id'])
+        # Use the in-memory merged entrants (phase-level for phase TMs) so that
+        # challonge_id → discord_id lookup works correctly without re-fetching the
+        # raw DB document (which only has top-level entrants, not phase-level ones).
+        entrants = tournament.get('entrants', {})
+        player_1_id = next((did for did, cid in entrants.items() if cid == match['player1_id']), None)
+        player_2_id = next((did for did, cid in entrants.items() if cid == match['player2_id']), None)
 
         if player_1_id is None or player_2_id is None:
             return None
@@ -346,9 +350,9 @@ class ChallongeFormat(BaseFormat):
                 self.hold_when_ready.discard(match_data['match_id'])
 
                 if str(player_1['user_id']) in tournament['dqs']:
-                    await match_lobby.end_reporting(winner_id=player_2['user_id'], is_dq=True)
+                    await match_lobby.end_reporting(winner_id=str(player_2['user_id']), is_dq=True)
                 elif str(player_2['user_id']) in tournament['dqs']:
-                    await match_lobby.end_reporting(winner_id=player_1['user_id'], is_dq=True)
+                    await match_lobby.end_reporting(winner_id=str(player_1['user_id']), is_dq=True)
                 else:
                     await match_lobby.initialize_match(should_hold)
 

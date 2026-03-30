@@ -90,16 +90,29 @@ def make_challonge_tm():
         'name': 'Test Tournament',
         'format': 'double elimination',
         'state': 'active',
-        'entrants': {'100': 10, '200': 20},   # discord_id: challonge_id
+        'active_phase': 0,
+        # entrants and challonge_data live on phase 0; get_tournament() overlays them
+        'entrants': {'100': 10, '200': 20},   # overlaid by get_tournament() from phase
+        'challonge_data': {'id': 'chid', 'url': 'test-url'},  # overlaid by get_tournament()
         'checked_in': ['100', '200'],
         'dqs': [],
         'stagelist': [],
         'organizers': [999],
         'config': {'approved_registration': False, 'ranked_reporting': False},
         'registration_open': False,
-        'challonge_data': {'id': 'chid', 'url': 'test-url'},
         'debug': False,
         'category_id': 99999,
+        'phases': [
+            {
+                'index': 0,
+                'type': 'double elimination',
+                'label': 'Double Elimination',
+                'state': 'active',
+                'config_overrides': {},
+                'challonge_data': {'id': 'chid', 'url': 'test-url'},
+                'entrants': {'100': 10, '200': 20},
+            }
+        ],
     }
 
     tm = object.__new__(TournamentManager)

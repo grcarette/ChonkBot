@@ -33,7 +33,6 @@ def _make_swiss_filter_event_with_standings():
         'state': 'active',
         'active_phase': 0,
         'registration_open': False,
-        'entrants': {str(i): i for i in range(1, 17)},
         'checked_in': [],
         'dqs': [],
         'pending_teams': [],
@@ -58,6 +57,7 @@ def _make_swiss_filter_event_with_standings():
                 'tournament_id': eid,
                 'config_overrides': {},
                 'round_limit': 3,
+                'entrants': {str(i): i for i in range(1, 17)},
             },
             {
                 'index': 1,

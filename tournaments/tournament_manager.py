@@ -1828,6 +1828,23 @@ class TournamentManager:
     async def get_tournament(self):
         tournament = await self.bot.dh.get_tournament_by_id(self.tournament['_id'])
         if tournament is not None:
+            # Always overlay the relevant phase's entrants and challonge_data so
+            # all downstream code can read tournament['entrants'] and
+            # tournament['challonge_data'] at the top level.
+            # Phase TMs carry _phase_index; standalone TMs use active_phase.
+            phase_idx = self.tournament.get('_phase_index')
+            if phase_idx is None:
+                phase_idx = tournament.get('active_phase', 0)
+            phases = tournament.get('phases', [])
+            if phase_idx < len(phases):
+                phase = phases[phase_idx]
+                tournament['entrants'] = phase.get('entrants', {})
+                if phase.get('challonge_data'):
+                    tournament['challonge_data'] = phase['challonge_data']
+                # Preserve phase tracking metadata for phase TMs
+                if '_phase_index' in self.tournament:
+                    tournament['_phase_index'] = phase_idx
+                    tournament['_phase_label'] = phase.get('label', '')
             self.tournament = tournament
         return self.tournament
 

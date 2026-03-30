@@ -39,9 +39,10 @@ class UserMethodsMixin:
         
     async def get_user_by_challonge(self, tournament_id, challonge_id):
         tournament = await self.get_tournament_by_id(tournament_id)
-        for discord_id, player_id in tournament['entrants'].items():
-            if player_id == challonge_id:
-                return discord_id
+        for phase in tournament.get('phases', []):
+            for discord_id, player_id in phase.get('entrants', {}).items():
+                if player_id == challonge_id:
+                    return discord_id
         return None
 
     async def get_users_bulk(self, user_ids: list[str | int]) -> dict[str, dict]:

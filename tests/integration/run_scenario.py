@@ -254,7 +254,6 @@ async def create_and_start_tournament(bot, guild, scenario: Scenario) -> object:
         'state':             'registration',
         'date':              'Test',
         'organizers':        [888888888],
-        'entrants':          {},
         'checked_in':        [],
         'dqs':               [],
         'stagelist':         ['s1', 's2', 's3', 's4', 's5'],
@@ -262,6 +261,7 @@ async def create_and_start_tournament(bot, guild, scenario: Scenario) -> object:
         'debug':             True,
         'round_limit':       scenario.round_limit,
         'pending_teams':     [],
+        'active_phase':      0,
         'category_id':       guild._next_category_id,
         'config': {
             'approved_registration': False,
@@ -270,6 +270,17 @@ async def create_and_start_tournament(bot, guild, scenario: Scenario) -> object:
             'ranked_reporting':      scenario.ranked,
             'teams_mode':            False,
         },
+        'phases': [
+            {
+                'index': 0,
+                'type': 'swiss',
+                'label': 'Swiss Rounds',
+                'state': 'setup',
+                'config_overrides': {},
+                'round_limit': scenario.round_limit,
+                'entrants': {},
+            }
+        ],
     }
     result  = await bot.dh.tournament_collection.insert_one(tournament_doc)
     tid     = result.inserted_id

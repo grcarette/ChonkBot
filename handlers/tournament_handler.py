@@ -34,8 +34,10 @@ class TournamentHandler():
     async def initialize_active_events(self):
         from data.migration_swiss_filter_schema import migrate_swiss_filter_schema
         from data.migration_challonge_to_phase import migrate_challonge_to_phase
+        from data.migration_entrants_to_phase import migrate_entrants_to_phase
         await migrate_swiss_filter_schema(self.bot.dh.tournament_collection)
         await migrate_challonge_to_phase(self.bot.dh.tournament_collection)
+        await migrate_entrants_to_phase(self.bot.dh.tournament_collection)
 
         active_events = await self.bot.dh.get_active_events()
         for event in active_events:
