@@ -108,9 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const staggeredRow = document.getElementById('cfg-staggered-row');
         if (staggeredRow && staggeredRow.style.display !== 'none') {
             payload.staggered_start = document.getElementById('cfg-staggered').checked;
-            payload.staggered_start_threshold = parseInt(
-                document.getElementById('cfg-staggered-threshold').value, 10
-            ) || 16;
         }
         const floatingRow = document.getElementById('cfg-floating-row');
         if (floatingRow && floatingRow.style.display !== 'none') {
@@ -572,7 +569,8 @@ function renderActionArea(t) {
         };
 
         } else if (state === 'active') {
-        const roundHtml = isSwiss && t.swiss ? `<div class="round-info">
+        const showSwissProgress = isSwiss && t.swiss && !(format === 'swiss filter' && t.active_phase > 0);
+        const roundHtml = showSwissProgress ? `<div class="round-info">
             <div class="action-panel-title">Swiss Progress</div>
             <div class="round-stat-row">
                 <div class="round-stat"><span class="round-stat-val">${t.swiss.current_round}</span><span class="round-stat-lbl">Current Round</span></div>
@@ -580,7 +578,7 @@ function renderActionArea(t) {
                 <div class="round-stat"><span class="round-stat-val">${t.swiss.active_matches}</span><span class="round-stat-lbl">Active Matches</span></div>
                 <div class="round-stat"><span class="round-stat-val">${t.swiss.players_remaining}</span><span class="round-stat-lbl">Players In</span></div>
             </div></div>` : '';
-        const finalRoundActive = isSwiss && t.swiss?.final_round_active;
+        const finalRoundActive = showSwissProgress && t.swiss?.final_round_active;
         const nextBtn = isSwiss && t.swiss && !finalRoundActive
             ? `<button class="btn btn-success" id="btn-next-round">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -687,8 +685,11 @@ function renderActionArea(t) {
             if (pt) {
                 const transBtn = document.getElementById('btn-phase-transition');
                 if (transBtn) transBtn.onclick = async () => {
-                    if (await showConfirm(pt.confirm_title, pt.confirm_message))
+                    if (await showConfirm(pt.confirm_title, pt.confirm_message)) {
+                        transBtn.disabled = true;
+                        transBtn.textContent = 'Transitioning...';
                         await doAction(pt.action);
+                    }
                 };
             } else {
                 const postBtn = document.getElementById('btn-post-results');
@@ -793,8 +794,12 @@ function renderActionArea(t) {
                 </div>
             </div>`;
             document.getElementById('btn-phase-transition').onclick = async () => {
-                if (await showConfirm(pt.confirm_title, pt.confirm_message))
+                if (await showConfirm(pt.confirm_title, pt.confirm_message)) {
+                    const btn = document.getElementById('btn-phase-transition');
+                    btn.disabled = true;
+                    btn.textContent = 'Transitioning...';
                     await doAction(pt.action);
+                }
             };
         } else {
             area.innerHTML = `<div class="action-panel">
@@ -868,15 +873,11 @@ function populateConfig(t) {
 
     // Staggered start — only show for Swiss formats
     const isSwissFmt = (t.format === 'swiss' || t.format === 'swiss filter');
-    const staggeredRow     = document.getElementById('cfg-staggered-row');
-    const staggeredThRow   = document.getElementById('cfg-staggered-threshold-row');
-    const staggeredCheck   = document.getElementById('cfg-staggered');
-    const staggeredThInput = document.getElementById('cfg-staggered-threshold');
+    const staggeredRow   = document.getElementById('cfg-staggered-row');
+    const staggeredCheck = document.getElementById('cfg-staggered');
 
-    if (staggeredRow) staggeredRow.style.display     = isSwissFmt ? '' : 'none';
-    if (staggeredThRow) staggeredThRow.style.display  = isSwissFmt && t.config?.staggered_start ? '' : 'none';
-    if (staggeredCheck) staggeredCheck.checked         = t.config?.staggered_start ?? false;
-    if (staggeredThInput) staggeredThInput.value       = t.config?.staggered_start_threshold ?? 16;
+    if (staggeredRow) staggeredRow.style.display = isSwissFmt ? '' : 'none';
+    if (staggeredCheck) staggeredCheck.checked    = t.config?.staggered_start ?? false;
 
     if (staggeredCheck) {
         staggeredCheck.onchange = () => {

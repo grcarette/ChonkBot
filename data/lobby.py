@@ -38,8 +38,9 @@ class LobbyMethodsMixin:
         return result
     
     async def get_dependent_matches(self, match_id):
+        mid = int(match_id) if str(match_id).isdigit() else match_id
         query = {
-            'prereq_matches': int(match_id)
+            'prereq_matches': {'$in': [mid, str(mid)]}
         }
         lobbies = await self.lobby_collection.find(query).to_list(length=None)
         return lobbies
@@ -65,7 +66,7 @@ class LobbyMethodsMixin:
         }
         update = {
             '$addToSet': {
-                'checked_in': player_id
+                'checked_in': str(player_id)
             }
         }
         result = await self.lobby_collection.update_one(query, update)
@@ -301,7 +302,7 @@ class LobbyMethodsMixin:
         query = {
             'tournament': ObjectId(tournament_id),
             'state': {'$nin': ['closed', 'finished']},
-            'players': {'$in': [str(user_id)]}
+            'players': {'$in': [str(user_id), int(user_id)]}
         }
         active_match = await self.lobby_collection.find_one(query)
         return active_match

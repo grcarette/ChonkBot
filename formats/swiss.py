@@ -141,10 +141,11 @@ class SwissFormat(BaseFormat):
         config = tournament.get('config', {})
 
         if config.get('staggered_start'):
-            threshold = config.get('staggered_start_threshold', 16)
             swiss_event = await self.dh.get_swiss_event_by_tournament(tournament['_id'])
             if swiss_event:
                 entrant_ids = list(tournament.get('entrants', {}).keys())
+                import math
+                threshold = math.ceil(len(entrant_ids) / 2)
                 top_players = [int(did) for did in entrant_ids[:threshold]]
 
                 existing = set(swiss_event.get('players', {}).keys())

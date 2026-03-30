@@ -257,7 +257,6 @@ function initCreateModal() {
                 round_limit:           cfg.hasRoundLimit ? parseInt(fieldRounds.value) || 8 : 8,
                 teams_mode:            document.getElementById('opt-teams').checked,
                 staggered_start:       document.getElementById('opt-staggered')?.checked || false,
-                staggered_start_threshold: 16,
             };
             if (cfg.showFloating) {
                 payload.top_seed_floating       = document.getElementById('opt-floating')?.checked || false;

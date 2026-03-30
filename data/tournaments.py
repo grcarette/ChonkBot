@@ -72,8 +72,8 @@ class TournamentMethodsMixin:
                     'config_overrides': {},
                     'player_source': {
                         'phase_index': 0,
-                        'method': 'wins',
-                        'wins_required': 3,
+                        'method': 'points',
+                        'points_required': 3,
                         'accepts_floated': True,
                     },
                 },
@@ -87,8 +87,8 @@ class TournamentMethodsMixin:
                     'config_overrides': {},
                     'player_source': {
                         'phase_index': 0,
-                        'method': 'wins',
-                        'wins_required': 2,
+                        'method': 'points',
+                        'points_required': 2,
                         'accepts_floated': False,
                     },
                 },
@@ -398,13 +398,13 @@ class TournamentMethodsMixin:
     async def add_registration_request(self, tournament_id, discord_id: int):
         await self.tournament_collection.update_one(
             {'_id': ObjectId(tournament_id)},
-            {'$addToSet': {'registration_requests': discord_id}}
+            {'$addToSet': {'registration_requests': str(discord_id)}}
         )
 
     async def remove_registration_request(self, tournament_id, discord_id: int):
         await self.tournament_collection.update_one(
             {'_id': ObjectId(tournament_id)},
-            {'$pull': {'registration_requests': discord_id}}
+            {'$pull': {'registration_requests': str(discord_id)}}
         )
 
     async def get_registration_requests(self, tournament_id):
@@ -463,7 +463,7 @@ class TournamentMethodsMixin:
             await self.lobby_collection.delete_many({'tournament': ObjectId(tournament_id)})
             await self.tournament_collection.update_one(
                 {'_id': ObjectId(tournament_id)},
-                {'$set': {'state': 'checkin', 'dqs': []}}
+                {'$set': {'state': 'checkin', 'dqs': [], 'phases.0.state': 'setup'}}
             )
 
         elif to_state == 'registration':

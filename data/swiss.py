@@ -163,6 +163,7 @@ class SwissMethodsMixin:
         """
         p1 = str(player_1)
         p2 = str(player_2)
+        assert p1 != p2, f"swiss_create_match: player cannot play themselves ({p1})"
         match = {
             'match_id': match_id,
             'player_1': p1,
@@ -193,6 +194,10 @@ class SwissMethodsMixin:
             raise ValueError(f"swiss_record_result called with loser_id=None for match {match_id}")
         
         event = await self.get_swiss_event(event_id)
+        match = next((m for m in event.get('matches', []) if m['match_id'] == match_id), None)
+        if match and match.get('state') == 'finished':
+            return  # Already recorded — skip duplicate
+
         winner = event['players'].get(str(winner_id))
         loser  = event['players'].get(str(loser_id))
         if not winner or not loser:
@@ -210,7 +215,7 @@ class SwissMethodsMixin:
             f'players.{loser_id}.rounds_played': 1,
         }
         if is_dq:
-            inc_ops[f'players.{loser_id}.points'] = 0
+            inc_ops[f'players.{loser_id}.points'] = -1
 
         await self.swiss_collection.update_one(
             {'_id': ObjectId(event_id)},

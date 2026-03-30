@@ -262,6 +262,9 @@ class MatchLobby:
             asyncio.create_task(self._auto_report())
 
     async def end_reporting(self, winner_id, is_dq=False):
+        lobby = await self.get_lobby()
+        if lobby.get('state') == 'finished':
+            return
         if self.resolved:
             return
         self.resolved = True

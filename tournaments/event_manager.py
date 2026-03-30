@@ -101,7 +101,7 @@ class EventManager:
         event = self.event
 
         doc = {
-            '_id': phase.get('tournament_id', event['_id']),
+            '_id': phase.get('tournament_id') or event['_id'],
             'name': event['name'],
             'date': event.get('date', ''),
             'organizers': event['organizers'],
@@ -125,6 +125,7 @@ class EventManager:
 
         # Bracket label prefix for lobby channel naming (e.g. 'pro', 'int', 'beg')
         doc['lobby_prefix'] = phase.get('label', '').lower()[:3]
+        doc['_phase_label'] = phase.get('label', '')
 
         # Carry over challonge_data and entrants so ChallongeFormat.on_initialize()
         # can rehydrate from the existing bracket instead of creating a new one.
@@ -203,12 +204,12 @@ class EventManager:
         except Exception as e:
             self.logger.info('PHASE', f'Failed to post Swiss standings: {e}')
 
-    # ── Swiss Filter: wins-based bracket distribution ─────────────────────────
+    # ── Swiss Filter: points-based bracket distribution ──────────────────────
 
     async def _distribute_players_to_brackets(self) -> dict[int, list[str]]:
         """
         Read Swiss standings and distribute players into 3 brackets
-        based on win count. Floated players go to Pro regardless of record.
+        based on point total. Floated players go to Pro regardless of record.
         """
         swiss_phase = self.event['phases'][0]
         swiss_event = await self.bot.dh.get_swiss_event_by_tournament(
@@ -247,10 +248,10 @@ class EventManager:
             if did in floated_ids:
                 pro_players.append(did)
                 continue
-            wins = player.get('wins', 0)
-            if wins >= 3:
+            points = player.get('points', 0)
+            if points >= 3:
                 pro_players.append(did)
-            elif wins == 2:
+            elif points >= 2:
                 intermediate_players.append(did)
             else:
                 beginner_players.append(did)
@@ -576,11 +577,14 @@ class EventManager:
 
     async def _post_bracket_links(self):
         """Post bracket links for all active bracket phases to event-info."""
-        tm = self.active_tm
-        if not tm:
-            return
-        channel = await tm.get_channel('event-info')
+        channel = None
+        for tm_candidate in [self.active_tm] + list(self.phase_managers.values()):
+            if tm_candidate:
+                channel = await tm_candidate.get_channel('event-info')
+                if channel:
+                    break
         if not channel:
+            self.logger.info('PHASE', 'Could not find event-info channel for bracket links')
             return
 
         from utils.get_bracket_link import get_bracket_link

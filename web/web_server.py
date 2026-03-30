@@ -651,7 +651,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         'stagelist_ready':       (
             tournament.get('stagelist_published', False)
             or (
-                fmt in ('swiss')
+                fmt in ('swiss', 'swiss filter')
                 and tournament.get('config', {}).get('randomized_stagelist', False)
                 and bool(tournament.get('stagelist'))
             )
@@ -756,6 +756,10 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 if phase_tm_lookup:
                     tm = phase_tm_lookup
 
+        # Normalize discord_id to string to survive JS 64-bit precision loss
+        if 'discord_id' in body and body['discord_id'] is not None:
+            body['discord_id'] = str(body['discord_id'])
+
         def need_tm():
             if not tm:
                 raise ValueError('Tournament manager not loaded — bot may need restart')
@@ -763,6 +767,15 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
         try:
             if action == 'progress':
                 need_tm()
+                if tournament.get('state') == 'registration':
+                    config = tournament.get('config', {})
+                    if not config.get('randomized_stagelist', False):
+                        stages = tournament.get('stagelist', [])
+                        if len(stages) < 5:
+                            return web.json_response(
+                                {'error': f'At least 5 stages are required to start check-in (currently {len(stages)}).'},
+                                status=400
+                            )
                 await tm.progress_tournament()
 
             elif action == 'open_registration':
@@ -794,11 +807,12 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'dq_player':
                 need_tm()
-                discord_id = body.get('discord_id')
-                if discord_id is None:
+                discord_id_raw = body.get('discord_id')
+                if discord_id_raw is None:
                     return web.json_response({'error': 'discord_id is required'}, status=400)
-                discord_id = int(discord_id)
-                result = await tm.disqualify_player(discord_id)
+                entrant_keys = list(tournament.get('entrants', {}).keys())
+                discord_id = next((k for k in entrant_keys if str(k) == str(discord_id_raw)), discord_id_raw)
+                result = await tm.disqualify_player(int(discord_id))
                 if result is False:
                     return web.json_response(
                         {'error': 'Player not registered or tournament is not active'},
@@ -807,19 +821,21 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'undq_player':
                 need_tm()
-                discord_id = body.get('discord_id')
-                if discord_id is None:
+                discord_id_raw = body.get('discord_id')
+                if discord_id_raw is None:
                     return web.json_response({'error': 'discord_id is required'}, status=400)
-                discord_id = int(discord_id)
-                await tm.undisqualify_player(discord_id)
+                entrant_keys = list(tournament.get('entrants', {}).keys())
+                discord_id = next((k for k in entrant_keys if str(k) == str(discord_id_raw)), discord_id_raw)
+                await tm.undisqualify_player(int(discord_id))
 
             elif action == 'unregister_player':
                 need_tm()
-                discord_id = body.get('discord_id')
-                if discord_id is None:
+                discord_id_raw = body.get('discord_id')
+                if discord_id_raw is None:
                     return web.json_response({'error': 'discord_id is required'}, status=400)
-                discord_id = int(discord_id)
-                await tm.unregister_player(discord_id)
+                entrant_keys = list(tournament.get('entrants', {}).keys())
+                discord_id = next((k for k in entrant_keys if str(k) == str(discord_id_raw)), discord_id_raw)
+                await tm.unregister_player(int(discord_id))
 
             elif action == 'force_advance':
                 need_tm()
@@ -1144,8 +1160,21 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     tm.format.invalidate_pending_cache()
 
             elif action == 'post_results':
-                need_tm()
-                await tm.post_final_results()
+                if tournament.get('format') == 'swiss filter':
+                    em = bot.th.events.get(tournament['_id'])
+                    if not em:
+                        return web.json_response({'error': 'Event manager not loaded'}, status=400)
+                    # Post in reverse order: Beginner (3) → Intermediate (2) → Pro (1)
+                    # so Pro shows first in the channel (most recent message at top)
+                    for phase_index in [3, 2, 1]:
+                        phase_tm = em.phase_managers.get(phase_index)
+                        if phase_tm and phase_tm.format:
+                            phase = em.event['phases'][phase_index]
+                            if phase.get('challonge_data') and phase.get('entrants'):
+                                await phase_tm.post_final_results()
+                else:
+                    need_tm()
+                    await tm.post_final_results()
 
             elif action == 'refresh_event_info':
                 need_tm()

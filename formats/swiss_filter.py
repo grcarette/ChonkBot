@@ -30,7 +30,10 @@ class SwissFilterFormat(SwissFormat):
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     async def on_tournament_start(self) -> None:
-        """Mark phase 0 as active in the event doc, then run normal Swiss start."""
+        """Sync floated players, mark phase 0 as active, then run normal Swiss start."""
+        em = self.tm.bot.th.events.get(self.tm.tournament['_id'])
+        if em:
+            await em.sync_floated_players()
         await self._ensure_phase_active()
         await super().on_tournament_start()
 

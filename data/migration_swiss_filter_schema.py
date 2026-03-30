@@ -29,8 +29,8 @@ _PHASE_DEFAULTS = [
         'config_overrides': {},
         'player_source': {
             'phase_index':    0,
-            'method':         'wins',
-            'wins_required':  3,
+            'method':         'points',
+            'points_required':  3,
             'accepts_floated': True,
         },
     },
@@ -44,8 +44,8 @@ _PHASE_DEFAULTS = [
         'config_overrides': {},
         'player_source': {
             'phase_index':    0,
-            'method':         'wins',
-            'wins_required':  2,
+            'method':         'points',
+            'points_required':  2,
             'accepts_floated': False,
         },
     },

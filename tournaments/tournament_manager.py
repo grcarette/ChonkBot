@@ -1165,8 +1165,10 @@ class TournamentManager:
         else:
             color = get_random_color()
 
+        phase_label = self.tournament.get('_phase_label', '')
+        embed_title = f"{self.tournament['name']} — {phase_label}" if phase_label else self.tournament['name']
         embed = discord.Embed(
-            title=f"{self.tournament['name']}",
+            title=embed_title,
             description=message_content,
             color=color
         )
@@ -1199,9 +1201,26 @@ class TournamentManager:
 
     async def _cleanup_lobbies(self):
         """Delete all in-memory lobbies and clear all lobby DB records for this tournament."""
-        for lobby in self.lobbies.values():
+        in_memory_ids = set(self.lobbies.keys())
+        for lobby in list(self.lobbies.values()):
             await lobby.delete_lobby()
         self.lobbies.clear()
+
+        # Delete Discord channels for any DB lobbies not loaded in memory
+        # (happens when the TM was rehydrated without loading existing lobbies,
+        #  e.g. EventManager phase TMs created via _create_phase_tm)
+        db_lobbies = await self.bot.dh.get_all_lobbies(self.tournament['_id'])
+        for lobby_doc in db_lobbies:
+            if lobby_doc['match_id'] not in in_memory_ids:
+                channel_id = lobby_doc.get('channel_id')
+                if channel_id:
+                    channel = self.bot.guild.get_channel(channel_id)
+                    if channel:
+                        try:
+                            await channel.delete()
+                        except discord.NotFound:
+                            pass
+
         await self.bot.dh.clear_lobbies(self.tournament['_id'])
 
     async def remove_tournament_from_discord(self):
@@ -1236,7 +1255,7 @@ class TournamentManager:
         lobby_data = await self.bot.dh.find_player_match(self.tournament['_id'], user_id)
         if lobby_data:
             lobby = self.lobbies[lobby_data['match_id']]
-            winner_id = (set(lobby_data['players']) - {str(user_id)}).pop()
+            winner_id = (set(str(p) for p in lobby_data['players']) - {str(user_id)}).pop()
 
             if lobby.channel:
                 await lobby.purge_bot_messages()
@@ -1269,7 +1288,7 @@ class TournamentManager:
         result = await self.bot.dh.undisqualify_player(self.tournament['_id'], user_id)
 
         # Mark as dropped in swiss so they must explicitly rejoin
-        if tournament.get('format') == 'swiss' and self.format:
+        if tournament.get('format') in ('swiss', 'swiss filter') and self.format:
             swiss_event = await self.bot.dh.get_swiss_event_by_tournament(self.tournament['_id'])
             if swiss_event and str(user_id) in swiss_event.get('players', {}):
                 await self.bot.dh.swiss_collection.update_one(
