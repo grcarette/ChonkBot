@@ -164,32 +164,46 @@ document.addEventListener('DOMContentLoaded', () => {
                     Name does not match.
                 </div>
             </div>`;
-        document.getElementById('modal-title').textContent  = 'Delete Tournament?';
-        document.getElementById('modal-desc').textContent   = 'This will permanently delete the tournament and all associated data.';
-        document.getElementById('modal-extra').innerHTML    = extraHtml;
-        document.getElementById('modal-icon').className     = 'modal-icon danger';
+        document.getElementById('modal-title').textContent = 'Delete Tournament?';
+        document.getElementById('modal-desc').textContent  = 'This will permanently delete the tournament and all associated data.';
+        document.getElementById('modal-extra').innerHTML   = extraHtml;
+        document.getElementById('modal-icon').className   = 'modal-icon danger';
+
         const confirmBtn = document.getElementById('modal-confirm');
         confirmBtn.className = 'modal-confirm danger';
+        confirmBtn.disabled  = true;
+
         document.getElementById('modal-backdrop').hidden = false;
-        document.getElementById('delete-confirm-input').focus();
+
+        const input = document.getElementById('delete-confirm-input');
+        input.focus();
+
+        input.addEventListener('input', () => {
+            const matches = input.value.trim() === name;
+            confirmBtn.disabled = !matches;
+            if (matches) document.getElementById('delete-confirm-error').style.display = 'none';
+        });
 
         const confirmed = await new Promise(resolve => {
+            _confirmResolve = (val) => { resolve(val); _confirmResolve = null; };
+
             confirmBtn.onclick = () => {
-                const typed = document.getElementById('delete-confirm-input').value.trim();
-                if (typed !== name) {
+                if (input.value.trim() !== name) {
                     document.getElementById('delete-confirm-error').style.display = '';
+                    confirmBtn.disabled = true;
                     return;
                 }
                 document.getElementById('modal-backdrop').hidden = true;
                 document.getElementById('modal-extra').innerHTML = '';
+                _confirmResolve = null;
                 resolve(true);
             };
-            document.getElementById('modal-cancel').onclick = () => {
-                closeModal();
-                resolve(false);
-            };
+            // Global cancel/backdrop listeners in utils.js call closeModal() which
+            // invokes _confirmResolve(false) — no need to override modal-cancel.onclick.
         });
-        if (confirmed) await doAction('delete_tournament');
+
+        confirmBtn.disabled = false;
+        if (confirmed) await doAction('delete_tournament', { confirm_name: name });
     };
 
     // Stagelist controls
@@ -750,31 +764,45 @@ function renderActionArea(t) {
                         Text does not match.
                     </div>
                 </div>`;
-            document.getElementById('modal-title').textContent  = 'Revert to Check-in?';
-            document.getElementById('modal-desc').textContent   = 'All active lobby channels will be deleted. This cannot be undone.';
-            document.getElementById('modal-extra').innerHTML    = extraHtml;
-            document.getElementById('modal-icon').className     = 'modal-icon danger';
+            document.getElementById('modal-title').textContent = 'Revert to Check-in?';
+            document.getElementById('modal-desc').textContent  = 'All active lobby channels will be deleted. This cannot be undone.';
+            document.getElementById('modal-extra').innerHTML   = extraHtml;
+            document.getElementById('modal-icon').className   = 'modal-icon danger';
+
             const confirmBtn = document.getElementById('modal-confirm');
             confirmBtn.className = 'modal-confirm danger';
+            confirmBtn.disabled  = true;
+
             document.getElementById('modal-backdrop').hidden = false;
-            document.getElementById('revert-confirm-input').focus();
+
+            const input = document.getElementById('revert-confirm-input');
+            input.focus();
+
+            input.addEventListener('input', () => {
+                const matches = input.value.trim().toLowerCase() === 'revert';
+                confirmBtn.disabled = !matches;
+                if (matches) document.getElementById('revert-confirm-error').style.display = 'none';
+            });
 
             const confirmed = await new Promise(resolve => {
+                _confirmResolve = (val) => { resolve(val); _confirmResolve = null; };
+
                 confirmBtn.onclick = () => {
-                    const typed = document.getElementById('revert-confirm-input').value.trim().toLowerCase();
-                    if (typed !== 'revert') {
+                    if (input.value.trim().toLowerCase() !== 'revert') {
                         document.getElementById('revert-confirm-error').style.display = '';
+                        confirmBtn.disabled = true;
                         return;
                     }
                     document.getElementById('modal-backdrop').hidden = true;
                     document.getElementById('modal-extra').innerHTML = '';
+                    _confirmResolve = null;
                     resolve(true);
                 };
-                document.getElementById('modal-cancel').onclick = () => {
-                    closeModal();
-                    resolve(false);
-                };
+                // Global cancel/backdrop listeners in utils.js call closeModal() which
+                // invokes _confirmResolve(false) — no need to override modal-cancel.onclick.
             });
+
+            confirmBtn.disabled = false;
             if (confirmed) await doAction('revert_tournament');
         };
 

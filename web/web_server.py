@@ -982,6 +982,13 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
             elif action == 'delete_tournament':
                 need_tm()
 
+                confirm_name = body.get('confirm_name', '').strip()
+                if confirm_name != tournament.get('name', ''):
+                    return web.json_response(
+                        {'error': 'Tournament name does not match. Deletion cancelled.'},
+                        status=400
+                    )
+
                 # Delete ALL Challonge brackets from this event, regardless of
                 # EventManager state. Reads directly from the DB document so
                 # this works even if the EM isn't loaded or is stale.
