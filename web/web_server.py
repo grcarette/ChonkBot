@@ -21,6 +21,21 @@ _tournament_action_locks: dict[str, asyncio.Lock] = {}
 
 TOKEN_EXPIRY_MINUTES = 30
 
+def _resolve_challonge_data(tournament: dict) -> dict | None:
+    """Return challonge_data, preferring phase-level over legacy top-level.
+
+    Iterates phases in order, returning the first bracket-type phase that has
+    challonge_data. Falls back to the legacy top-level field for tournaments
+    that haven't been migrated yet.
+    """
+    for phase in tournament.get('phases', []):
+        if phase.get('type') in ('single elimination', 'double elimination'):
+            ch = phase.get('challonge_data')
+            if ch:
+                return ch
+    return tournament.get('challonge_data')
+
+
 def _get_tournament_lock(tournament_id: str) -> asyncio.Lock:
     if tournament_id not in _tournament_action_locks:
         _tournament_action_locks[tournament_id] = asyncio.Lock()
@@ -315,7 +330,8 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     # ── Parallel fetches ──────────────────────────────────────────────────────
 
     async def _fetch_challonge_participants():
-        if not (is_bracket_fmt and 'challonge_data' in tournament):
+        ch_data = _resolve_challonge_data(tournament)
+        if not (is_bracket_fmt and ch_data):
             return []
         try:
             ch = bot.th.tournaments.get(tournament['_id'])
@@ -326,8 +342,8 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             )
             if ch_handler is None:
                 from tournaments.challonge_handler import ChallongeHandler
-                ch_handler = ChallongeHandler(tournament['challonge_data']['url'])
-            return await ch_handler.get_participants(tournament['challonge_data']['url'])
+                ch_handler = ChallongeHandler(ch_data['url'])
+            return await ch_handler.get_participants(ch_data['url'])
         except Exception:
             return []
 
@@ -389,7 +405,7 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
     seed_by_discord:         dict[str, int | None] = {}
     challonge_id_by_discord: dict[str, int | None] = {}
 
-    if is_bracket_fmt and 'challonge_data' in tournament:
+    if is_bracket_fmt and _resolve_challonge_data(tournament):
         challonge_to_discord = {
             int(cid): str(did)
             for did, cid in tournament.get('entrants', {}).items()
@@ -1200,10 +1216,9 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'unpublish_tournament':
                 need_tm()
-                if tournament.get('format') == 'swiss filter':
-                    em = bot.th.events.get(tournament['_id'])
-                    if em:
-                        await em.destroy_bracket_shells()
+                em = bot.th.events.get(tournament['_id'])
+                if em and tournament.get('format') in ('swiss filter', 'single elimination', 'double elimination'):
+                    await em.destroy_bracket_shells()
                 await tm.remove_tournament_from_discord()
                 await bot.dh.unpublish_tournament(tournament['_id'])
 
@@ -1320,7 +1335,8 @@ async def handle_set_seed(request: web.Request) -> web.Response:
     if fmt not in ('single elimination', 'double elimination', 'swiss filter', 'swiss'):
         return web.json_response({'error': 'Seeding not available for this format'}, status=400)
 
-    if 'challonge_data' in tournament:
+    _seeds_ch_data = _resolve_challonge_data(tournament)
+    if _seeds_ch_data:
         try:
             ch = bot.th.tournaments.get(tournament['_id'])
             ch_handler = (
@@ -1330,14 +1346,14 @@ async def handle_set_seed(request: web.Request) -> web.Response:
             )
             if ch_handler is None:
                 from tournaments.challonge_handler import ChallongeHandler
-                ch_handler = ChallongeHandler(tournament['challonge_data']['url'])
+                ch_handler = ChallongeHandler(_seeds_ch_data['url'])
             for entry in seeds:
                 try:
                     challonge_id = int(entry['challonge_id'])
                     seed         = int(entry['seed'])
                 except (KeyError, ValueError, TypeError):
                     continue
-                await ch_handler.update_seed(tournament['challonge_data']['url'], challonge_id, seed)
+                await ch_handler.update_seed(_seeds_ch_data['url'], challonge_id, seed)
         except Exception as e:
             return web.json_response({'error': str(e)}, status=502)
     else:
@@ -1492,13 +1508,14 @@ async def handle_get_bracket(request: web.Request) -> web.Response:
             status=400
         )
 
-    if 'challonge_data' not in tournament:
+    _bracket_ch_data = _resolve_challonge_data(tournament)
+    if not _bracket_ch_data:
         return web.json_response(
             {'error': 'No Challonge bracket linked to this tournament yet'},
             status=400
         )
 
-    challonge_url = tournament['challonge_data']['url']
+    challonge_url = _bracket_ch_data['url']
 
     is_teams = tournament.get('config', {}).get('teams_mode', False)
 

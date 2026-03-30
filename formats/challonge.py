@@ -37,7 +37,16 @@ class ChallongeFormat(BaseFormat):
         """
         Create the Challonge bracket if it doesn't exist yet,
         or rehydrate the ChallongeHandler with the stored URL if it does.
+
+        Check the in-memory tournament doc first: _create_bracket_phase sets
+        challonge_data on the phase_doc before calling on_initialize, but the
+        phase TM's _id may equal the parent event's _id, so get_tournament()
+        would re-fetch the parent event (format='swiss filter') and overwrite
+        the phase_doc — causing Challonge to reject 'swiss filter' as a type.
         """
+        if 'challonge_data' in self.tm.tournament:
+            self.ch = ChallongeHandler(self.tm.tournament['challonge_data']['url'])
+            return
         tournament = await self.tm.get_tournament()
         if 'challonge_data' in tournament:
             self.ch = ChallongeHandler(tournament['challonge_data']['url'])

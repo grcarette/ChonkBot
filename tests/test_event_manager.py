@@ -53,6 +53,7 @@ def _make_single_phase_event(fmt='swiss'):
                 'tournament_id': eid,
                 'config_overrides': {},
                 'round_limit': 3,
+                **({'challonge_data': None} if fmt in ('single elimination', 'double elimination') else {}),
             }
         ],
     }

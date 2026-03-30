@@ -117,6 +117,8 @@ class TournamentMethodsMixin:
             }
             if fmt in ('swiss',):
                 phase['round_limit'] = tournament.get('round_limit', 8)
+            if fmt in ('single elimination', 'double elimination'):
+                phase['challonge_data'] = None
             tournament_doc['phases'] = [phase]
 
         tournament_doc['active_phase'] = 0
@@ -225,7 +227,8 @@ class TournamentMethodsMixin:
         }
         update = {
             '$set': {
-                'challonge_data': challonge_data
+                'challonge_data': challonge_data,          # legacy — remove after migration
+                'phases.0.challonge_data': challonge_data,  # canonical location
             }
         }
         result = await self.tournament_collection.update_one(query, update)
