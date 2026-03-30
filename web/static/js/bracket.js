@@ -409,6 +409,8 @@ function closeDrawer() {
     document.getElementById('match-drawer').hidden    = true;
     document.getElementById('drawer-backdrop').hidden = true;
     document.body.style.overflow = '';
+    // Refresh after drawer closes so any deferred renders apply
+    if (typeof loadTournament === 'function') loadTournament({ force: true });
 }
 
 function _hasFinishedChild(matchId, allMatches) {

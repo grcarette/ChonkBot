@@ -64,8 +64,9 @@ async function selectPhase(index) {
     const phase = _cachedPhases[index];
     if (!phase) return;
 
-    // Default to matches tab on phase selection
-    _selectedPhaseTab = 'matches';
+    // Default to bracket tab for bracket phases, matches for swiss
+    const isBracketPhase = phase.type === 'double elimination' || phase.type === 'single elimination';
+    _selectedPhaseTab = isBracketPhase ? 'bracket' : 'matches';
 
     renderPhaseHeader(phase);
     renderPhaseTabs(phase);
@@ -106,13 +107,13 @@ function renderPhaseTabs(phase) {
     const isBracket = phase.type === 'double elimination' || phase.type === 'single elimination';
 
     const tabs = [];
-    tabs.push({ id: 'matches', label: 'Matches' });
     if (isBracket) tabs.push({ id: 'bracket', label: 'Bracket' });
+    tabs.push({ id: 'matches', label: 'Matches' });
     if (isSwiss)   tabs.push({ id: 'leaderboard', label: 'Leaderboard' });
 
     // Ensure selected tab is valid for this phase
     if (!tabs.find(t => t.id === _selectedPhaseTab)) {
-        _selectedPhaseTab = 'matches';
+        _selectedPhaseTab = tabs[0]?.id || 'matches';
     }
 
     tabBar.innerHTML = tabs.map(t =>
@@ -187,19 +188,68 @@ async function renderPhaseBracket(container, phase) {
     // Set active phase bracket index so drawer actions route to the right TM
     _activePhaseBracketIndex = phase.index;
 
-    // Build the container structure (header + bracket wrap)
+    // Build the container structure (header + toolbar + bracket wrap)
+    const autocall = phase.autocall_matches || false;
+    const autocallClass = autocall ? 'btn-toggle-on' : 'btn-toggle-off';
+
     container.innerHTML = `
         <div style="padding:18px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-                <span style="font-size:15px;font-weight:600">${escapeHtml(phase.label)}</span>
-                <span style="font-size:12px;color:var(--text-muted)">${phase.entrant_count || 0} players</span>
-                ${phase.challonge_url ? `<a href="${escapeHtml(phase.challonge_url)}" target="_blank" rel="noopener"
-                   class="btn btn-secondary btn-sm" style="text-decoration:none">
-                    View on Challonge ↗
-                </a>` : ''}
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:15px;font-weight:600">${escapeHtml(phase.label)}</span>
+                    <span style="font-size:12px;color:var(--text-muted)">${phase.entrant_count || 0} players</span>
+                    ${phase.challonge_url ?
+                        `<a href="${escapeHtml(phase.challonge_url)}" target="_blank" rel="noopener"
+                           class="btn btn-secondary btn-sm" style="text-decoration:none">
+                            View on Challonge ↗
+                        </a>` : ''}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <button class="btn ${autocallClass} btn-sm" id="phase-btn-autocall">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Auto Call: ${autocall ? 'On' : 'Off'}
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="phase-btn-call-all">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Call All
+                    </button>
+                </div>
             </div>
             <div id="phase-bracket-wrap" style="overflow-x:auto"></div>
         </div>`;
+
+    // Wire up toolbar buttons
+    document.getElementById('phase-btn-autocall')?.addEventListener('click', async () => {
+        try {
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+                action: 'set_autocall',
+                enabled: !autocall,
+                ..._phasePayload(),
+            });
+            showToast(autocall ? 'Auto-call disabled' : 'Auto-call enabled', 'success');
+            await loadTournament({ force: true });
+            const updatedPhase = _cachedPhases[_selectedPhase];
+            if (updatedPhase) await renderPhaseBracket(container, updatedPhase);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    document.getElementById('phase-btn-call-all')?.addEventListener('click', async () => {
+        try {
+            document.getElementById('phase-btn-call-all').disabled = true;
+            document.getElementById('phase-btn-call-all').textContent = 'Calling...';
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+                action: 'call_all_matches',
+                ..._phasePayload(),
+            });
+            showToast('All matches called', 'success');
+            await loadTournament({ force: true });
+            startBracketRapidPoll(20000, 1500);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
 
     const wrap = document.getElementById('phase-bracket-wrap');
     let _lastPhaseBracketJson = null;

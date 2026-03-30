@@ -627,6 +627,10 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
             'round_limit': phase.get('round_limit'),
             'config_overrides': phase.get('config_overrides', {}),
             'entrant_count': len(phase.get('entrants', {})),
+            'autocall_matches': (
+                getattr(phase_tm.format, 'autocall_matches', False)
+                if phase_tm and phase_tm.format else False
+            ),
         }
 
         if challonge_url is not None:

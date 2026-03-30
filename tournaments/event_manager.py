@@ -303,11 +303,12 @@ class EventManager:
                 print('[FLOAT] Pro bracket shell not created yet — skipping')
                 return
 
-            swiss_phase_0  = self.event.get('phases', [{}])[0] if self.event.get('phases') else {}
-            swiss_entrants = swiss_phase_0.get('entrants') or {}
+            # Top-level entrants = who's registered for the event
+            event_entrants = self.event.get('entrants', {})
+            # Pro phase entrants = who's already floated (has challonge mapping)
             pro_entrants   = pro_phase.get('entrants') or {}
-            all_ids        = set(str(k) for k in swiss_entrants) | set(str(k) for k in pro_entrants)
-            print(f'[FLOAT] swiss_entrants={list(swiss_entrants.keys())[:5]}... ({len(swiss_entrants)} total)')
+            all_ids        = set(str(k) for k in event_entrants) | set(str(k) for k in pro_entrants)
+            print(f'[FLOAT] event_entrants count={len(event_entrants)}')
             print(f'[FLOAT] pro_entrants={list(pro_entrants.keys())[:5]}... ({len(pro_entrants)} total)')
             print(f'[FLOAT] all_ids count={len(all_ids)}')
 

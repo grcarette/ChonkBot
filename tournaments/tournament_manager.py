@@ -562,14 +562,13 @@ class TournamentManager:
             return
 
         # ── Solo path ────────────────────────────────────────────────────────────
-        entrants = tournament.get('entrants', {})
-        if isinstance(entrants, dict):
-            if str(user_id) not in entrants:
-                pass
-        else:
-            entrants = {str(e['discord_id']): None for e in entrants}
+        # Use registration entrants (top-level) for the membership check;
+        # tournament['entrants'] is the phase overlay (challonge mapping).
+        reg_entrants = tournament.get('_registration_entrants') or tournament.get('entrants', {})
+        if not isinstance(reg_entrants, dict):
+            reg_entrants = {str(e['discord_id']): None for e in reg_entrants}
 
-        if str(user_id) not in entrants:
+        if str(user_id) not in reg_entrants:
             self.logger.warning('REGISTRATION', f'Unregister attempted for {user_id} but not in entrants')
             return
 
@@ -889,8 +888,9 @@ class TournamentManager:
                 await self.unregister_player(int(team_id.split('_')[0]))
         else:
             checked_in_set = set(str(x) for x in tournament['checked_in'])
+            reg_entrants = tournament.get('_registration_entrants') or tournament.get('entrants', {})
             removed_players = [
-                player for player in tournament['entrants'].keys()
+                player for player in reg_entrants.keys()
                 if str(player) not in checked_in_set
             ]
             for player_id in removed_players:
@@ -1433,7 +1433,8 @@ class TournamentManager:
         # ── Entrants ──────────────────────────────────────────────────────────
         entrant_list = []
         if tournament.get('config', {}).get('display_entrants'):
-            entrants = tournament.get('entrants', {})
+            # Use registration entrants (top-level); tournament['entrants'] is the phase overlay.
+            entrants = tournament.get('_registration_entrants') or tournament.get('entrants', {})
             if entrants:
                 # Resolve individual discord IDs — in teams mode keys are "p1_p2" strings
                 individual_ids = []
@@ -1838,6 +1839,9 @@ class TournamentManager:
             phases = tournament.get('phases', [])
             if phase_idx < len(phases):
                 phase = phases[phase_idx]
+                # Preserve top-level registration entrants before overwriting with
+                # phase entrants (challonge ID mapping used by gameplay code).
+                tournament['_registration_entrants'] = dict(tournament.get('entrants', {}))
                 tournament['entrants'] = phase.get('entrants', {})
                 if phase.get('challonge_data'):
                     tournament['challonge_data'] = phase['challonge_data']

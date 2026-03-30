@@ -33,6 +33,8 @@ function closeModal() {
     const extra = document.getElementById('modal-extra');
     if (extra) extra.innerHTML = '';
     if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+    // Refresh after modal closes so any deferred renders apply
+    if (typeof loadTournament === 'function') loadTournament({ force: true });
 }
 
 function showConfirm(title, desc, type = 'warning', extraHtml = '') {

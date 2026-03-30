@@ -1,0 +1,175 @@
+[2026-03-30 01:37:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 01:37:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 01:37:46] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-30 01:37:48] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-30 01:37:49] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-30 01:37:50] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-30 01:37:52] [INFO ] [REGISTRATION] Debug User 4 (4) registered
+[2026-03-30 01:37:53] [INFO ] [REGISTRATION] Debug User 5 (5) registered
+[2026-03-30 01:37:54] [INFO ] [REGISTRATION] Debug User 6 (6) registered
+[2026-03-30 01:37:56] [INFO ] [REGISTRATION] Debug User 7 (7) registered
+[2026-03-30 01:37:57] [INFO ] [REGISTRATION] Debug User 8 (8) registered
+[2026-03-30 01:37:58] [INFO ] [REGISTRATION] Debug User 9 (9) registered
+[2026-03-30 01:38:00] [INFO ] [REGISTRATION] Debug User 10 (10) registered
+[2026-03-30 01:38:01] [INFO ] [REGISTRATION] Debug User 11 (11) registered
+[2026-03-30 01:38:02] [INFO ] [REGISTRATION] Debug User 12 (12) registered
+[2026-03-30 01:38:04] [INFO ] [REGISTRATION] Debug User 13 (13) registered
+[2026-03-30 01:38:05] [INFO ] [REGISTRATION] Debug User 14 (14) registered
+[2026-03-30 01:38:06] [INFO ] [REGISTRATION] Debug User 15 (15) registered
+[2026-03-30 01:38:08] [INFO ] [REGISTRATION] Debug User 16 (16) registered
+[2026-03-30 01:38:09] [INFO ] [REGISTRATION] Debug User 17 (17) registered
+[2026-03-30 01:38:11] [INFO ] [REGISTRATION] Debug User 18 (18) registered
+[2026-03-30 01:38:12] [INFO ] [REGISTRATION] Debug User 19 (19) registered
+[2026-03-30 01:38:13] [INFO ] [REGISTRATION] Debug User 20 (20) registered
+[2026-03-30 01:38:15] [INFO ] [REGISTRATION] Debug User 21 (21) registered
+[2026-03-30 01:38:16] [INFO ] [REGISTRATION] Debug User 22 (22) registered
+[2026-03-30 01:38:17] [INFO ] [REGISTRATION] Debug User 23 (23) registered
+[2026-03-30 01:38:19] [INFO ] [REGISTRATION] Debug User 24 (24) registered
+[2026-03-30 01:38:20] [INFO ] [REGISTRATION] Debug User 25 (25) registered
+[2026-03-30 01:38:23] [INFO ] [REGISTRATION] Debug User 26 (26) registered
+[2026-03-30 01:38:24] [INFO ] [REGISTRATION] Debug User 27 (27) registered
+[2026-03-30 01:38:25] [INFO ] [REGISTRATION] Debug User 28 (28) registered
+[2026-03-30 01:38:27] [INFO ] [REGISTRATION] Debug User 29 (29) registered
+[2026-03-30 01:38:28] [INFO ] [REGISTRATION] Debug User 30 (30) registered
+[2026-03-30 01:38:30] [INFO ] [REGISTRATION] Debug User 31 (31) registered
+[2026-03-30 01:38:32] [INFO ] [STATE] setup → registration
+[2026-03-30 01:38:47] [INFO ] [PHASE] Pro Bracket: Challonge shell created — test_pro_bracket
+[2026-03-30 01:38:48] [INFO ] [PHASE] Intermediate Bracket: Challonge shell created — test_intermediate_bracket
+[2026-03-30 01:38:48] [INFO ] [PHASE] Beginner Bracket: Challonge shell created — test_beginner_bracket
+[2026-03-30 01:38:52] [INFO ] [STATE] registration → checkin
+[2026-03-30 01:38:58] [INFO ] [STATE] Tournament started — 0 players
+[2026-03-30 01:38:58] [INFO ] [STATE] checkin → active
+[2026-03-30 01:39:04] [INFO ] [SWISS] Round 1 started — 32 players, 16 matches
+[2026-03-30 01:39:04] [INFO ] [SWISS] Match 57300001 created — 1 vs 7 (round 1)
+[2026-03-30 01:39:05] [INFO ] [SWISS] Match 57300002 created — 9 vs 15 (round 1)
+[2026-03-30 01:39:06] [INFO ] [SWISS] Match 57300003 created — 17 vs 23 (round 1)
+[2026-03-30 01:39:07] [INFO ] [SWISS] Match 57300001 reported — winner: 1, loser: 7
+[2026-03-30 01:39:08] [INFO ] [SWISS] Match 57300004 created — 25 vs 31 (round 1)
+[2026-03-30 01:39:09] [INFO ] [SWISS] Match 57300002 reported — winner: 9, loser: 15
+[2026-03-30 01:39:09] [INFO ] [SWISS] Match 57300005 created — 0 vs 6 (round 1)
+[2026-03-30 01:39:10] [INFO ] [SWISS] Match 57300003 reported — winner: 23, loser: 17
+[2026-03-30 01:39:11] [INFO ] [SWISS] Match 57300006 created — 8 vs 14 (round 1)
+[2026-03-30 01:39:12] [INFO ] [SWISS] Match 57300004 reported — winner: 25, loser: 31
+[2026-03-30 01:39:12] [INFO ] [SWISS] Match 57300007 created — 16 vs 22 (round 1)
+[2026-03-30 01:39:13] [INFO ] [SWISS] Match 57300005 reported — winner: 6, loser: 0
+[2026-03-30 01:39:14] [INFO ] [SWISS] Match 57300008 created — 24 vs 30 (round 1)
+[2026-03-30 01:39:14] [INFO ] [SWISS] Match 57300006 reported — winner: 8, loser: 14
+[2026-03-30 01:39:15] [INFO ] [SWISS] Match 57300009 created — 2 vs 5 (round 1)
+[2026-03-30 01:39:16] [INFO ] [SWISS] Match 57300007 reported — winner: 16, loser: 22
+[2026-03-30 01:39:17] [INFO ] [SWISS] Match 57300010 created — 10 vs 13 (round 1)
+[2026-03-30 01:39:17] [INFO ] [SWISS] Match 57300008 reported — winner: 24, loser: 30
+[2026-03-30 01:39:18] [INFO ] [SWISS] Match 57300011 created — 18 vs 21 (round 1)
+[2026-03-30 01:39:19] [INFO ] [SWISS] Match 57300009 reported — winner: 5, loser: 2
+[2026-03-30 01:39:19] [INFO ] [SWISS] Match 57300012 created — 26 vs 29 (round 1)
+[2026-03-30 01:39:20] [INFO ] [SWISS] Match 57300010 reported — winner: 10, loser: 13
+[2026-03-30 01:39:21] [INFO ] [SWISS] Match 57300013 created — 3 vs 4 (round 1)
+[2026-03-30 01:39:21] [INFO ] [SWISS] Match 57300011 reported — winner: 18, loser: 21
+[2026-03-30 01:39:22] [INFO ] [SWISS] Match 57300014 created — 11 vs 12 (round 1)
+[2026-03-30 01:39:24] [INFO ] [SWISS] Match 57300012 reported — winner: 26, loser: 29
+[2026-03-30 01:39:24] [INFO ] [SWISS] Match 57300015 created — 19 vs 20 (round 1)
+[2026-03-30 01:39:25] [INFO ] [SWISS] Match 57300013 reported — winner: 4, loser: 3
+[2026-03-30 01:39:25] [INFO ] [SWISS] Match 57300016 created — 27 vs 28 (round 1)
+[2026-03-30 01:39:26] [INFO ] [SWISS] Match 57300014 reported — winner: 12, loser: 11
+[2026-03-30 01:39:27] [INFO ] [SWISS] Match 57300015 reported — winner: 19, loser: 20
+[2026-03-30 01:39:29] [INFO ] [SWISS] Match 57300016 reported — winner: 28, loser: 27
+[2026-03-30 01:39:29] [INFO ] [SWISS] Round 1 complete
+[2026-03-30 01:39:36] [INFO ] [SWISS] Round 2 started — 32 players, 16 matches
+[2026-03-30 01:39:36] [INFO ] [SWISS] Match 57300017 created — 1 vs 23 (round 2)
+[2026-03-30 01:39:38] [INFO ] [SWISS] Match 57300018 created — 9 vs 6 (round 2)
+[2026-03-30 01:39:39] [INFO ] [SWISS] Match 57300019 created — 25 vs 5 (round 2)
+[2026-03-30 01:39:40] [INFO ] [SWISS] Match 57300017 reported — winner: 1, loser: 23
+[2026-03-30 01:39:40] [INFO ] [SWISS] Match 57300020 created — 8 vs 4 (round 2)
+[2026-03-30 01:39:41] [INFO ] [SWISS] Match 57300018 reported — winner: 9, loser: 6
+[2026-03-30 01:39:42] [INFO ] [SWISS] Match 57300021 created — 16 vs 12 (round 2)
+[2026-03-30 01:39:43] [INFO ] [SWISS] Match 57300019 reported — winner: 5, loser: 25
+[2026-03-30 01:39:43] [INFO ] [SWISS] Match 57300022 created — 24 vs 28 (round 2)
+[2026-03-30 01:39:44] [INFO ] [SWISS] Match 57300020 reported — winner: 8, loser: 4
+[2026-03-30 01:39:44] [INFO ] [SWISS] Match 57300023 created — 10 vs 19 (round 2)
+[2026-03-30 01:39:45] [INFO ] [SWISS] Match 57300021 reported — winner: 12, loser: 16
+[2026-03-30 01:39:46] [INFO ] [SWISS] Match 57300024 created — 18 vs 26 (round 2)
+[2026-03-30 01:39:46] [INFO ] [SWISS] Match 57300022 reported — winner: 28, loser: 24
+[2026-03-30 01:39:47] [INFO ] [SWISS] Match 57300025 created — 17 vs 7 (round 2)
+[2026-03-30 01:39:48] [INFO ] [SWISS] Match 57300023 reported — winner: 10, loser: 19
+[2026-03-30 01:39:49] [INFO ] [SWISS] Match 57300026 created — 0 vs 15 (round 2)
+[2026-03-30 01:39:49] [INFO ] [SWISS] Match 57300024 reported — winner: 18, loser: 26
+[2026-03-30 01:39:50] [INFO ] [SWISS] Match 57300027 created — 2 vs 31 (round 2)
+[2026-03-30 01:39:51] [INFO ] [SWISS] Match 57300025 reported — winner: 7, loser: 17
+[2026-03-30 01:39:52] [INFO ] [SWISS] Match 57300028 created — 3 vs 14 (round 2)
+[2026-03-30 01:39:53] [INFO ] [SWISS] Match 57300026 reported — winner: 15, loser: 0
+[2026-03-30 01:39:54] [INFO ] [SWISS] Match 57300029 created — 11 vs 22 (round 2)
+[2026-03-30 01:39:54] [INFO ] [SWISS] Match 57300027 reported — winner: 31, loser: 2
+[2026-03-30 01:39:55] [INFO ] [SWISS] Match 57300030 created — 27 vs 30 (round 2)
+[2026-03-30 01:39:56] [INFO ] [SWISS] Match 57300028 reported — winner: 3, loser: 14
+[2026-03-30 01:39:56] [INFO ] [SWISS] Match 57300031 created — 20 vs 13 (round 2)
+[2026-03-30 01:39:57] [INFO ] [SWISS] Match 57300029 reported — winner: 11, loser: 22
+[2026-03-30 01:39:58] [INFO ] [SWISS] Match 57300032 created — 21 vs 29 (round 2)
+[2026-03-30 01:39:58] [INFO ] [SWISS] Match 57300030 reported — winner: 30, loser: 27
+[2026-03-30 01:40:00] [INFO ] [SWISS] Match 57300031 reported — winner: 13, loser: 20
+[2026-03-30 01:40:02] [INFO ] [SWISS] Match 57300032 reported — winner: 21, loser: 29
+[2026-03-30 01:40:02] [INFO ] [SWISS] Round 2 complete
+[2026-03-30 01:40:11] [INFO ] [SWISS] Round 3 started — 32 players, 16 matches
+[2026-03-30 01:40:11] [INFO ] [SWISS] Match 57300033 created — 1 vs 5 (round 3)
+[2026-03-30 01:40:12] [INFO ] [SWISS] Match 57300034 created — 9 vs 12 (round 3)
+[2026-03-30 01:40:14] [INFO ] [SWISS] Match 57300035 created — 8 vs 28 (round 3)
+[2026-03-30 01:40:15] [INFO ] [SWISS] Match 57300033 reported — winner: 1, loser: 5
+[2026-03-30 01:40:15] [INFO ] [SWISS] Match 57300036 created — 10 vs 18 (round 3)
+[2026-03-30 01:40:16] [INFO ] [SWISS] Match 57300034 reported — winner: 12, loser: 9
+[2026-03-30 01:40:16] [INFO ] [SWISS] Match 57300037 created — 25 vs 7 (round 3)
+[2026-03-30 01:40:17] [INFO ] [SWISS] Match 57300035 reported — winner: 28, loser: 8
+[2026-03-30 01:40:18] [INFO ] [SWISS] Match 57300038 created — 16 vs 15 (round 3)
+[2026-03-30 01:40:19] [INFO ] [SWISS] Match 57300036 reported — winner: 18, loser: 10
+[2026-03-30 01:40:19] [INFO ] [SWISS] Match 57300039 created — 24 vs 23 (round 3)
+[2026-03-30 01:40:20] [INFO ] [SWISS] Match 57300037 reported — winner: 25, loser: 7
+[2026-03-30 01:40:21] [INFO ] [SWISS] Match 57300040 created — 26 vs 31 (round 3)
+[2026-03-30 01:40:21] [INFO ] [SWISS] Match 57300038 reported — winner: 16, loser: 15
+[2026-03-30 01:40:22] [INFO ] [SWISS] Match 57300041 created — 3 vs 6 (round 3)
+[2026-03-30 01:40:23] [INFO ] [SWISS] Match 57300039 reported — winner: 23, loser: 24
+[2026-03-30 01:40:23] [INFO ] [SWISS] Match 57300042 created — 11 vs 30 (round 3)
+[2026-03-30 01:40:24] [INFO ] [SWISS] Match 57300040 reported — winner: 26, loser: 31
+[2026-03-30 01:40:25] [INFO ] [SWISS] Match 57300043 created — 19 vs 13 (round 3)
+[2026-03-30 01:40:26] [INFO ] [SWISS] Match 57300041 reported — winner: 3, loser: 6
+[2026-03-30 01:40:26] [INFO ] [SWISS] Match 57300044 created — 4 vs 21 (round 3)
+[2026-03-30 01:40:27] [INFO ] [SWISS] Match 57300042 reported — winner: 30, loser: 11
+[2026-03-30 01:40:27] [INFO ] [SWISS] Match 57300045 created — 17 vs 14 (round 3)
+[2026-03-30 01:40:28] [INFO ] [SWISS] Match 57300043 reported — winner: 19, loser: 13
+[2026-03-30 01:40:29] [INFO ] [SWISS] Match 57300046 created — 0 vs 22 (round 3)
+[2026-03-30 01:40:29] [INFO ] [SWISS] Match 57300044 reported — winner: 21, loser: 4
+[2026-03-30 01:40:30] [INFO ] [SWISS] Match 57300047 created — 2 vs 29 (round 3)
+[2026-03-30 01:40:31] [INFO ] [SWISS] Match 57300045 reported — winner: 17, loser: 14
+[2026-03-30 01:40:32] [INFO ] [SWISS] Match 57300048 created — 27 vs 20 (round 3)
+[2026-03-30 01:40:32] [INFO ] [SWISS] Match 57300046 reported — winner: 0, loser: 22
+[2026-03-30 01:40:34] [INFO ] [SWISS] Match 57300047 reported — winner: 29, loser: 2
+[2026-03-30 01:40:35] [INFO ] [SWISS] Match 57300048 reported — winner: 27, loser: 20
+[2026-03-30 01:40:35] [INFO ] [SWISS] Round 3 complete
+[2026-03-30 01:40:42] [INFO ] [PHASE] Phase 0 (Swiss Rounds) finished
+[2026-03-30 01:40:42] [INFO ] [PHASE] Swiss phase complete — waiting for TO to start brackets
+[2026-03-30 01:40:42] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-30 01:40:50] [INFO ] [PHASE] Distributing players: Pro=8, Intermediate=8, Beginner=16
+[2026-03-30 01:40:52] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 01:40:52] [INFO ] [PHASE] Pro Bracket: populated with 8 players, started
+[2026-03-30 01:40:53] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 01:40:53] [INFO ] [PHASE] Intermediate Bracket: populated with 8 players, started
+[2026-03-30 01:40:56] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 01:40:56] [INFO ] [PHASE] Beginner Bracket: populated with 16 players, started
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — active match ended, 200 wins by default
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 disqualified — no active match
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [WARNING] [DQ] DQ attempted for 100 but player is not registered
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [DQ] Player 100 un-DQ'd — must rejoin to play
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log
+[2026-03-30 02:18:33] [INFO ] [LOGGER] Log opened — logs\test_2026-03-30.log

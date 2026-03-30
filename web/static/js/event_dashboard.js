@@ -44,10 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SECTION_META = {
         overview:  { title: 'Overview',       sub: 'Tournament status and controls' },
-        matches:   { title: 'Matches',        sub: 'Active lobbies and match state' },
         config:    { title: 'Configuration',  sub: 'Tournament settings' },
         stagelist: { title: 'Stagelist',      sub: 'Manage tournament stages' },
-        bracket:   { title: 'Bracket',        sub: 'Match tree and lobby controls' },
     };
 
     document.querySelectorAll('.nav-item[data-section]').forEach(btn => {
@@ -61,20 +59,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('topbar-title').textContent = m.title || '';
             document.getElementById('topbar-sub').textContent   = m.sub   || '';
 
-            if (btn.dataset.section === 'bracket') {
-                if (bracketData) renderBracket(bracketData);
-                else loadBracket();
-                if (!bracketRefreshInterval)
-                    bracketRefreshInterval = setInterval(loadBracket, 5000);
-            } else {
-                if (bracketRefreshInterval) {
-                    clearInterval(bracketRefreshInterval);
-                    bracketRefreshInterval = null;
-                }
-                if (btn.dataset.section === 'stagelist') {
-                    loadStagelist();
-                    loadBrowser();
-                }
+            if (btn.dataset.section === 'stagelist') {
+                loadStagelist();
+                loadBrowser();
             }
         });
     });
@@ -186,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('modal-backdrop').hidden = false;
         document.getElementById('delete-confirm-input').focus();
 
-        await new Promise(resolve => {
+        const confirmed = await new Promise(resolve => {
             confirmBtn.onclick = () => {
                 const typed = document.getElementById('delete-confirm-input').value.trim();
                 if (typed !== name) {
@@ -202,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resolve(false);
             };
         });
-        await doAction('delete_tournament');
+        if (confirmed) await doAction('delete_tournament');
     };
 
     // Stagelist controls
@@ -279,6 +266,14 @@ async function doAction(action, extra = {}) {
     }
 }
 
+// ── Interaction guard ─────────────────────────────────────────────────────────
+
+function _isInteractionOpen() {
+    const modal  = document.getElementById('modal-backdrop');
+    const drawer = document.getElementById('match-drawer');
+    return (modal && !modal.hidden) || (drawer && !drawer.hidden);
+}
+
 // ── Main poll ─────────────────────────────────────────────────────────────────
 
 async function loadTournament({ force = false } = {}) {
@@ -304,32 +299,40 @@ async function loadTournament({ force = false } = {}) {
         ]);
 
         _timing.start('loadTournament_render');
+
+        // Always update lightweight/non-destructive elements
         renderBadge(data.state);
         renderLogo(data.logo_url);
         renderStats(data);
-        renderActionArea(data);
-        renderPhaseNav(data);
-        updatePhaseCache(data);
 
-        // If a phase is selected, re-render its content with fresh data
-        if (_selectedPhase !== null && data.phases && data.phases.length > 0) {
-            const phase = _cachedPhases[_selectedPhase];
-            if (phase) {
-                renderPhaseHeader(phase);
-                renderPhaseTabs(phase);
-                if (_selectedPhaseTab !== 'bracket') {
-                    renderPhaseTabContent(phase);
+        // Defer heavy re-renders if a modal or drawer is open
+        if (!_isInteractionOpen()) {
+            renderActionArea(data);
+            renderPhaseNav(data);
+            updatePhaseCache(data);
+
+            if (_selectedPhase !== null && data.phases && data.phases.length > 0) {
+                const phase = _cachedPhases[_selectedPhase];
+                if (phase) {
+                    renderPhaseHeader(phase);
+                    renderPhaseTabs(phase);
+                    if (_selectedPhaseTab !== 'bracket') {
+                        renderPhaseTabContent(phase);
+                    }
                 }
             }
+
+            populateConfig(data);
+            renderOverviewParticipants(
+                data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
+            renderRegistrationRequests(data.registration_requests || [], data.config);
+
+            const pending = pmResult.pending || [];
+            renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false, data.swiss ?? null, data.dqs || []);
+        } else {
+            // Still update the phase cache so data is fresh when modal closes
+            updatePhaseCache(data);
         }
-
-        populateConfig(data);
-        renderOverviewParticipants(
-            data.entrants || [], data.checked_in || [], data.dqs || [], data.state, data.format);
-        renderRegistrationRequests(data.registration_requests || [], data.config);
-
-        const pending = pmResult.pending || [];
-        renderMatches(data.lobbies || [], pending, data.autocall_matches ?? false, data.swiss ?? null, data.dqs || []);
 
         if (_forceRefreshSeeds || !_seedsRendered) {
             renderPlayers(
