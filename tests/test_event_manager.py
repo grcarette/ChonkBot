@@ -30,6 +30,7 @@ def _make_single_phase_event(fmt='swiss'):
         'registration_open': False,
         'checked_in': ['100'],
         'dqs': [],
+        'entrants': {'100': None, '200': None},
         'pending_teams': [],
         'config': {
             'approved_registration': False,
@@ -73,6 +74,7 @@ def _make_swiss_filter_event():
         'registration_open': False,
         'checked_in': [],
         'dqs': [],
+        'entrants': {str(i): None for i in range(1, 17)},
         'pending_teams': [],
         'config': {
             'approved_registration': False,

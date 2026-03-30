@@ -27,6 +27,7 @@ class TournamentMethodsMixin:
             'state': tournament.get('state', 'setup'),
             'config': config_data,
             'stagelist': [],
+            'entrants': {},
             'dqs': [],
             'checked_in': [],
             'pending_teams': [],
@@ -258,48 +259,37 @@ class TournamentMethodsMixin:
         return active_events
     
     async def get_registration_status(self, tournament_id, user_id):
-        tournament = await self.get_tournament_by_id(tournament_id)
-        if not tournament:
-            return False
-        active_phase = tournament.get('active_phase', 0)
-        phases = tournament.get('phases', [])
-        if active_phase < len(phases):
-            entrants = phases[active_phase].get('entrants', {})
-            return str(user_id) in entrants
-        return False
+        query = {
+            '_id': ObjectId(tournament_id),
+            f'entrants.{user_id}': {'$exists': True}
+        }
+        player_exists = await self.tournament_collection.find_one(query)
+        return player_exists
 
     async def register_player(self, tournament_id, user_id, player_id):
         player_exists = await self.get_registration_status(tournament_id, user_id)
         if player_exists:
             return False
 
-        tournament = await self.get_tournament_by_id(tournament_id)
-        active_phase = tournament.get('active_phase', 0)
-
         query = {'_id': ObjectId(tournament_id)}
-        update = {'$set': {f'phases.{active_phase}.entrants.{user_id}': player_id}}
+        update = {'$set': {f'entrants.{user_id}': player_id}}
         result = await self.tournament_collection.update_one(query, update)
         return result
 
     async def unregister_player(self, tournament_id, user_id):
+        query = {'_id': ObjectId(tournament_id)}
         tournament = await self.get_tournament_by_id(tournament_id)
-        active_phase = tournament.get('active_phase', 0)
-        phases = tournament.get('phases', [])
 
         update = {}
 
-        if active_phase < len(phases):
-            entrants = phases[active_phase].get('entrants', {})
-            if str(user_id) in entrants:
-                update.setdefault('$unset', {})[f'phases.{active_phase}.entrants.{user_id}'] = ''
+        if str(user_id) in tournament.get('entrants', {}):
+            update.setdefault('$unset', {})[f'entrants.{user_id}'] = ''
 
         if 'checked_in' in tournament and str(user_id) in tournament['checked_in']:
             update.setdefault('$pull', {})['checked_in'] = str(user_id)
 
         if update:
-            result = await self.tournament_collection.update_one(
-                {'_id': ObjectId(tournament_id)}, update
-            )
+            result = await self.tournament_collection.update_one(query, update)
             return result
         return None
         
@@ -325,20 +315,15 @@ class TournamentMethodsMixin:
         return tournament
         
     async def disqualify_player(self, tournament_id, user_id):
-        tournament = await self.tournament_collection.find_one({'_id': ObjectId(tournament_id)})
-        phases = tournament.get('phases', [])
-        # Check all phases so multi-phase events work correctly
-        in_any_phase = any(
-            str(user_id) in phase.get('entrants', {})
-            for phase in phases
-        )
-        if not in_any_phase:
+        query = {'_id': ObjectId(tournament_id)}
+        tournament = await self.tournament_collection.find_one(query)
+        if str(user_id) not in tournament['entrants']:
             return False
         if tournament['state'] != 'active':
             return False
 
         update = {'$addToSet': {'dqs': str(user_id)}}
-        await self.tournament_collection.update_one({'_id': ObjectId(tournament_id)}, update)
+        result = await self.tournament_collection.update_one(query, update)
         return True
 
     async def undisqualify_player(self, tournament_id, user_id):
@@ -507,26 +492,19 @@ class TournamentMethodsMixin:
 
     async def register_team(self, tournament_id, team_id: str, participant_id) -> None:
         """
-        Store team_id → participant_id in the active phase's entrants.
+        Store team_id → participant_id in top-level entrants.
         team_id is the deterministic string f"{player1_id}_{player2_id}".
-        Same shape as solo registration so all bracket code is unaffected.
         """
-        tournament = await self.get_tournament_by_id(tournament_id)
-        active_phase = tournament.get('active_phase', 0)
         query = {'_id': ObjectId(tournament_id)}
-        update = {'$set': {f'phases.{active_phase}.entrants.{team_id}': participant_id}}
+        update = {'$set': {f'entrants.{team_id}': participant_id}}
         await self.tournament_collection.update_one(query, update)
 
     async def unregister_team(self, tournament_id, team_id: str) -> None:
-        """Remove a team from the active phase's entrants."""
+        """Remove a team from top-level entrants."""
         tournament = await self.get_tournament_by_id(tournament_id)
-        active_phase = tournament.get('active_phase', 0)
-        phases = tournament.get('phases', [])
         update = {}
-        if active_phase < len(phases):
-            entrants = phases[active_phase].get('entrants', {})
-            if str(team_id) in entrants:
-                update.setdefault('$unset', {})[f'phases.{active_phase}.entrants.{team_id}'] = ''
+        if str(team_id) in tournament.get('entrants', {}):
+            update.setdefault('$unset', {})[f'entrants.{team_id}'] = ''
         if update:
             await self.tournament_collection.update_one(
                 {'_id': ObjectId(tournament_id)}, update

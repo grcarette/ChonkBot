@@ -256,6 +256,7 @@ async def create_and_start_tournament(bot, guild, scenario: Scenario) -> object:
         'organizers':        [888888888],
         'checked_in':        [],
         'dqs':               [],
+        'entrants':          {},
         'stagelist':         ['s1', 's2', 's3', 's4', 's5'],
         'registration_open': True,
         'debug':             True,

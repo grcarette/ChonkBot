@@ -35,6 +35,7 @@ def _make_swiss_filter_event_with_standings():
         'registration_open': False,
         'checked_in': [],
         'dqs': [],
+        'entrants': {str(i): None for i in range(1, 17)},
         'pending_teams': [],
         'config': {
             'approved_registration': False,
