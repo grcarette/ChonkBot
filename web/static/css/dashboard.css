@@ -539,4 +539,31 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-main
     color: var(--accent);
     border-bottom-color: var(--accent);
 }
+
+/* ── Standings table (Swiss leaderboard tab) ── */
+.standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.standings-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.standings-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.standings-table tr.dropped {
+    opacity: 0.4;
+}
+.standings-table tbody tr:last-child td {
+    border-bottom: none;
+}
 .phase-state-label.phase-waiting  { color: var(--text-muted); }

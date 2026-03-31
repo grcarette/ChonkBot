@@ -1,0 +1,16 @@
+[2026-03-31 15:46:03] [INFO ] [LOGGER] Log opened — logs\quicktest_2026-03-31.log
+[2026-03-31 15:46:03] [INFO ] [LOGGER] Log opened — logs\quicktest_2026-03-31.log
+[2026-03-31 15:46:29] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-31 15:46:30] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-31 15:46:32] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-31 15:46:33] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-31 15:46:34] [INFO ] [STATE] setup → registration
+[2026-03-31 15:47:03] [INFO ] [STATE] registration → checkin
+[2026-03-31 15:47:52] [INFO ] [STATE] Tournament started — 0 players
+[2026-03-31 15:47:52] [INFO ] [STATE] checkin → active
+[2026-03-31 15:47:56] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-31 15:47:56] [INFO ] [SWISS] Match 618300001 created — 1 vs 2 (round 1)
+[2026-03-31 15:47:57] [INFO ] [SWISS] Match 618300002 created — 0 vs 3 (round 1)
+[2026-03-31 15:48:01] [INFO ] [SWISS] Match 618300002 reported — winner: 3, loser: 0
+[2026-03-31 15:48:02] [INFO ] [SWISS] Match 618300001 reported — winner: 1, loser: 2
+[2026-03-31 15:48:02] [INFO ] [SWISS] Round 1 complete

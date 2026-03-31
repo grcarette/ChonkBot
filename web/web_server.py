@@ -611,12 +611,13 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
         from utils.get_bracket_link import get_bracket_link
         phase_tm = em.phase_managers.get(i) if em else None
         phase_tid = phase.get('tournament_id')
+        is_swiss_phase = phase['type'] in ('swiss', 'swiss filter')
 
         challonge_url, phase_lobbies, phase_swiss = await asyncio.gather(
             get_bracket_link(phase['challonge_data']['url']) if phase.get('challonge_data') else _noop(),
             bot.dh.get_active_lobbies(phase_tid) if (phase_tid and phase_tid != tournament['_id']) else _noop(),
             bot.dh.get_swiss_event_by_tournament(phase.get('tournament_id', tournament['_id']))
-                if (phase_tm and phase['type'] in ('swiss', 'swiss filter')) else _noop(),
+                if is_swiss_phase else _noop(),
         )
 
         phase_summary = {
@@ -638,6 +639,73 @@ async def handle_get_tournament(request: web.Request) -> web.Response:
 
         if phase_swiss and phase_tm and phase_tm.format:
             phase_summary['swiss'] = await phase_tm.format.get_dashboard_state()
+        elif phase_swiss:
+            # Fallback: TM not loaded or format not initialised
+            players = phase_swiss.get('players', {})
+            active_matches = sum(
+                1 for p in players.values()
+                if p.get('active_match_id') is not None and not p.get('dropped')
+            ) // 2
+            players_remaining = sum(1 for p in players.values() if not p.get('dropped'))
+            current_round = phase_swiss.get('current_round', 0)
+            round_limit = phase_swiss.get('round_limit', tournament.get('round_limit', 8))
+            phase_summary['swiss'] = {
+                'current_round':      current_round,
+                'round_limit':        round_limit,
+                'active_matches':     active_matches,
+                'players_remaining':  players_remaining,
+                'round_ready':        False,
+                'final_round_active': current_round >= round_limit,
+            }
+
+        # Add standings to swiss data
+        if phase_swiss and 'swiss' in phase_summary:
+            raw_standings = await bot.dh.swiss_get_standings(phase_swiss['_id'])
+            missing_ids = [s['discord_id'] for s in raw_standings if s['discord_id'] not in user_map]
+            extra_map = await bot.dh.get_users_bulk(missing_ids) if missing_ids else {}
+            standings_out = []
+            for rank, s in enumerate(raw_standings, 1):
+                uid = s['discord_id']
+                u = user_map.get(uid) or extra_map.get(uid)
+                standings_out.append({
+                    'rank':          rank,
+                    'discord_id':    uid,
+                    'username':      u['name'] if u else uid,
+                    'points':        s['points'],
+                    'wins':          s['wins'],
+                    'losses':        s['losses'],
+                    'rounds_played': s.get('rounds_played', 0),
+                    'dropped':       s.get('dropped', False),
+                    'buchholz':      s['buchholz'],
+                })
+            phase_summary['swiss']['standings'] = standings_out
+
+        # Add phase-scoped lobbies and pending matches for Swiss phases
+        if phase_swiss:
+            swiss_match_ids = {str(m['match_id']) for m in phase_swiss.get('matches', [])}
+            phase_summary['lobbies'] = [l for l in lobbies if str(l['match_id']) in swiss_match_ids]
+            # Pending = swiss matches that have no active (non-closed) lobby yet
+            active_lobby_ids = {
+                str(l['match_id']) for l in phase_summary['lobbies']
+                if l['state'] != 'closed'
+            }
+            pending_out = []
+            for m in phase_swiss.get('matches', []):
+                if (str(m['match_id']) not in active_lobby_ids
+                        and m.get('winner') is None
+                        and m.get('state') == 'active'):
+                    p1_id = str(m['player_1'])
+                    p2_id = str(m['player_2'])
+                    p1_user = user_map.get(p1_id)
+                    p2_user = user_map.get(p2_id)
+                    pending_out.append({
+                        'match_id': m['match_id'],
+                        'round':    m.get('round_number', 0),
+                        'bracket':  None,
+                        'p1_name':  p1_user['name'] if p1_user else p1_id,
+                        'p2_name':  p2_user['name'] if p2_user else p2_id,
+                    })
+            phase_summary['pending_matches'] = pending_out
 
         if phase_lobbies is not None:
             phase_summary['lobby_count'] = len(phase_lobbies)

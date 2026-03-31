@@ -6,10 +6,12 @@
 let _selectedPhase = null;   // null = overview, or phase index
 let _selectedPhaseTab = null; // 'matches' | 'bracket' | 'leaderboard'
 let _cachedPhases = [];       // populated by loadTournament
+let _cachedDqs = [];          // tournament-level DQ list, cached for phase match rendering
 let _phaseBracketPollTimer = null; // interval for polling phase bracket
 
 function updatePhaseCache(data) {
     _cachedPhases = data.phases || [];
+    _cachedDqs = data.dqs || [];
 }
 
 // ── Sidebar nav ──────────────────────────────────────────────────────────────
@@ -156,17 +158,21 @@ async function renderPhaseTabContent(phase) {
 }
 
 function renderPhaseMatches(container, phase) {
-    // For single-phase events, the main loadTournament already renders matches.
-    // For multi-phase, we need phase-scoped match rendering.
-    // Reuse the existing renderMatches function with phase-scoped data.
-    container.innerHTML = '<div id="phase-matches-wrap"></div>';
-    // TODO: fetch phase-scoped matches from the cached data or a targeted endpoint.
-    // For now, if this is the active phase, show the existing match data.
     container.innerHTML = `
-        <div style="padding:20px;color:var(--text-muted);font-size:13px">
-            Matches for ${escapeHtml(phase.label)}
-            ${phase.lobby_count ? ` · ${phase.lobby_count} active` : ' · No active lobbies'}
-        </div>`;
+        <div class="section-header" style="padding:18px 18px 0">
+            <div class="section-title" style="font-size:15px;font-weight:600">
+                Matches <span id="matches-count" class="section-count" style="font-size:12px;color:var(--text-muted);font-weight:400;margin-left:6px"></span>
+            </div>
+        </div>
+        <div id="matches-section-wrap"></div>
+    `;
+
+    const lobbies = phase.lobbies || [];
+    const pending = phase.pending_matches || [];
+    const autocall = phase.autocall_matches || false;
+    const swiss = phase.swiss || null;
+
+    renderMatches(lobbies, pending, autocall, swiss, _cachedDqs);
 }
 
 async function renderPhaseBracket(container, phase) {
@@ -295,16 +301,64 @@ function renderPhaseLeaderboard(container, phase) {
             </div>`;
         return;
     }
+
     const s = phase.swiss;
-    container.innerHTML = `
-        <div style="padding:18px">
-            <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-                <div class="info-card" style="min-width:100px"><div class="info-label">Round</div><div class="info-value">${s.current_round} / ${s.round_limit}</div></div>
-                <div class="info-card" style="min-width:100px"><div class="info-label">Active</div><div class="info-value">${s.active_matches}</div></div>
-                <div class="info-card" style="min-width:100px"><div class="info-label">Players</div><div class="info-value">${s.players_remaining}</div></div>
+    const standings = s.standings || [];
+    const dqSet = new Set((_cachedDqs || []).map(String));
+
+    // Info cards
+    let html = `<div style="padding:18px">
+        <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+            <div class="info-card" style="min-width:100px">
+                <div class="info-label">Round</div>
+                <div class="info-value">${s.current_round} / ${s.round_limit}</div>
             </div>
-            <div style="color:var(--text-muted);font-size:13px">
-                Full leaderboard coming soon — standings data will be rendered here.
+            <div class="info-card" style="min-width:100px">
+                <div class="info-label">Active</div>
+                <div class="info-value">${s.active_matches}</div>
+            </div>
+            <div class="info-card" style="min-width:100px">
+                <div class="info-label">Players</div>
+                <div class="info-value">${s.players_remaining}</div>
             </div>
         </div>`;
+
+    if (standings.length === 0) {
+        html += `<div style="color:var(--text-muted);font-size:13px">No players registered yet.</div>`;
+    } else {
+        html += `<table class="standings-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    <th>Record</th>
+                    <th>Points</th>
+                    <th>Buchholz</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        for (const row of standings) {
+            const isDq = dqSet.has(String(row.discord_id));
+            const isDropped = row.dropped || isDq;
+            const rowClass = isDropped ? ' class="dropped"' : '';
+            const tag = isDq
+                ? ' <span class="tag tag-stuck" style="font-size:10px;padding:1px 5px">DQ</span>'
+                : isDropped
+                    ? ' <span class="tag" style="font-size:10px;padding:1px 5px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--border)">Dropped</span>'
+                    : '';
+            html += `<tr${rowClass}>
+                <td style="color:var(--text-muted)">${row.rank}</td>
+                <td>${escapeHtml(row.username)}${tag}</td>
+                <td>${row.wins}-${row.losses}</td>
+                <td>${row.points.toFixed(1)}</td>
+                <td style="color:var(--text-muted)">${row.buchholz.toFixed(1)}</td>
+            </tr>`;
+        }
+
+        html += `</tbody></table>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
 }
