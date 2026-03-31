@@ -207,7 +207,7 @@ async function renderPhaseBracket(container, phase) {
                 <div style="display:flex;align-items:center;gap:8px">
                     <button class="btn ${autocallClass} btn-sm" id="phase-btn-autocall">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Auto Call: ${autocall ? 'On' : 'Off'}
+                        ${autocall ? 'Disable' : 'Enable'} Auto Call
                     </button>
                     <button class="btn btn-primary btn-sm" id="phase-btn-call-all">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -220,18 +220,26 @@ async function renderPhaseBracket(container, phase) {
 
     // Wire up toolbar buttons
     document.getElementById('phase-btn-autocall')?.addEventListener('click', async () => {
+        const btn = document.getElementById('phase-btn-autocall');
+        const newState = !autocall;
+        btn.disabled = true;
+        btn.textContent = newState ? 'Enabling...' : 'Disabling...';
+        btn.className = `btn ${newState ? 'btn-toggle-on' : 'btn-toggle-off'} btn-sm`;
         try {
             await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
                 action: 'set_autocall',
-                enabled: !autocall,
+                enabled: newState,
                 ..._phasePayload(),
             });
-            showToast(autocall ? 'Auto-call disabled' : 'Auto-call enabled', 'success');
+            showToast(newState ? 'Auto-call enabled' : 'Auto-call disabled', 'success');
             await loadTournament({ force: true });
             const updatedPhase = _cachedPhases[_selectedPhase];
             if (updatedPhase) await renderPhaseBracket(container, updatedPhase);
         } catch (err) {
             showToast(err.message, 'error');
+            await loadTournament({ force: true });
+            const updatedPhase = _cachedPhases[_selectedPhase];
+            if (updatedPhase) await renderPhaseBracket(container, updatedPhase);
         }
     });
 

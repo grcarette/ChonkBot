@@ -31,7 +31,7 @@ function renderMatches(lobbies, pending, autocall, swiss, dqs) {
     let html = `<div class="matches-toolbar">
         <button class="btn ${autocallClass}" id="btn-autocall">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Auto Call: ${autocall ? 'On' : 'Off'}
+            ${autocall ? 'Disable' : 'Enable'} Auto Match Calling
         </button>
         <button class="btn btn-primary" id="btn-call-all" ${!hasPending ? 'disabled' : ''}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -185,7 +185,22 @@ function renderMatches(lobbies, pending, autocall, swiss, dqs) {
     });
 
     document.getElementById('btn-autocall').onclick = async () => {
-        await doAction('set_autocall', { enabled: !autocall });
+        const btn = document.getElementById('btn-autocall');
+        const newState = !autocall;
+        // Immediate feedback
+        btn.disabled = true;
+        btn.textContent = newState ? 'Enabling...' : 'Disabling...';
+        btn.className = `btn ${newState ? 'btn-toggle-on' : 'btn-toggle-off'}`;
+        try {
+            await api('POST', `/api/tournament/${TOURNAMENT_ID}/action`, {
+                action: 'set_autocall',
+                enabled: newState,
+            });
+            showToast(newState ? 'Auto match calling enabled' : 'Auto match calling disabled', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        await loadTournament({ force: true });
     };
     document.getElementById('btn-call-all').onclick = async () => {
         if (!hasPending) return;

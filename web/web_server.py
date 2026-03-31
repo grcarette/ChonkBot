@@ -1160,9 +1160,15 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
 
             elif action == 'call_all_matches':
                 need_tm()
-                await tm.format.call_matches()
+                pending = await tm.format.get_pending_matches()
+                called = 0
+                for match_data in pending:
+                    if match_data['match_id'] not in tm.format.called_match_ids:
+                        await tm.format.call_match(match_data)
+                        called += 1
                 if hasattr(tm.format, 'invalidate_pending_cache'):
                     tm.format.invalidate_pending_cache()
+                return web.json_response({'ok': True, 'called': called})
 
             elif action == 'set_autocall':
                 need_tm()
@@ -1171,7 +1177,13 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                     return web.json_response({'error': 'autocall not supported for this format'}, status=400)
                 tm.format.autocall_matches = enabled
                 if enabled:
-                    await tm.format.call_matches()
+                    pending = await tm.format.get_pending_matches()
+                    for match_data in pending:
+                        if match_data['match_id'] not in tm.format.called_match_ids:
+                            await tm.format.call_match(match_data)
+                    if hasattr(tm.format, 'invalidate_pending_cache'):
+                        tm.format.invalidate_pending_cache()
+                return web.json_response({'ok': True, 'enabled': enabled})
 
             elif action == 'start_held_match':
                 need_tm()
@@ -1266,7 +1278,7 @@ async def handle_tournament_action(request: web.Request) -> web.Response:
                 if not em:
                     return web.json_response({'error': 'Event manager not loaded'}, status=400)
                 if tournament.get('format') == 'swiss filter':
-                    await em.transition_to_brackets()
+                    await em.start_bracket_checkin()
                 else:
                     await em.transition_to_next_phase()
         except ValueError as e:

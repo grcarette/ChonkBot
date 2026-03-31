@@ -2,7 +2,9 @@ import discord
 
 from formats import make_format
 from tournaments.tournament_manager import TournamentManager
+from ui.event_checkin import EventCheckinView
 from utils.event_logger import EventLogger
+from utils.messages import get_mentions
 
 
 def _default_label(fmt: str) -> str:
@@ -545,6 +547,41 @@ class EventManager:
 
         self.logger.info('PHASE',
             f'{phase["label"]}: populated with {len(player_ids)} players, started')
+
+    async def start_bracket_checkin(self):
+        """
+        Post a single coalesced check-in embed to event-info for all players
+        before the bracket phase starts.  When every player has checked in (or
+        a TO overrides), ``transition_to_brackets()`` is called automatically.
+        """
+        self.event = await self.bot.dh.get_tournament_by_id(self.event['_id'])
+        swiss_phase = self.event['phases'][0]
+        if swiss_phase['state'] != 'finished':
+            raise ValueError('Swiss phase is not finished yet')
+
+        # Collect all non-dropped entrant IDs
+        entrants = self.event.get('entrants', {})
+        pending_ids = [str(k) for k in entrants.keys()]
+        if not pending_ids:
+            raise ValueError('No entrants found for bracket check-in')
+
+        channel = None
+        for tm_candidate in [self.active_tm] + list(self.phase_managers.values()):
+            if tm_candidate:
+                channel = await tm_candidate.get_channel('event-info')
+                if channel:
+                    break
+        if not channel:
+            raise ValueError('Could not find event-info channel for bracket check-in')
+
+        view = EventCheckinView(self, pending_ids)
+        embed = view.generate_embed()
+        mentions = get_mentions(pending_ids)
+        # Send mentions as plain text so players are pinged, embed shows the list
+        await channel.send(' '.join(mentions), embed=embed, view=view)
+
+        self.logger.info('PHASE',
+            f'Bracket check-in posted — {len(pending_ids)} players must check in')
 
     async def transition_to_brackets(self):
         """TO-triggered transition from Swiss phase to the three bracket phases."""

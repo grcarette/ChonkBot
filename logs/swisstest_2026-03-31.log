@@ -1,0 +1,55 @@
+[2026-03-31 14:37:33] [INFO ] [LOGGER] Log opened — logs\swisstest_2026-03-31.log
+[2026-03-31 14:37:33] [INFO ] [LOGGER] Log opened — logs\swisstest_2026-03-31.log
+[2026-03-31 14:37:54] [INFO ] [REGISTRATION] Debug User 0 (0) registered
+[2026-03-31 14:37:55] [INFO ] [REGISTRATION] Debug User 1 (1) registered
+[2026-03-31 14:37:56] [INFO ] [REGISTRATION] Debug User 2 (2) registered
+[2026-03-31 14:37:58] [INFO ] [REGISTRATION] Debug User 3 (3) registered
+[2026-03-31 14:37:58] [INFO ] [STATE] setup → registration
+[2026-03-31 14:38:11] [INFO ] [STATE] registration → checkin
+[2026-03-31 14:38:25] [INFO ] [STATE] Tournament started — 0 players
+[2026-03-31 14:38:25] [INFO ] [STATE] checkin → active
+[2026-03-31 14:38:33] [INFO ] [SWISS] Round 1 started — 4 players, 2 matches
+[2026-03-31 14:38:33] [INFO ] [SWISS] Match 14500001 created — 1 vs 2 (round 1)
+[2026-03-31 14:38:34] [INFO ] [SWISS] Match 14500002 created — 0 vs 3 (round 1)
+[2026-03-31 14:38:36] [INFO ] [SWISS] Match 14500001 reported — winner: 2, loser: 1
+[2026-03-31 14:38:38] [INFO ] [SWISS] Match 14500002 reported — winner: 3, loser: 0
+[2026-03-31 14:38:38] [INFO ] [SWISS] Round 1 complete
+[2026-03-31 14:38:47] [INFO ] [REGISTRATION] Bojack (142798704703700992) registered
+[2026-03-31 14:38:50] [INFO ] [SWISS] Round 1 complete
+[2026-03-31 14:38:50] [INFO ] [REGISTRATION] 142798704703700992 (142798704703700992) dropped
+[2026-03-31 14:39:02] [INFO ] [REGISTRATION] Bojack (142798704703700992) registered
+[2026-03-31 14:39:09] [INFO ] [SWISS] Round 2 started — 5 players, 2 matches
+[2026-03-31 14:39:10] [INFO ] [SWISS] Match 14500003 created — 2 vs 3 (round 2)
+[2026-03-31 14:39:11] [INFO ] [SWISS] Match 14500004 created — 0 vs 142798704703700992 (round 2)
+[2026-03-31 14:39:13] [INFO ] [SWISS] Bye awarded to 1
+[2026-03-31 14:39:13] [INFO ] [SWISS] Match 14500003 reported — winner: 3, loser: 2
+[2026-03-31 14:39:15] [INFO ] [SWISS] Match 14500004 reported — winner: 0, loser: 142798704703700992
+[2026-03-31 14:39:15] [INFO ] [SWISS] Round 2 complete
+[2026-03-31 14:39:24] [INFO ] [SWISS] Round 2 complete
+[2026-03-31 14:39:25] [INFO ] [REGISTRATION] 142798704703700992 (142798704703700992) dropped
+[2026-03-31 14:39:32] [INFO ] [SWISS] Round 3 started — 4 players, 2 matches
+[2026-03-31 14:39:32] [INFO ] [SWISS] Match 14500005 created — 3 vs 1 (round 3)
+[2026-03-31 14:39:34] [INFO ] [SWISS] Match 14500006 created — 0 vs 2 (round 3)
+[2026-03-31 14:39:36] [INFO ] [SWISS] Match 14500005 reported — winner: 1, loser: 3
+[2026-03-31 14:39:37] [INFO ] [SWISS] Match 14500006 reported — winner: 0, loser: 2
+[2026-03-31 14:39:37] [INFO ] [SWISS] Round 3 complete
+[2026-03-31 14:39:55] [INFO ] [SWISS] Round 4 started — 4 players, 2 matches
+[2026-03-31 14:39:55] [INFO ] [SWISS] Match 14500007 created — 1 vs 0 (round 4)
+[2026-03-31 14:39:56] [INFO ] [SWISS] Match 14500008 created — 3 vs 2 (round 4)
+[2026-03-31 14:39:59] [INFO ] [SWISS] Match 14500007 reported — winner: 1, loser: 0
+[2026-03-31 14:40:00] [INFO ] [SWISS] Match 14500008 reported — winner: 2, loser: 3
+[2026-03-31 14:40:00] [INFO ] [SWISS] Round 4 complete
+[2026-03-31 14:40:20] [INFO ] [SWISS] Round 5 started — 4 players, 2 matches
+[2026-03-31 14:40:20] [INFO ] [SWISS] Match 14500009 created — 1 vs 2 (round 5)
+[2026-03-31 14:40:22] [INFO ] [SWISS] Match 14500010 created — 0 vs 3 (round 5)
+[2026-03-31 14:40:24] [INFO ] [SWISS] Match 14500009 reported — winner: 2, loser: 1
+[2026-03-31 14:40:25] [INFO ] [SWISS] Match 14500010 reported — winner: 3, loser: 0
+[2026-03-31 14:40:25] [INFO ] [SWISS] Round 5 complete
+[2026-03-31 14:40:34] [INFO ] [SWISS] Round 6 started — 4 players, 2 matches
+[2026-03-31 14:40:35] [INFO ] [SWISS] Match 14500011 created — 1 vs 2 (round 6)
+[2026-03-31 14:40:36] [INFO ] [SWISS] Match 14500012 created — 3 vs 0 (round 6)
+[2026-03-31 14:40:39] [INFO ] [SWISS] Match 14500011 reported — winner: 2, loser: 1
+[2026-03-31 14:40:40] [INFO ] [SWISS] Match 14500012 reported — winner: 3, loser: 0
+[2026-03-31 14:40:40] [INFO ] [SWISS] Round 6 complete
+[2026-03-31 14:40:41] [INFO ] [STATE] Tournament ended — all lobbies closed
+[2026-03-31 14:40:42] [INFO ] [STATE] active → finished
