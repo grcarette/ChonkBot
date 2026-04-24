@@ -1,0 +1,19 @@
+[2026-04-16 17:17:12] [INFO ] [LOGGER] Log opened — logs\test event_2026-04-16.log
+[2026-04-16 17:17:12] [DEBUG] [EM_INIT] Starting for test event
+[2026-04-16 17:17:12] [DEBUG] [EM_INIT] phase[0]: label=Double Elimination type=double elimination state=setup has_challonge=False entrants=0
+[2026-04-16 17:17:12] [DEBUG] [EM_INIT] phase_managers=[] active_phase=0 active_tm=False
+[2026-04-16 17:17:12] [INFO ] [LOGGER] Log opened — logs\test event_2026-04-16.log
+[2026-04-16 17:17:12] [DEBUG] [CH_INIT] Creating new Challonge bracket: format=double elimination
+[2026-04-16 17:17:15] [DEBUG] [PENDING] Fetching from Challonge: format=double elimination has_challonge=True entrants=0 _is_phase=None _phase_idx=None
+[2026-04-16 17:17:15] [DEBUG] [PENDING] Raw from Challonge: 0 open matches
+[2026-04-16 17:17:15] [DEBUG] [PENDING] Result: 0 pending, 0 have lobbies, 0 already called — ids=[]
+[2026-04-16 17:17:19] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:24] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:29] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:34] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:39] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:44] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:49] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:54] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:17:59] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
+[2026-04-16 17:18:04] [DEBUG] [PENDING] Returning cached: 0 matches ids=[]
